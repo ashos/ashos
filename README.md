@@ -1,5 +1,5 @@
 # astOS (Arch Snapshot Tree OS)
-### An immutable Arch based distribution utilizing btrfs snapshots  
+### An immutable Arch based distribution utilizing btrfs snapshots
 
 ![astos-logo](logo.png)
 
@@ -25,9 +25,9 @@
 
 ## What is astOS?  
 
-astOS is a modern distribution based on [Arch Linux](https://archlinux.org).  
-Unlike Arch it uses an immutable (read-only) root filesystem.  
-Software is installed and configured into individual snapshot trees, which can then be deployed and booted into.  
+astOS is a modern distribution based on [Arch Linux](https://archlinux.org).
+Unlike Arch it uses an immutable (read-only) root filesystem.
+Software is installed and configured into individual snapshot trees, which can then be deployed and booted into.
 It doesn't use it's own package format or package manager, instead relying on [pacman](https://wiki.archlinux.org/title/pacman) from Arch.
 
 
@@ -75,8 +75,8 @@ pacman -Sy git
 Clone repository
 
 ```
-git clone "https://github.com/CuBeRJAN/astOS"  
-cd astOS  
+git clone "https://github.com/CuBeRJAN/astOS"
+cd astOS
 ```
 Partition and format drive
 
@@ -86,7 +86,7 @@ Partition and format drive
 
 ```
 lsblk  # Find your drive name
-cfdisk /dev/*** # Format drive, make sure to add an EFI partition, if using BIOS leave 2M free space before first partition  
+cfdisk /dev/*** # Format drive, make sure to add an EFI partition, if using BIOS leave 2M free space before first partition
 ```
 Run installer
 
@@ -230,7 +230,7 @@ ast deploy <snapshot>
 ```
 ast base-update
 ```
-* Note: the base itself is located at ```/.snapshots/snapshot-0``` with it's specific ```/var``` files and ```/etc``` being located at ```/.var/var-0``` and ```/.etc/etc-0``` respectively, therefore if you really need to make a configuration change, you can mount snapshot these as read-write and then snapshot back as read only
+* Note: the base itself is located at ```/.snapshots/rootfs/snapshot-0``` with it's specific ```/var``` files and ```/etc``` being located at ```/.snapshots/var/var-0``` and ```/.snapshots/etc/etc-0``` respectively, therefore if you really need to make a configuration change, you can mount snapshot these as read-write and then snapshot back as read only
 
 ## Package management
 
@@ -343,14 +343,14 @@ ast deploy <snapshot>
 ```
 git clone "https://github.com/CuBeRJAN/astOS"
 cd astOS
-cp astpk.py ast 
+cp astpk.py ast
 chmod +x ast
 cp ./ast /var/astpk/ast  # Copy new ast to /var, accessible from all snapshots
-ast trun <snapshot> cp /var/astpk/ast /usr/bin/ast  # Copy over new ast
+ast trun <snapshot> cp /var/astpk/ast /usr/local/sbin/ast  # Copy over new ast
 ast clone 0
-ast run <clone of 0> cp /var/astpk/ast /usr/bin/ast  # Now we update snapshot 0 in a clone  
-btrfs sub del /.snapshots/snapshot-0  # Here we manually replace snapshot 0 with the updated snapshot
-btrfs sub snap -r /.snapshots/snapshot-<clone of 0> /.snapshots/snapshot-0
+ast run <clone of 0> cp /var/astpk/ast /usr/local/sbin/ast  # Now we update snapshot 0 in a clone
+btrfs sub del /.snapshots/rootfs/snapshot-0  # Here we manually replace snapshot 0 with the updated snapshot
+btrfs sub snap -r /.snapshots/rootfs/snapshot-<clone of 0> /.snapshots/rootfs/snapshot-0
 ast del <clone of 0>  # Remove temporary snapshot
 ```
 

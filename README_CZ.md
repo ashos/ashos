@@ -1,5 +1,5 @@
 # astOS (Arch Snapshot Tree OS)
-### Neměnná distribuce založená na archi využívající snapshoty btrfs.  
+### Neměnná distribuce založená na archi využívající snapshoty btrfs.
 
 ![astos-logo](logo.png)
 
