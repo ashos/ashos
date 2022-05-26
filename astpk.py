@@ -579,7 +579,7 @@ def posttrans(snapshot):
     os.system(f"mkdir -p /.snapshots/var/var-{etc}/lib/systemd >/dev/null 2>&1")
     #os.system(f"mkdir -p /.snapshots/var/var-{etc}/lib/pacman >/dev/null 2>&1")
     os.system(f"cp --reflink=auto -r /.snapshots/var/var-chr{snapshot}/lib/systemd/* /.snapshots/var/var-{etc}/lib/systemd >/dev/null 2>&1")
-    os.system(f"cp --reflink=auto -r /.snapshots/rootfs/snapshot-chr{snapshot}/.snapshots/ast/fstree /.snapshots/ast/ >/dev/null 2>&1")
+    #os.system(f"cp --reflink=auto -r /.snapshots/rootfs/snapshot-chr{snapshot}/.snapshots/ast/fstree /.snapshots/ast/ >/dev/null 2>&1")
     #os.system(f"cp --reflink=auto -r /.snapshots/var/var-chr{snapshot}/lib/pacman/* /.snapshots/var/var-{etc}/lib/pacman >/dev/null 2>&1")
     #os.system(f"rm -rf /var/lib/pacman/* >/dev/null 2>&1")
     #os.system(f"cp --reflink=auto -r /.snapshots/rootfs/snapshot-{tmp}/var/lib/pacman/* /var/lib/pacman >/dev/null 2>&1")
