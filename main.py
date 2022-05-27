@@ -97,16 +97,14 @@ def main(args):
 
     # ------------------------------------------------
     # Now install the packages
-    os.system("pacstrap /mnt base btrfs-progs nano python3 python-anytree dhcpcd arch-install-scripts networkmanager grub")
+    os.system("pacstrap /mnt base linux linux-firmware btrfs-progs nano python3 python-anytree dhcpcd arch-install-scripts networkmanager grub")
 
     if isLVM:
+        os.system("pacstrap /mnt lvm2")
         os.system("sed -i -e 's/^BINARIES=(/BINARIES=(\/usr\/bin\/btrfsck/g' \
                           -e '/^HOOKS/{ s/modconf block/modconf block lvm2/g }' \
                           -e '/^HOOKS/{ s/fsck/btrfs fsck/g }' /mnt/etc/mkinitcpio.conf")
-        os.system("pacstrap /mnt linux linux-firmware lvm2")
         os.system("arch-chroot /mnt mkinitcpio -p linux")
-    else:
-        os.system("pacstrap /mnt linux linux-firmware")
 
     if efi:
         os.system("pacstrap /mnt efibootmgr")
