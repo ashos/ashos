@@ -28,7 +28,7 @@
 ## What is AstOS?
 
 AstOS is a modern distribution based on [Arch Linux](https://archlinux.org).
-Unlike Arch it uses an immutable (read-only) root filesystem.  
+Unlike Arch it uses an immutable (read-only) root filesystem.
 Software is installed and configured into individual snapshot trees, which can then be deployed and booted into.
 It doesn't use it's own package format or package manager, instead relying on [pacman](https://wiki.archlinux.org/title/pacman) from Arch.
 
