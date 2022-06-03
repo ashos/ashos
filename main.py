@@ -11,15 +11,11 @@ args = list(sys.argv)
 def clear():
     os.system("clear")
 
-# Convert partition label to UUID
 def to_uuid(part):
     uuid = str(subprocess.check_output(f"blkid -s UUID -o value {part}", shell=True))
     return uuid.replace("b'","").replace('"',"").replace("\\n'","")
 
 def main(args):
-
-    isLVM = False
-    btrfspart = args[1]
 
     while True:
         clear()
@@ -50,31 +46,15 @@ def main(args):
     print("Enter hostname:")
     hostname = input("> ")
 
-    clear()
-    while True:
-        print("LVM (y/n)?")
-        reply = input("> ")
-        if reply.casefold() == "y":
-            os.system(f"pvcreate {args[1]}")
-            os.system(f"vgcreate vigor {args[1]}")
-            os.system(f"lvcreate -l +100%FREE vigor --name btrfs")
-            btrfspart="/dev/mapper/vigor-btrfs"
-            isLVM = True
-            break
-        elif reply.casefold() == "n":
-            break
-
-    # Update arch keyring, makes the install more reliable
     os.system("pacman -S --noconfirm archlinux-keyring")
-    os.system(f"mkfs.btrfs -f {btrfspart}")
+    os.system(f"mkfs.btrfs -f {args[1]}")
 
     if os.path.exists("/sys/firmware/efi"):
         efi = True
     else:
         efi = False
 
-    # This section handles all the subvolume setup
-    os.system(f"mount {btrfspart} /mnt")
+    os.system(f"mount {args[1]} /mnt")
     btrdirs = ["@","@.snapshots","@home","@var","@etc","@boot"]
     mntdirs = ["",".snapshots","home","var","etc","boot"]
 
@@ -82,11 +62,11 @@ def main(args):
         os.system(f"btrfs sub create /mnt/{btrdir}")
 
     os.system(f"umount /mnt")
-    os.system(f"mount {btrfspart} -o subvol=@,compress=zstd,noatime /mnt")
+    os.system(f"mount {args[1]} -o subvol=@,compress=zstd,noatime /mnt")
 
     for mntdir in mntdirs:
         os.system(f"mkdir /mnt/{mntdir}")
-        os.system(f"mount {btrfspart} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
+        os.system(f"mount {args[1]} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
 
     os.system("mkdir -p /mnt/{tmp,root}")
     os.system("mkdir -p /mnt/.snapshots/{rootfs,etc,var,boot,tmp,root}")
@@ -95,27 +75,17 @@ def main(args):
         os.system("mkdir /mnt/boot/efi")
         os.system(f"mount {args[3]} /mnt/boot/efi")
 
-    # ------------------------------------------------
-    # Now install the packages
-    os.system("pacstrap /mnt base linux linux-firmware btrfs-progs nano python3 python-anytree dhcpcd arch-install-scripts networkmanager grub")
-
-    if isLVM:
-        os.system("pacstrap /mnt lvm2")
-        os.system("sed -i -e 's/^BINARIES=(/BINARIES=(\/usr\/bin\/btrfsck/g' \
-                          -e '/^HOOKS/{ s/modconf block/modconf block lvm2/g }' \
-                          -e '/^HOOKS/{ s/fsck/btrfs fsck/g }' /mnt/etc/mkinitcpio.conf")
-        os.system("arch-chroot /mnt mkinitcpio -p linux")
+    os.system("pacstrap /mnt base linux linux-firmware nano python3 python-anytree dhcpcd arch-install-scripts btrfs-progs networkmanager grub")
 
     if efi:
         os.system("pacstrap /mnt efibootmgr")
 
-    # Set up basic necessary files
     mntdirs_n = mntdirs
     mntdirs_n.remove("")
-    os.system(f"echo 'UUID=\"{to_uuid(btrfspart)}\" / btrfs subvol=@,compress=zstd,noatime,ro 0 0' > /mnt/etc/fstab")
+    os.system(f"echo 'UUID=\"{to_uuid(args[1])}\" / btrfs subvol=@,compress=zstd,noatime,ro 0 0' > /mnt/etc/fstab")
 
     for mntdir in mntdirs_n:
-        os.system(f"echo 'UUID=\"{to_uuid(btrfspart)}\" /{mntdir} btrfs subvol=@{mntdir},compress=zstd,noatime 0 0' >> /mnt/etc/fstab")
+        os.system(f"echo 'UUID=\"{to_uuid(args[1])}\" /{mntdir} btrfs subvol=@{mntdir},compress=zstd,noatime 0 0' >> /mnt/etc/fstab")
 
     if efi:
         os.system(f"echo 'UUID=\"{to_uuid(args[3])}\" /boot/efi vfat umask=0077 0 2' >> /mnt/etc/fstab")
@@ -123,12 +93,11 @@ def main(args):
     os.system("echo '/.snapshots/ast/root /root none bind 0 0' >> /mnt/etc/fstab")
     os.system("echo '/.snapshots/ast/tmp /tmp none bind 0 0' >> /mnt/etc/fstab")
 
-    astpart = to_uuid(btrfspart)
+    astpart = to_uuid(args[1])
 
     os.system(f"mkdir -p /mnt/usr/share/ast/db")
     os.system(f"echo '0' > /mnt/usr/share/ast/snap")
 
-    # Some configs getting set here
     os.system(f"echo 'NAME=\"astOS\"' > /mnt/etc/os-release")
     os.system(f"echo 'PRETTY_NAME=\"astOS\"' >> /mnt/etc/os-release")
     os.system(f"echo 'ID=astos' >> /mnt/etc/os-release")
@@ -144,6 +113,8 @@ def main(args):
 
     os.system(f"arch-chroot /mnt ln -sf {timezone} /etc/localtime")
     os.system("echo 'en_US UTF-8' >> /mnt/etc/locale.gen")
+#    os.system("sed -i s/'^#'// /mnt/etc/locale.gen")
+#    os.system("sed -i s/'^ '/'#'/ /mnt/etc/locale.gen")
     os.system(f"arch-chroot /mnt locale-gen")
     os.system(f"arch-chroot /mnt hwclock --systohc")
     os.system(f"echo 'LANG=en_US.UTF-8' > /mnt/etc/locale.conf")
@@ -198,7 +169,6 @@ def main(args):
     os.system("btrfs sub snap -r /mnt/.snapshots/etc/etc-tmp /mnt/.snapshots/etc/etc-0")
     os.system(f"echo '{astpart}' > /mnt/.snapshots/ast/part")
 
-    # Gnome install
     if DesktopInstall == 1:
         os.system(f"echo '1' > /mnt/usr/share/ast/snap")
         os.system("pacstrap /mnt flatpak gnome gnome-extra gnome-themes-extra gdm pipewire pipewire-pulse sudo")
@@ -252,7 +222,6 @@ def main(args):
         os.system("btrfs sub snap -r /mnt/.snapshots/etc/etc-tmp /mnt/.snapshots/etc/etc-1")
         os.system("btrfs sub snap /mnt/.snapshots/rootfs/snapshot-1 /mnt/.snapshots/rootfs/snapshot-tmp")
 
-    # KDE Plasma install
     elif DesktopInstall == 2:
         os.system(f"echo '1' > /mnt/usr/share/ast/snap")
         os.system("pacstrap /mnt flatpak plasma xorg kde-applications sddm pipewire pipewire-pulse sudo")
@@ -319,17 +288,17 @@ def main(args):
 
     if efi:
         os.system("umount /mnt/boot/efi")
-    # Unmount everything, fully prepare system 
+
     os.system("umount /mnt/boot")
 #    os.system("mkdir /mnt/.snapshots/var/var-tmp")
 #    os.system("mkdir /mnt/.snapshots/boot/boot-tmp")
-#    os.system(f"mount {btrfspart} -o subvol=@var,compress=zstd,noatime /mnt/.snapshots/var/var-tmp")
-    os.system(f"mount {btrfspart} -o subvol=@boot,compress=zstd,noatime /mnt/.snapshots/boot/boot-tmp")
+#    os.system(f"mount {args[1]} -o subvol=@var,compress=zstd,noatime /mnt/.snapshots/var/var-tmp")
+    os.system(f"mount {args[1]} -o subvol=@boot,compress=zstd,noatime /mnt/.snapshots/boot/boot-tmp")
 #    os.system("cp --reflink=auto -r /mnt/.snapshots/var/var-tmp/* /mnt/var")
     os.system("cp --reflink=auto -r /mnt/.snapshots/boot/boot-tmp/* /mnt/boot")
     os.system("umount /mnt/etc")
 #    os.system("mkdir /mnt/.snapshots/etc/etc-tmp")
-    os.system(f"mount {btrfspart} -o subvol=@etc,compress=zstd,noatime /mnt/.snapshots/etc/etc-tmp")
+    os.system(f"mount {args[1]} -o subvol=@etc,compress=zstd,noatime /mnt/.snapshots/etc/etc-tmp")
     os.system("cp --reflink=auto -r /mnt/.snapshots/etc/etc-tmp/* /mnt/etc")
 
     if DesktopInstall:
@@ -342,7 +311,7 @@ def main(args):
         os.system("cp --reflink=auto -r /mnt/.snapshots/boot/boot-0/* /mnt/.snapshots/rootfs/snapshot-tmp/boot")
 
     os.system("umount -R /mnt")
-    os.system(f"mount {btrfspart} /mnt")
+    os.system(f"mount {args[1]} /mnt")
     os.system("btrfs sub del /mnt/@")
     os.system("umount -R /mnt")
     clear()
