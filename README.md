@@ -17,6 +17,7 @@
   * [Updating the pacman keys](https://github.com/CuBeRJAN/astOS#fixing-pacman-corrupt-packages--key-issues)
   * [Configuring dual boot](https://github.com/CuBeRJAN/astOS#dual-boot)
   * [Updating ast itself](https://github.com/CuBeRJAN/astOS#updating-ast-itself)
+  * [Debugging ast](https://github.com/astos/astos#debuggin-ast)
 * [Known bugs](https://github.com/CuBeRJAN/astOS#known-bugs)
 * [Contributing](https://github.com/CuBeRJAN/astOS#contributing)
 * [Community](https://github.com/CuBeRJAN/astOS#community)
@@ -354,6 +355,23 @@ btrfs sub del /.snapshots/rootfs/snapshot-0  # Here we manually replace snapshot
 btrfs sub snap -r /.snapshots/rootfs/snapshot-<clone of 0> /.snapshots/rootfs/snapshot-0
 ast del <clone of 0>  # Remove temporary snapshot
 ```
+
+#### Debugging ast
+
+- sometimes it may be necessary to debug ast
+- copy `ast` to any location:
+
+```
+cp /usr/local/sbin/ast astpk.py
+```
+
+- the following command is useful as it shows outputs of commands when running astpk.py:
+
+```
+sed -i -e s,\ 2\>\&1\>\ \/dev\/null,,g astpk.py
+```
+
+If you have modified the original ast file (possible but not recommended), please make sure to revert it back when done!
 
 ## Known bugs
 
