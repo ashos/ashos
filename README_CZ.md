@@ -1,4 +1,4 @@
-# AstOS (Arch Snapshot Tree OS)
+# astOS (Arch Snapshot Tree OS)
 
 ### Neměnná distribuce založená na archi využívající snapshoty btrfs.
 
@@ -8,9 +8,9 @@
 
 ## Obsah
 
-- [Co je AstOS?](https://github.com/astos/astos/blob/main/README_CZ.md#co-je-astos)
-- [AstOS ve srovnání s jinými podobnými distribucemi](https://github.com/astos/astos/blob/main/README_CZ.md#ast-ve-srovnání-s-jinými-podobnými-distribucemi)
-- [dokumentace k ast a AstOS](https://github.com/astos/astos/blob/main/README_CZ.md#dokumentace-k-ast-a-astos)
+- [Co je astOS?](https://github.com/astos/astos/blob/main/README_CZ.md#co-je-astos)
+- [astOS ve srovnání s jinými podobnými distribucemi](https://github.com/astos/astos/blob/main/README_CZ.md#ast-ve-srovnání-s-jinými-podobnými-distribucemi)
+- [dokumentace k ast a astOS](https://github.com/astos/astos/blob/main/README_CZ.md#dokumentace-k-ast-a-astos)
   - [Instalace](https://github.com/astos/astos/blob/main/README_CZ.md#instalace)
   - [Po instalaci](https://github.com/astos/astos/blob/main/README_CZ.md#po-instalaci)
   - [Správa snímků a nasazení](https://github.com/astos/astos/blob/main/README_CZ.md#správa-snímků)
@@ -21,9 +21,9 @@
 
 ---
 
-## Co je AstOS?
+## Co je astOS?
 
-AstOS je moderní distribuce založená na [Arch Linuxu](https://archlinux.org).  
+astOS je moderní distribuce založená na [Arch Linuxu](https://archlinux.org).  
 Na rozdíl od Archu používá neměnný (pouze pro čtení) kořenový souborový systém.  
 Software je instalován a konfigurován do jednotlivých stromů snímků, které lze následně nasadit a zavést do systému.  
 Nepoužívá vlastní formát balíčků ani správce balíčků, místo toho se spoléhá na [pacman](https://wiki.archlinux.org/title/pacman) z Archu.
@@ -36,34 +36,34 @@ Nepoužívá vlastní formát balíčků ani správce balíčků, místo toho se
   - Díky tomu, že je systém připojen pouze pro čtení, není možné omylem přepsat systémové soubory.
   - Pokud se systém dostane do problémů, můžete během několika minut snadno vrátit poslední funkční snímek.
   - Atomické aktualizace - aktualizace systému najednou je spolehlivější.
-  - Díky funkci snapshotu může systém AstOS dodávat špičkový software, aniž by se stal nestabilním
-  - AstOS nepotřebuje téměř žádnou údržbu, protože má vestavěný plně automatický aktualizační nástroj, který před aktualizacemi vytváří snapshoty a před nasazením nového snapshotu automaticky kontroluje, zda se systém správně aktualizoval
+  - Díky funkci snapshotu může systém astOS dodávat špičkový software, aniž by se stal nestabilním
+  - astOS nepotřebuje téměř žádnou údržbu, protože má vestavěný plně automatický aktualizační nástroj, který před aktualizacemi vytváří snapshoty a před nasazením nového snapshotu automaticky kontroluje, zda se systém správně aktualizoval
 - Konfigurovatelnost
 
   - Díky snapshotům uspořádaným do stromu můžete mít snadno k dispozici více různých konfigurací softwaru s různými balíčky, aniž by došlo k jakémukoli zásahu do systému
   - Například: můžete mít nainstalovanou jednu pracovní plochu Gnome a nad ní mít dva překryvy - jeden s videohrami, s nejnovějším jádrem a ovladači, a druhý pro práci, s jádrem LTS a stabilnějším softwarem, mezi nimiž pak můžete snadno přepínat podle toho, co se snažíte dělat.
   - Můžete také snadno zkoušet software, aniž byste se museli obávat, že si rozbijete systém nebo ho znečistíte nepotřebnými soubory, například můžete vyzkoušet nové desktopové prostředí ve snapshotu a poté snapshot smazat, aniž byste vůbec měnili svůj hlavní systém.
   - To lze využít i pro víceuživatelské systémy, kde má každý uživatel zcela samostatný systém s jiným softwarem, a přesto může sdílet určité balíčky, například jádra a ovladače.
-  - AstOS umožňuje instalovat software pomocí chrootování do snapshotů, proto můžete k instalaci dalších balíčků použít software, jako je AUR.
-  - AstOS je stejně jako Arch velmi přizpůsobitelný, můžete si přesně vybrat software, který chcete používat.
+  - astOS umožňuje instalovat software pomocí chrootování do snapshotů, proto můžete k instalaci dalších balíčků použít software, jako je AUR.
+  - astOS je stejně jako Arch velmi přizpůsobitelný, můžete si přesně vybrat software, který chcete používat.
 
-- Díky své spolehlivosti a automatickým aktualizacím je AstOS vhodný pro jednorázová nebo vestavěná zařízení.
+- Díky své spolehlivosti a automatickým aktualizacím je astOS vhodný pro jednorázová nebo vestavěná zařízení.
 - Je také dobrou distribucí pro pracovní stanice nebo obecné použití s využitím vývojových kontejnerů a flatpaku pro desktopové aplikace.
 
 ---
 
-## AstOS ve srovnání s jinými podobnými distribucemi
+## astOS ve srovnání s jinými podobnými distribucemi
 
-- **NixOS** - ve srovnání s nixOS je AstOS tradičnější systém, co se týče nastavení a údržby. Zatímco nixOS je kompletně konfigurován pomocí programovacího jazyka Nix, AstOS používá správce balíčků Arch pacman. AstOS používá snímky btrfs.
-  - AstOS umožňuje deklarativní konfiguraci pomocí Ansible, pro podobnou funkčnost jako NixOS.
-- **Fedora Silverblue** - AstOS je lépe přizpůsobitelný, ale vyžaduje více ručního nastavení.
-- **OpenSUSE MicroOS** - AstOS je více přizpůsobitelný systém, ale opět vyžaduje trochu více ručního nastavení. MicroOS funguje podobně jako AstOS ve způsobu, jakým využívá snímky btrfs.
+- **NixOS** - ve srovnání s nixOS je astOS tradičnější systém, co se týče nastavení a údržby. Zatímco nixOS je kompletně konfigurován pomocí programovacího jazyka Nix, astOS používá správce balíčků Arch pacman. astOS používá snímky btrfs.
+  - astOS umožňuje deklarativní konfiguraci pomocí Ansible, pro podobnou funkčnost jako NixOS.
+- **Fedora Silverblue** - astOS je lépe přizpůsobitelný, ale vyžaduje více ručního nastavení.
+- **OpenSUSE MicroOS** - astOS je více přizpůsobitelný systém, ale opět vyžaduje trochu více ručního nastavení. MicroOS funguje podobně jako astOS ve způsobu, jakým využívá snímky btrfs.
 
 ---
 
 ## Instalace
 
-- AstOS se instaluje z oficiálního Live iso Arch Linuxu dostupného na [https://archlinux.org/](https://archlinux.org).
+- astOS se instaluje z oficiálního Live iso Arch Linuxu dostupného na [https://archlinux.org/](https://archlinux.org).
 
 Nejprve nainstalujte git - to nám umožní stáhnout instalační skript.
 
@@ -75,7 +75,7 @@ Klonování repozitáře
 
 ```
 git clone "https://github.com/astos/astos"
-cd AstOS
+cd astOS
 ```
 
 Rozdělení a formátování disku
@@ -93,7 +93,7 @@ python3 main.py /dev/<oddíl> /dev/<disk> /dev/<efi oddíl> # V případě insta
 
 ## Nastavení po instalaci
 
-- AstOS neprovádí mnoho nastavení pro uživatele, proto bude nutné provést nějaké nastavení po instalaci.
+- astOS neprovádí mnoho nastavení pro uživatele, proto bude nutné provést nějaké nastavení po instalaci.
 - Mnoho informací o tom, jak zvládnout poinstalační nastavení, je k dispozici na stránce [ArchWiki](https://wiki.archlinux.org/title/general_recommendations).
 - Zde je malý příklad postupu nastavení:
   - Začněte vytvořením nového snímku ze základního obrazu pomocí `ast clone 0`)
