@@ -17,15 +17,15 @@ args = list(sys.argv)
 # -----------------
 
 # Directories
-# All images share one /var
+# All snapshots share one /var
 # global boot is always at @boot
-# *-tmp - temporary directories used to boot deployed image
-# *-chr - temporary directories used to chroot into image or copy images around
-# /.snapshots/var/var-* == individual /var for each image
-# /.snapshots/etc/etc-* == individual /etc for each image
-# /.snapshots/boot/boot-* == individual /boot for each image
-# /.snapshots/rootfs/snapshot-* == images
-# /root/images/*-desc == descriptions
+# *-tmp - temporary directories used to boot deployed snapshot
+# *-chr - temporary directories used to chroot into snapshot or copy snapshots around
+# /.snapshots/var/var-* == individual /var for each snapshot
+# /.snapshots/etc/etc-* == individual /etc for each snapshot
+# /.snapshots/boot/boot-* == individual /boot for each snapshot
+# /.snapshots/rootfs/snapshot-* == snapshots
+# /root/snapshots/*-desc == descriptions
 # /usr/share/ast == files that store current snapshot info
 # /usr/share/ast/db == package database
 # /var/lib/ast(/fstree) == ast files, stores fstree, symlink to /.snapshots/ast
@@ -40,14 +40,14 @@ def import_tree_file(treename):
 def print_tree(tree):
     snapshot = get_snapshot()
     for pre, fill, node in anytree.RenderTree(tree):
-        if os.path.isfile(f"/.snapshots/ast/images/{node.name}-desc"):
-            descfile = open(f"/.snapshots/ast/images/{node.name}-desc","r")
+        if os.path.isfile(f"/.snapshots/ast/snapshots/{node.name}-desc"):
+            descfile = open(f"/.snapshots/ast/snapshots/{node.name}-desc","r")
             desc = descfile.readline()
             descfile.close()
         else:
             desc = ""
         if str(node.name) == "0":
-            desc = "base image"
+            desc = "base snapshot"
         if snapshot != str(node.name):
             print("%s%s - %s" % (pre, node.name, desc))
         else:
@@ -55,8 +55,8 @@ def print_tree(tree):
 
 # Write new description
 def write_desc(snapshot, desc):
-    os.system(f"touch /.snapshots/ast/images/{snapshot}-desc")
-    descfile = open(f"/.snapshots/ast/images/{snapshot}-desc","w")
+    os.system(f"touch /.snapshots/ast/snapshots/{snapshot}-desc")
+    descfile = open(f"/.snapshots/ast/snapshots/{snapshot}-desc","w")
     descfile.write(desc)
     descfile.close()
 
@@ -136,7 +136,7 @@ def get_tmp():
     else:
         return("tmp")
 
-# Deploy image
+# Deploy snapshot
 def deploy(snapshot):
     if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
         print("cannot deploy, snapshot doesn't exist")
@@ -364,7 +364,7 @@ def new_snapshot(desc=""):
 def show_fstree():
     print_tree(fstree)
 
-# Saves changes made to /etc to image
+# Saves changes made to /etc to snapshot
 def update_etc():
     tmp = get_tmp()
     snapshot = get_snapshot()
@@ -389,7 +389,7 @@ def chroot(snapshot):
     if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
         print("cannot chroot, snapshot doesn't exist")
     elif snapshot == "0":
-        print("changing base image is not allowed")
+        print("changing base snapshot is not allowed")
     else:
         prepare(snapshot)
         os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot}")
@@ -400,7 +400,7 @@ def chrrun(snapshot,cmd):
     if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
         print("cannot chroot, snapshot doesn't exist")
     elif snapshot == "0":
-        print("changing base image is not allowed")
+        print("changing base snapshot is not allowed")
     else:
         prepare(snapshot)
         os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} {cmd}")
@@ -463,7 +463,7 @@ def install(snapshot,pkg):
     if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
         print("cannot install, snapshot doesn't exist")
     elif snapshot == "0":
-        print("changing base image is not allowed")
+        print("changing base snapshot is not allowed")
     else:
         prepare(snapshot)
         excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --overwrite '/var/*'"))
@@ -478,7 +478,7 @@ def remove(snapshot,pkg):
     if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
         print("cannot remove, snapshot doesn't exist")
     elif snapshot == "0":
-        print("changing base image is not allowed")
+        print("changing base snapshot is not allowed")
     else:
         prepare(snapshot)
         excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman --noconfirm -Rns {pkg}"))
@@ -499,7 +499,7 @@ def delete(snapshot):
     if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
         print("cannot delete, tree doesn't exist")
     elif snapshot == "0":
-        print("changing base image is not allowed")
+        print("changing base snapshot is not allowed")
     elif run == True:
         children = return_children(fstree,snapshot)
         os.system(f"btrfs sub del /.snapshots/boot/boot-{snapshot} >/dev/null 2>&1")
@@ -549,7 +549,7 @@ def prepare(snapshot):
     os.system(f"mkdir -p /.snapshots/rootfs/snapshot-chr{snapshot}/.snapshots/ast && cp -f /.snapshots/ast/fstree /.snapshots/rootfs/snapshot-chr{snapshot}/.snapshots/ast/")
     os.system(f"mount --bind /etc/resolv.conf /.snapshots/rootfs/snapshot-chr{snapshot}/etc/resolv.conf >/dev/null 2>&1")
 
-# Post transaction function, copy from chroot dirs back to read only image dir
+# Post transaction function, copy from chroot dirs back to read only snapshot dir
 def posttrans(snapshot):
     etc = snapshot
     tmp = get_tmp()
@@ -597,7 +597,7 @@ def upgrade(snapshot):
     if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
         print("cannot upgrade, snapshot doesn't exist")
     elif snapshot == "0":
-        print("changing base image is not allowed")
+        print("changing base snapshot is not allowed")
     else:
         prepare(snapshot)
         excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu")) # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
@@ -737,7 +737,7 @@ def tmpclear():
     os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr*/* >/dev/null 2>&1")
     os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr* >/dev/null 2>&1")
 
-# Find new unused image dir
+# Find new unused snapshot dir
 def findnew():
     i = 0
     snapshots = os.listdir("/.snapshots/rootfs")

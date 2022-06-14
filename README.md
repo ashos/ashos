@@ -100,7 +100,7 @@ python3 main.py /dev/<partition> /dev/<drive> /dev/<efi part> # Skip the EFI par
 * Post installation setup is not necessary if you install one of the desktop editions (Gnome or KDE)
 * A lot of information for how to handle post-install setup is available on the [ArchWiki page](https://wiki.archlinux.org/title/general_recommendations) 
 * Here is a small example setup procedure:
-  * Start by creating a new snapshot from the base image using ```ast clone 0```
+  * Start by creating a new snapshot from `base` using ```ast clone 0```
   * Chroot inside this new snapshot (```ast chroot <snapshot>```) and begin setup
     * Start by adding a new user account: ```useradd username```
     * Set the user password ```passwd username```
@@ -113,8 +113,8 @@ python3 main.py /dev/<partition> /dev/<drive> /dev/<efi part> # Skip the EFI par
 * It is advised to refer to the [Arch wiki](https://wiki.archlinux.org/) for documentation not part of this project
 * Report issues/bugs on the [Github issues page](https://github.com/CuBeRJAN/astOS/issues)
 
-#### Base image
-* The snapshot ```0``` is reserved for the base system image, it cannot be changed and can only be updated using ```ast base-update```
+#### Base snapshot
+* The snapshot ```0``` is reserved for the base system snapshot, it cannot be changed and can only be updated using ```ast base-update```
 
 ## Snapshot Management
 
@@ -128,7 +128,7 @@ ast tree
 
 ```
 root - root
-├── 0 - base image
+├── 0 - base snapshot
 └── 1 - multiuser system
     └── 4 - applications
         ├── 6 - MATE full desktop

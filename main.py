@@ -124,7 +124,7 @@ def main(args):
     os.system("sed -i '0,/@etc/{s,@etc,@.snapshots/etc/etc-tmp,}' /mnt/etc/fstab")
 #    os.system("sed -i '0,/@var/{s,@var,@.snapshots/var/var-tmp,}' /mnt/etc/fstab")
     os.system("sed -i '0,/@boot/{s,@boot,@.snapshots/boot/boot-tmp,}' /mnt/etc/fstab")
-    os.system("mkdir -p /mnt/.snapshots/ast/images")
+    os.system("mkdir -p /mnt/.snapshots/ast/snapshots")
     os.system("arch-chroot /mnt btrfs sub set-default /.snapshots/rootfs/snapshot-tmp")
 
     os.system("arch-chroot /mnt ln -s /.snapshots/ast /var/lib/ast")    
