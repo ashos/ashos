@@ -69,7 +69,7 @@ def main(args):
         os.system(f"mount {args[1]} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
 
     os.system("mkdir -p /mnt/{tmp,root}")
-    os.system("mkdir -p /mnt/.snapshots/{rootfs,etc,var,boot,tmp,root}")
+    os.system("mkdir -p /mnt/.snapshots/{ast,boot,etc,root,rootfs,tmp,var}")
 
     if efi:
         os.system("mkdir /mnt/boot/efi")
@@ -141,7 +141,6 @@ def main(args):
             os.system("arch-chroot /mnt passwd")
 
     os.system("arch-chroot /mnt systemctl enable NetworkManager")
-    os.system("mkdir -p /mnt/.snapshots/{ast,boot,etc,rootfs,var}")
     os.system("echo {\\'name\\': \\'root\\', \\'children\\': [{\\'name\\': \\'0\\'}]} > /mnt/.snapshots/ast/fstree")
 
     if DesktopInstall:
