@@ -215,7 +215,7 @@ def main(args):
         os.system("btrfs sub create /mnt/.snapshots/boot/boot-tmp")
 #        os.system("cp --reflink=auto -r /mnt/var/* /mnt/.snapshots/var/var-tmp")
         for i in ("pacman", "systemd"):
-		    os.system(f"mkdir -p /mnt/.snapshots/var/var-tmp/lib/{i}")
+            os.system(f"mkdir -p /mnt/.snapshots/var/var-tmp/lib/{i}")
         os.system("cp --reflink=auto -r /mnt/var/lib/pacman/* /mnt/.snapshots/var/var-tmp/lib/pacman/")
         os.system("cp --reflink=auto -r /mnt/var/lib/systemd/* /mnt/.snapshots/var/var-tmp/lib/systemd/")
         os.system("cp --reflink=auto -r /mnt/boot/* /mnt/.snapshots/boot/boot-tmp")
@@ -271,7 +271,7 @@ def main(args):
         os.system("btrfs sub create /mnt/.snapshots/boot/boot-tmp")
 #        os.system("cp --reflink=auto -r /mnt/var/* /mnt/.snapshots/var/var-tmp")
         for i in ("pacman", "systemd"):
-		    os.system(f"mkdir -p /mnt/.snapshots/var/var-tmp/lib/{i}")
+            os.system(f"mkdir -p /mnt/.snapshots/var/var-tmp/lib/{i}")
         os.system("cp --reflink=auto -r /mnt/var/lib/pacman/* /mnt/.snapshots/var/var-tmp/lib/pacman/")
         os.system("cp --reflink=auto -r /mnt/var/lib/systemd/* /mnt/.snapshots/var/var-tmp/lib/systemd/")
         os.system("cp --reflink=auto -r /mnt/boot/* /mnt/.snapshots/boot/boot-tmp")
