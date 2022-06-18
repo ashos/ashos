@@ -127,7 +127,6 @@ def main(args):
 #    os.system("sed -i '0,/@var/{s,@var,@.snapshots/var/var-tmp,}' /mnt/etc/fstab")
     os.system("sed -i '0,/@boot/{s,@boot,@.snapshots/boot/boot-tmp,}' /mnt/etc/fstab")
     os.system("mkdir -p /mnt/.snapshots/ast/snapshots")
-    os.system("arch-chroot /mnt btrfs sub set-default /.snapshots/rootfs/snapshot-tmp")
 
     os.system("arch-chroot /mnt ln -s /.snapshots/ast /var/lib/ast")    
 
@@ -224,6 +223,7 @@ def main(args):
         os.system("btrfs sub snap -r /mnt/.snapshots/boot/boot-tmp /mnt/.snapshots/boot/boot-1")
         os.system("btrfs sub snap -r /mnt/.snapshots/etc/etc-tmp /mnt/.snapshots/etc/etc-1")
         os.system("btrfs sub snap /mnt/.snapshots/rootfs/snapshot-1 /mnt/.snapshots/rootfs/snapshot-tmp")
+        os.system("arch-chroot /mnt btrfs sub set-default /.snapshots/rootfs/snapshot-tmp")
 
     elif DesktopInstall == 2:
         os.system(f"echo '1' > /mnt/usr/share/ast/snap")
