@@ -1,6 +1,7 @@
 #!/usr/bin/python3
+
 import sys
-import ast # Heh funny name coincidence with project name
+import ast
 import subprocess
 from anytree.importer import DictImporter
 from anytree.exporter import DictExporter
@@ -67,11 +68,11 @@ def append_base_tree(tree,val):
 
 # Add child to node
 def add_node_to_parent(tree, id, val):
-    par = (anytree.find(tree, filter_=lambda node: ("x"+str(node.name)+"x") in ("x"+str(id)+"x"))) 
+    par = (anytree.find(tree, filter_=lambda node: ("x"+str(node.name)+"x") in ("x"+str(id)+"x")))
     add = anytree.Node(val, parent=par)
 
 # Clone within node
-def add_node_to_level(tree,id, val): 
+def add_node_to_level(tree,id, val):
     npar = get_parent(tree, id)
     par = (anytree.find(tree, filter_=lambda node: ("x"+str(node.name)+"x") in ("x"+str(npar)+"x")))
     add = anytree.Node(val, parent=par)
@@ -902,3 +903,4 @@ def main(args):
 
 # Call main
 main(args)
+

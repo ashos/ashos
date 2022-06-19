@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+
 import os
 import time
 import sys
@@ -67,7 +68,7 @@ def main(args):
     for mntdir in mntdirs:
         os.system(f"mkdir /mnt/{mntdir}")
         os.system(f"mount {args[1]} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
-    
+
     for i in ("tmp", "root"):
         os.system(f"mkdir -p /mnt/{i}")
     for i in ("ast", "boot", "etc", "root", "rootfs", "tmp", "var"):
@@ -128,7 +129,7 @@ def main(args):
     os.system("sed -i '0,/@boot/{s,@boot,@.snapshots/boot/boot-tmp,}' /mnt/etc/fstab")
     os.system("mkdir -p /mnt/.snapshots/ast/snapshots")
 
-    os.system("arch-chroot /mnt ln -s /.snapshots/ast /var/lib/ast")    
+    os.system("arch-chroot /mnt ln -s /.snapshots/ast /var/lib/ast")
 
     clear()
     os.system("arch-chroot /mnt passwd")
