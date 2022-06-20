@@ -165,17 +165,12 @@ def deploy(snapshot):
         os.system(f"cp --reflink=auto -r /.snapshots/boot/boot-{etc}/* /.snapshots/rootfs/snapshot-{tmp}/boot >/dev/null 2>&1")
         os.system(f"echo '{snapshot}' > /.snapshots/rootfs/snapshot-{tmp}/usr/share/ast/snap")
         switchtmp()
-        #os.system(f"rm -rf /var/lib/pacman/* >/dev/null 2>&1") # Clean pacman and systemd directories before copy
         os.system(f"rm -rf /var/lib/systemd/* >/dev/null 2>&1")
         os.system(f"rm -rf /.snapshots/rootfs/snapshot-{tmp}/var/lib/systemd/* >/dev/null 2>&1")
-        #os.system(f"rm -rf /.snapshots/rootfs/snapshot-{tmp}/var/lib/pacman/* >/dev/null 2>&1")
         os.system(f"cp --reflink=auto -r /.snapshots/var/var-{etc}/* /.snapshots/rootfs/snapshot-{tmp}/var/ >/dev/null 2>&1")
-        #os.system(f"cp --reflink=auto -r /.snapshots/var/var-{etc}/lib/pacman/* /var/lib/pacman/ >/dev/null 2>&1") # Copy pacman and systemd directories
         os.system(f"cp --reflink=auto -r /.snapshots/var/var-{etc}/lib/systemd/* /var/lib/systemd/ >/dev/null 2>&1")
-        #os.system(f"cp --reflink=auto -r /.snapshots/var/var-{etc}/lib/pacman/* /.snapshots/rootfs/snapshot-{tmp}/var/lib/pacman/")
         os.system(f"cp --reflink=auto -r /.snapshots/var/var-{etc}/lib/systemd/* /.snapshots/rootfs/snapshot-{tmp}/var/lib/systemd/ >/dev/null 2>&1")
         os.system(f"btrfs sub set-default /.snapshots/rootfs/snapshot-{tmp}") # Set default volume
-        #os.system(f"chattr -RV +i /.snapshots/rootfs/snapshot-{tmp}/usr > /dev/null 2>&1")
         print(f"{snapshot} was deployed to /")
 
 # Add node to branch
@@ -326,9 +321,7 @@ def sync_tree(tree,treename,forceOffline):
             order.remove(order[0])
             order.remove(order[0])
             prepare(sarg)
-            #os.system(f"cp --reflink=auto -r /.snapshots/var/var-{arg}/lib/pacman/local/* /.snapshots/var/var-chr{sarg}/lib/pacman/local/ >/dev/null 2>&1")
             os.system(f"cp --reflink=auto -r /.snapshots/var/var-{arg}/lib/systemd/* /.snapshots/var/var-chr{sarg}/lib/systemd/ >/dev/null 2>&1")
-            #os.system(f"cp --reflink=auto -r /.snapshots/var/var-{arg}/lib/pacman/local/* /.snapshots/rootfs/snapshot-chr{sarg}/var/lib/pacman/local/ >/dev/null 2>&1")
             os.system(f"cp --reflink=auto -r /.snapshots/var/var-{arg}/lib/systemd/* /.snapshots/rootfs/snapshot-chr{sarg}/var/lib/systemd/ >/dev/null 2>&1")
             os.system(f"cp --reflink=auto -n -r /.snapshots/rootfs/snapshot-{arg}/* /.snapshots/rootfs/snapshot-chr{sarg}/ >/dev/null 2>&1")
             posttrans(sarg)
@@ -434,7 +427,6 @@ def untmp():
 def live_install(pkg):
     tmp = get_tmp()
     part = get_part()
-    #os.system(f"chattr -RV -i /.snapshots/rootfs/snapshot-{tmp}/usr > /dev/null 2>&1")
     os.system(f"mount --bind /.snapshots/rootfs/snapshot-{tmp} /.snapshots/rootfs/snapshot-{tmp} > /dev/null 2>&1")
     os.system(f"mount --bind /home /.snapshots/rootfs/snapshot-{tmp}/home > /dev/null 2>&1")
     os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var > /dev/null 2>&1")
@@ -443,13 +435,11 @@ def live_install(pkg):
     os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} pacman -S  --overwrite \\* --noconfirm {pkg}")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* > /dev/null 2>&1")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} > /dev/null 2>&1")
-    #os.system(f"chattr -RV +i /.snapshots/rootfs/snapshot-{tmp}/usr > /dev/null 2>&1")
 
 # Live unlocked shell
 def live_unlock():
     tmp = get_tmp()
     part = get_part()
-    #os.system(f"chattr -RV -i /.snapshots/rootfs/snapshot-{tmp}/usr > /dev/null 2>&1")
     os.system(f"mount --bind /.snapshots/rootfs/snapshot-{tmp} /.snapshots/rootfs/snapshot-{tmp} > /dev/null 2>&1")
     os.system(f"mount --bind /home /.snapshots/rootfs/snapshot-{tmp}/home > /dev/null 2>&1")
     os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var > /dev/null 2>&1")
@@ -458,7 +448,6 @@ def live_unlock():
     os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp}")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* > /dev/null 2>&1")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} > /dev/null 2>&1")
-    #os.system(f"chattr -RV +i /.snapshots/rootfs/snapshot-{tmp}/usr > /dev/null 2>&1")
 
 # Install packages
 def install(snapshot,pkg):
@@ -531,19 +520,17 @@ def prepare(snapshot):
     os.system(f"btrfs sub snap /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-chr{snapshot} >/dev/null 2>&1")
     os.system(f"btrfs sub snap /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-chr{snapshot} >/dev/null 2>&1")
     os.system(f"mkdir -p /.snapshots/var/var-chr{snapshot} >/dev/null 2>&1")
-    os.system(f"mount --bind /.snapshots/rootfs/snapshot-chr{snapshot} /.snapshots/rootfs/snapshot-chr{snapshot} >/dev/null 2>&1") # Pacman gets weird when chroot directory is not a mountpoint, so this mount is necessary
+    # pacman gets weird when chroot directory is not a mountpoint, so the following mount is necessary
+    os.system(f"mount --bind /.snapshots/rootfs/snapshot-chr{snapshot} /.snapshots/rootfs/snapshot-chr{snapshot} >/dev/null 2>&1")
     os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-chr{snapshot}/var >/dev/null 2>&1")
     os.system(f"mount --rbind /dev /.snapshots/rootfs/snapshot-chr{snapshot}/dev >/dev/null 2>&1")
     os.system(f"mount --rbind /sys /.snapshots/rootfs/snapshot-chr{snapshot}/sys >/dev/null 2>&1")
     os.system(f"mount --rbind /tmp /.snapshots/rootfs/snapshot-chr{snapshot}/tmp >/dev/null 2>&1")
     os.system(f"mount --rbind /proc /.snapshots/rootfs/snapshot-chr{snapshot}/proc >/dev/null 2>&1")
-    #os.system(f"chmod 0755 /.snapshots/rootfs/snapshot-chr/var >/dev/null 2>&1") # For some reason the permission needs to be set here
     os.system(f"btrfs sub snap /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-chr{snapshot} >/dev/null 2>&1")
     os.system(f"cp -r --reflink=auto /.snapshots/etc/etc-chr{snapshot}/* /.snapshots/rootfs/snapshot-chr{snapshot}/etc >/dev/null 2>&1")
     os.system(f"cp -r --reflink=auto /.snapshots/boot/boot-chr{snapshot}/* /.snapshots/rootfs/snapshot-chr{snapshot}/boot >/dev/null 2>&1")
-    #os.system(f"rm -rf /.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/pacman/* >/dev/null 2>&1")
     os.system(f"rm -rf /.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/systemd/* >/dev/null 2>&1")
-    #os.system(f"cp -r --reflink=auto /.snapshots/var/var-{snapshot}/lib/pacman/* /.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/pacman/ >/dev/null 2>&1")
     os.system(f"cp -r --reflink=auto /.snapshots/var/var-{snapshot}/lib/systemd/* /.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/systemd/ >/dev/null 2>&1")
     os.system(f"mount --bind /home /.snapshots/rootfs/snapshot-chr{snapshot}/home >/dev/null 2>&1")
     os.system(f"mount --rbind /run /.snapshots/rootfs/snapshot-chr{snapshot}/run >/dev/null 2>&1")
@@ -567,9 +554,7 @@ def posttrans(snapshot):
     os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/etc/* /.snapshots/etc/etc-chr{snapshot} >/dev/null 2>&1")
     os.system(f"rm -rf /.snapshots/var/var-chr{snapshot}/* >/dev/null 2>&1")
     os.system(f"mkdir -p /.snapshots/var/var-chr{snapshot}/lib/systemd >/dev/null 2>&1")
-    #os.system(f"mkdir -p /.snapshots/var/var-chr{snapshot}/lib/pacman >/dev/null 2>&1")
     os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/systemd/* /.snapshots/var/var-chr{snapshot}/lib/systemd >/dev/null 2>&1")
-    #os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/pacman/* /.snapshots/var/var-chr{snapshot}/lib/pacman >/dev/null 2>&1")
     os.system(f"cp -r -n --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/pkg/* /var/cache/pacman/pkg/ >/dev/null 2>&1")
     os.system(f"rm -rf /.snapshots/boot/boot-chr{snapshot}/* >/dev/null 2>&1")
     os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/boot/* /.snapshots/boot/boot-chr{snapshot} >/dev/null 2>&1")
@@ -579,18 +564,10 @@ def posttrans(snapshot):
     os.system(f"btrfs sub snap -r /.snapshots/etc/etc-chr{snapshot} /.snapshots/etc/etc-{etc} >/dev/null 2>&1")
     os.system(f"btrfs sub create /.snapshots/var/var-{etc} >/dev/null 2>&1")
     os.system(f"mkdir -p /.snapshots/var/var-{etc}/lib/systemd >/dev/null 2>&1")
-    #os.system(f"mkdir -p /.snapshots/var/var-{etc}/lib/pacman >/dev/null 2>&1")
     os.system(f"cp --reflink=auto -r /.snapshots/var/var-chr{snapshot}/lib/systemd/* /.snapshots/var/var-{etc}/lib/systemd >/dev/null 2>&1")
-    #os.system(f"cp --reflink=auto -r /.snapshots/rootfs/snapshot-chr{snapshot}/.snapshots/ast/fstree /.snapshots/ast/ >/dev/null 2>&1")
-    #os.system(f"cp --reflink=auto -r /.snapshots/var/var-chr{snapshot}/lib/pacman/* /.snapshots/var/var-{etc}/lib/pacman >/dev/null 2>&1")
-    #os.system(f"rm -rf /var/lib/pacman/* >/dev/null 2>&1")
-    #os.system(f"cp --reflink=auto -r /.snapshots/rootfs/snapshot-{tmp}/var/lib/pacman/* /var/lib/pacman >/dev/null 2>&1")
     os.system(f"rm -rf /var/lib/systemd/* >/dev/null 2>&1")
     os.system(f"cp --reflink=auto -r /.snapshots/rootfs/snapshot-{tmp}/var/lib/systemd/* /var/lib/systemd >/dev/null 2>&1")
-    #os.system(f"cp --reflink=auto -r -n /.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/* /var/lib/ >/dev/null 2>&1")
-    #os.system(f"cp --reflink=auto -r -n /.snapshots/rootfs/snapshot-chr{snapshot}/var/games/* /var/games/ >/dev/null 2>&1")
     os.system(f"btrfs sub snap -r /.snapshots/rootfs/snapshot-chr{snapshot} /.snapshots/rootfs/snapshot-{snapshot} >/dev/null 2>&1")
-#    os.system(f"btrfs sub snap -r /.snapshots/var/var-chr{snapshot} /.snapshots/var/var-{etc} >/dev/null 2>&1")
     os.system(f"btrfs sub snap -r /.snapshots/boot/boot-chr{snapshot} /.snapshots/boot/boot-{etc} >/dev/null 2>&1")
     unchr(snapshot)
 
@@ -661,7 +638,6 @@ def switchtmp():
         os.system("sed -i 's,@.snapshots/rootfs/snapshot-tmp0,@.snapshots/rootfs/snapshot-tmp,g' /.snapshots/rootfs/snapshot-tmp/boot/grub/grub.cfg")
         os.system("sed -i 's,@.snapshots/rootfs/snapshot-tmp0,@.snapshots/rootfs/snapshot-tmp,g' /.snapshots/rootfs/snapshot-tmp/etc/fstab") # Write fstab for new deployment
         os.system("sed -i 's,@.snapshots/etc/etc-tmp0,@.snapshots/etc/etc-tmp,g' /.snapshots/rootfs/snapshot-tmp/etc/fstab")
-#        os.system("sed -i 's,@.snapshots/var/var-tmp0,@.snapshots/var/var-tmp,g' /.snapshots/rootfs/snapshot-tmp/etc/fstab")
         os.system("sed -i 's,@.snapshots/boot/boot-tmp0,@.snapshots/boot/boot-tmp,g' /.snapshots/rootfs/snapshot-tmp/etc/fstab")
         sfile = open("/.snapshots/rootfs/snapshot-tmp0/usr/share/ast/snap","r")
         snap = sfile.readline()
@@ -673,7 +649,6 @@ def switchtmp():
         os.system("sed -i 's,@.snapshots/rootfs/snapshot-tmp,@.snapshots/rootfs/snapshot-tmp0,g' /.snapshots/rootfs/snapshot-tmp0/boot/grub/grub.cfg")
         os.system("sed -i 's,@.snapshots/rootfs/snapshot-tmp,@.snapshots/rootfs/snapshot-tmp0,g' /.snapshots/rootfs/snapshot-tmp0/etc/fstab")
         os.system("sed -i 's,@.snapshots/etc/etc-tmp,@.snapshots/etc/etc-tmp0,g' /.snapshots/rootfs/snapshot-tmp0/etc/fstab")
-#        os.system("sed -i 's,@.snapshots/var/var-tmp,@.snapshots/var/var-tmp0,g' /.snapshots/rootfs/snapshot-tmp0/etc/fstab")
         os.system("sed -i 's,@.snapshots/boot/boot-tmp,@.snapshots/boot/boot-tmp0,g' /.snapshots/rootfs/snapshot-tmp0/etc/fstab")
         sfile = open("/.snapshots/rootfs/snapshot-tmp/usr/share/ast/snap", "r")
         snap = sfile.readline()
