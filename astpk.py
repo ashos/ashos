@@ -460,7 +460,7 @@ def install(snapshot,pkg):
         excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --overwrite '/var/*'"))
         if int(excode) == 0:
             posttrans(snapshot)
-            print(f"snapshot {snapshot} updated successfully")
+            print(f"Package {pkg} in snapshot {snapshot} installed successfully.")
         else:
             print("install failed, changes were discarded")
 
@@ -475,7 +475,7 @@ def remove(snapshot,pkg):
         excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman --noconfirm -Rns {pkg}"))
         if int(excode) == 0:
             posttrans(snapshot)
-            print(f"snapshot {snapshot} updated successfully")
+            print(f"Package {pkg} in snapshot {snapshot} removed successfully.")
         else:
             print("remove failed, changes were discarded")
 
@@ -582,9 +582,24 @@ def upgrade(snapshot):
         excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu")) # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
         if int(excode) == 0:
             posttrans(snapshot)
-            print(f"snapshot {snapshot} updated successfully")
+            print(f"Snapshot {snapshot} upgraded successfully.")
         else:
-            print("update failed, changes were discarded")
+            print("Failed upgrading. Changes were discarded.")
+
+# Refresh snapshot
+def refresh(snapshot):
+    if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
+        print("cannot refresh, snapshot doesn't exist")
+    elif snapshot == "0":
+        print("changing base snapshot is not allowed")
+    else:
+        prepare(snapshot)
+        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syy"))
+        if int(excode) == 0:
+            posttrans(snapshot)
+            print(f"Snapshot {snapshot} refreshed successfully.")
+        else:
+            print("Failed refreshing. Changes were discarded.")
 
 # Noninteractive update
 def autoupgrade(snapshot):
@@ -804,6 +819,10 @@ def main(args):
     elif arg == "upgrade" or arg == "up" and (lock != True):
         ast_lock()
         upgrade(args[args.index(arg)+1])
+        ast_unlock()
+    elif arg == "refresh" or arg == "ref" and (lock != True):
+        ast_lock()
+        refresh(args[args.index(arg)+1])
         ast_unlock()
     elif arg == "etc-update" or arg == "etc" and (lock != True):
         ast_lock()
