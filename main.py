@@ -46,7 +46,7 @@ def main(args):
     print("Enter hostname:")
     hostname = input("> ")
 
-    os.system("pacman -S --noconfirm archlinux-keyring")
+    os.system("pacman -Syy --noconfirm archlinux-keyring")
     os.system(f"mkfs.btrfs -f {args[1]}")
 
     if os.path.exists("/sys/firmware/efi"):
