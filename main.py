@@ -64,7 +64,7 @@ def main(args):
     os.system(f"umount /mnt")
     os.system(f"mount {args[1]} -o subvol=@,compress=zstd,noatime /mnt")
 
-    for mntdir in mntdirs:
+    for mntdir in mntdirs_n:
         os.system(f"mkdir /mnt/{mntdir}")
         os.system(f"mount {args[1]} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
 
