@@ -464,6 +464,10 @@ def install(snapshot,pkg):
         else:
             print("F: install failed and changes discarded.")
 
+# Install from a text file
+def install_profile(snapshot, profile):
+    install(snapshot, subprocess.check_output(f"cat {profile}", shell=True).decode('utf-8').strip())
+
 # Remove packages
 def remove(snapshot,pkg):
     if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
