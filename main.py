@@ -64,6 +64,8 @@ def main(args):
     os.system(f"umount /mnt")
     os.system(f"mount {args[1]} -o subvol=@,compress=zstd,noatime /mnt")
 
+    mntdirs_n = mntdirs
+    mntdirs_n.remove("")
     for mntdir in mntdirs_n:
         os.system(f"mkdir /mnt/{mntdir}")
         os.system(f"mount {args[1]} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
@@ -82,8 +84,7 @@ def main(args):
     if efi:
         os.system("pacstrap /mnt efibootmgr")
 
-    mntdirs_n = mntdirs
-    mntdirs_n.remove("")
+
     os.system(f"echo 'UUID=\"{to_uuid(args[1])}\" / btrfs subvol=@,compress=zstd,noatime,ro 0 0' > /mnt/etc/fstab")
 
     for mntdir in mntdirs_n:
