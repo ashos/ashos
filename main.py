@@ -315,7 +315,7 @@ def main(args):
         os.system("cp --reflink=auto -r /mnt/.snapshots/boot/boot-0/* /mnt/.snapshots/rootfs/snapshot-tmp/boot")
 
     os.system("umount -R /mnt")
-    os.system(f"mount {args[1]} /mnt")
+    os.system(f"mount {args[1]} -o subvolid=0 /mnt")
     os.system("btrfs sub del /mnt/@")
     os.system("umount -R /mnt")
     clear()
