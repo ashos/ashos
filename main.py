@@ -62,13 +62,12 @@ def main(args):
         os.system(f"btrfs sub create /mnt/{btrdir}")
 
     os.system(f"umount /mnt")
-    os.system(f"mount {args[1]} -o subvol=@,compress=zstd,noatime /mnt")
 
     mntdirs_n = mntdirs
     mntdirs_n.remove("")
     for mntdir in mntdirs_n:
         os.system(f"mkdir /mnt/{mntdir}")
-        os.system(f"mount {args[1]} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
+        os.system(f"mount {args[1]} -o subvol={btrdirs[mntdirs_n.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
 
     for i in ("tmp", "root"):
         os.system(f"mkdir -p /mnt/{i}")
