@@ -63,10 +63,9 @@ def main(args):
 
     os.system(f"umount /mnt")
 
-    mntdirs_n = mntdirs
-    for mntdir in mntdirs_n:
+    for mntdir in mntdirs:
         os.system(f"mkdir /mnt/{mntdir}")
-        os.system(f"mount {args[1]} -o subvol={btrdirs[mntdirs_n.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
+        os.system(f"mount {args[1]} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
 
     for i in ("tmp", "root"):
         os.system(f"mkdir -p /mnt/{i}")
@@ -85,7 +84,7 @@ def main(args):
 
     os.system(f"echo 'UUID=\"{to_uuid(args[1])}\" / btrfs subvol=@,compress=zstd,noatime,ro 0 0' > /mnt/etc/fstab")
 
-    for mntdir in mntdirs_n:
+    for mntdir in mntdirs:
         os.system(f"echo 'UUID=\"{to_uuid(args[1])}\" /{mntdir} btrfs subvol=@{mntdir},compress=zstd,noatime 0 0' >> /mnt/etc/fstab")
 
     if efi:
