@@ -650,7 +650,6 @@ def rollback():
 def switchtmp():
     mount = get_tmp()
     part = get_part()
-    # This part is useless? Dumb stuff
     os.system(f"mkdir -p /etc/mnt/boot >/dev/null 2>&1")
     os.system(f"mount {part} -o subvol=@boot /etc/mnt/boot") # Mount boot partition for writing
     if "tmp0" in mount:
