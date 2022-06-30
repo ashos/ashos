@@ -154,7 +154,7 @@ def main(args):
     os.system("arch-chroot /mnt chmod +x /usr/local/sbin/ast")
     os.system("btrfs sub snap -r /mnt /mnt/.snapshots/rootfs/snapshot-0")
     os.system("btrfs sub create /mnt/.snapshots/etc/etc-tmp")
-    os.system("btrfs sub create /mnt/.snapshots/var/var-tmp")
+#    os.system("btrfs sub create /mnt/.snapshots/var/var-tmp") #NOT NEEDED
     os.system("btrfs sub create /mnt/.snapshots/boot/boot-tmp")
 #    os.system("cp --reflink=auto -r /mnt/var/* /mnt/.snapshots/var/var-tmp")
     for i in ("pacman", "systemd"):
@@ -163,7 +163,7 @@ def main(args):
     os.system("cp --reflink=auto -r /mnt/var/lib/systemd/* /mnt/.snapshots/var/var-tmp/lib/systemd/")
     os.system("cp --reflink=auto -r /mnt/boot/* /mnt/.snapshots/boot/boot-tmp")
     os.system("cp --reflink=auto -r /mnt/etc/* /mnt/.snapshots/etc/etc-tmp")
-    os.system("btrfs sub snap -r /mnt/.snapshots/var/var-tmp /mnt/.snapshots/var/var-0")
+#    os.system("btrfs sub snap -r /mnt/.snapshots/var/var-tmp /mnt/.snapshots/var/var-0") #NOT NEEDED
     os.system("btrfs sub snap -r /mnt/.snapshots/boot/boot-tmp /mnt/.snapshots/boot/boot-0")
     os.system("btrfs sub snap -r /mnt/.snapshots/etc/etc-tmp /mnt/.snapshots/etc/etc-0")
     os.system(f"echo '{astpart}' > /mnt/.snapshots/ast/part")
