@@ -221,6 +221,7 @@ def clone_under(snapshot, branch):
         print(f"Branch {i} added under snapshot {snapshot}.")
 
 #   Lock ast
+#   Currently this lock is ignored
 def ast_lock():
     os.system("touch /.snapshots/ast/lock-disable")
 
@@ -726,6 +727,16 @@ def switchtmp():
     grubconf.close()
     os.system("umount /etc/mnt/boot >/dev/null 2>&1")
 
+#   Update ast itself
+def ast_sync():
+    cdir = os.getcwd()
+    os.chdir("/tmp")
+    excode = str(os.system("curl -O 'https://raw.githubusercontent.com/astos/astos/main/astpk.py'"))
+    if int(excode) == 0:
+        os.system("cp ./astpk.py /.snapshots/ast/ast")
+        os.system("chmod +x /.snapshots/ast/ast")
+    os.chdir(cdir)
+
 # Clear all temporary snapshots
 def tmpclear():
     os.system(f"btrfs sub del /.snapshots/etc/etc-chr* >/dev/null 2>&1")
@@ -857,6 +868,10 @@ def main(args):
     elif arg == "base-update" or arg == "bu" and (lock != True):
         ast_lock()
         update_base()
+        ast_unlock()
+    elif arg == "ast-sync" and (lock != True):
+        ast_lock()
+        ast_sync()
         ast_unlock()
     elif arg == "sync" or arg == "tree-sync" and (lock != True):
         ast_lock()
