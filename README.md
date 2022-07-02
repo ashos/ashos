@@ -112,6 +112,7 @@ python3 main.py /dev/<partition> /dev/<drive> /dev/<efi part> # Skip the EFI par
 ## Additional documentation
 * It is advised to refer to the [Arch wiki](https://wiki.archlinux.org/) for documentation not part of this project
 * Report issues/bugs on the [Github issues page](https://github.com/astos/astos/issues)
+* **HINT: you can use `ast help` to get a quick cheatsheet of all available commands**
 
 #### Base snapshot
 * The snapshot ```0``` is reserved for the base system snapshot, it cannot be changed and can only be updated using ```ast base-update```

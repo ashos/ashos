@@ -727,6 +727,38 @@ def switchtmp():
     grubconf.close()
     os.system("umount /etc/mnt/boot >/dev/null 2>&1")
 
+
+#   Show some basic ast commands
+def ast_help():
+    print("all ast commands, aside from 'ast tree' must be used with root permissions!")
+    print("\n\ntree manipulation commands:")
+    print("\ttree - show the snapshot tree")
+    print("\tcurrent - return current snapshot number")
+    print("\tdesc <snapshot> <description> - set a description for snapshot by number")
+    print("\tdel <tree> - delete a tree and all it's branches recursively")
+    print("\tchroot <snapshot> - open a root shell inside specified snapshot")
+    print("\tlive-chroot - open a read-write shell inside currently booted snapshot (changes are discarded on new deployment)")
+    print("\trun <snapshot> <command> - execute command inside another snapshot")
+    print("\ttree-run <tree> <command> - execute command inside another snapshot and all snapshots below it")
+    print("\tclone <snapshot> - create a copy of snapshot")
+    print("\tbranch <snapshot> - create a new branch from snapshot")
+    print("\tcbranch <snapshot> - copy snapshot under same parent branch")
+    print("\tubranch <parent> <snapshot> - copy snapshot under specified parent")
+    print("\tnew - create a new base snapshot")
+    print("\tdeploy <snapshot> - deploy a snapshot for next boot")
+    print("\tbase-update - update the base image")
+    print("\n\npackage management commands:")
+    print("\tinstall <snapshot> <package> - install a package inside specified snapshot")
+    print("\tsync <tree> - sync package and configuration changes recursively, requires an internet connection")
+    print("\tforce-sync <tree> - same thing as sync but doesn't update snapshots, potentially riskier")
+    print("\tremove <snapshot> <package(s)> - remove package(s) from snapshot")
+    print("\ttree-rmpkg <tree> <package(s)> - remove package(s) from tree recursively")
+    print("\tupgrade <snapshot> - update all packages in snapshot")
+    print("\ttree-upgrade <tree> - update all packages in snapshot recursively")
+    print("\trollback - rollback the deployment to the last booted snapshot")
+    print("\n\nto update ast itself use 'ast ast-sync'")
+
+
 #   Update ast itself
 def ast_sync():
     cdir = os.getcwd()
@@ -777,7 +809,11 @@ def main(args):
     fstreepath = str("/.snapshots/ast/fstree") # Path to fstree file
     fstree = importer.import_(import_tree_file("/.snapshots/ast/fstree")) # Import fstree file
     # Recognize argument and call appropriate function
-    arg = args[1]
+    if len(args) > 1:
+        arg = args[1]
+    else:
+        print("You need to specify an operation, see 'ast help' for help.")
+        sys.exit()
     if isChroot == True and ("--chroot" not in args):
         print("Please don't use ast inside a chroot!")
     elif lock == True:
@@ -872,6 +908,8 @@ def main(args):
         ast_lock()
         update_base()
         ast_unlock()
+    elif arg == "help":
+        ast_help()
     elif arg == "ast-sync" and (lock != True):
         ast_lock()
         ast_sync()
