@@ -77,7 +77,7 @@ Clone repository
 
 ```
 git clone "https://github.com/astos/astos"  
-cd astos  
+cd astOS  
 ```
 Partition and format drive
 
@@ -282,6 +282,8 @@ ast tree-rmpkg <tree> <pacakge or packages>
 
 #### Updating
 * It is advised to clone a snapshot before updating it, so you can roll back in case of failure
+* This update only updates the system packages, in order to update ast itself see [this section](https://github.com/astos/astos#updating-ast-itself)
+ 
 
 * To update a single snapshot
 
@@ -339,21 +341,12 @@ ast deploy <snapshot>
 ```
 
 #### Updating ast itself
+* ast doesn't get updated alongside the system when `ast upgrade` is used
 * sometimes it may be necessary to update ast itself
-* this can be done in a few steps:
+* ast can be updated with a single command
 
 ```
-git clone "https://github.com/astos/astos"
-cd astOS
-cp astpk.py ast 
-chmod +x ast
-cp ./ast /var/astpk/ast  # Copy new ast to /var, accessible from all snapshots
-ast trun <snapshot> cp /var/astpk/ast /usr/bin/ast  # Copy over new ast
-ast clone 0
-ast run <clone of 0> cp /var/astpk/ast /usr/bin/ast  # Now we update snapshot 0 in a clone  
-btrfs sub del /.snapshots/rootfs/snapshot-0  # Here we manually replace snapshot 0 with the updated snapshot
-btrfs sub snap -r /.snapshots/rootfs/snapshot-<clone of 0> /.snapshots/rootfs/snapshot-0
-ast del <clone of 0>  # Remove temporary snapshot
+ast ast-sync
 ```
 
 #### Debugging ast

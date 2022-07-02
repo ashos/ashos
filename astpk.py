@@ -735,6 +735,9 @@ def ast_sync():
     if int(excode) == 0:
         os.system("cp ./astpk.py /.snapshots/ast/ast")
         os.system("chmod +x /.snapshots/ast/ast")
+        print("ast updated succesfully.")
+    else:
+        print("error: failed to download ast")
     os.chdir(cdir)
 
 # Clear all temporary snapshots
