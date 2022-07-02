@@ -103,7 +103,7 @@ def main(args):
     os.system(f"echo 'ID=astos' >> /mnt/etc/os-release")
     os.system(f"echo 'BUILD_ID=rolling' >> /mnt/etc/os-release")
     os.system(f"echo 'ANSI_COLOR=\"38;2;23;147;209\"' >> /mnt/etc/os-release")
-    os.system(f"echo 'HOME_URL=\"https://github.com/CuBeRJAN/astOS\"' >> /mnt/etc/os-release")
+    os.system(f"echo 'HOME_URL=\"https://github.com/astos/astos\"' >> /mnt/etc/os-release")
     os.system(f"echo 'LOGO=astos-logo' >> /mnt/etc/os-release")
     os.system(f"cp -r /mnt/var/lib/pacman/* /mnt/usr/share/ast/db")
     os.system(f"sed -i s,\"#DBPath      = /var/lib/pacman/\",\"DBPath      = /usr/share/ast/db/\",g /mnt/etc/pacman.conf")
@@ -126,6 +126,8 @@ def main(args):
     os.system("sed -i '0,/@boot/{s,@boot,@.snapshots/boot/boot-tmp,}' /mnt/etc/fstab")
     os.system("mkdir -p /mnt/.snapshots/ast/snapshots")
 
+    os.system("cp ./astpk.py /mnt/.snapshots/ast/ast")
+    os.system("arch-chroot /mnt chmod +x /.snapshots/ast/ast")
     os.system("arch-chroot /mnt ln -s /.snapshots/ast /var/lib/ast")
 
     clear()
@@ -150,8 +152,7 @@ def main(args):
     os.system(f"arch-chroot /mnt grub-install {args[2]}")
     os.system(f"arch-chroot /mnt grub-mkconfig {args[2]} -o /boot/grub/grub.cfg")
     os.system("sed -i '0,/subvol=@/{s,subvol=@,subvol=@.snapshots/rootfs/snapshot-tmp,g}' /mnt/boot/grub/grub.cfg")
-    os.system("cp ./astpk.py /mnt/usr/local/sbin/ast")
-    os.system("arch-chroot /mnt chmod +x /usr/local/sbin/ast")
+    os.system("arch-chroot /mnt ln -s /.snapshots/ast/ast /usr/local/sbin/ast")
     os.system("btrfs sub snap -r /mnt /mnt/.snapshots/rootfs/snapshot-0")
     os.system("btrfs sub create /mnt/.snapshots/etc/etc-tmp")
     os.system("btrfs sub create /mnt/.snapshots/var/var-tmp")
