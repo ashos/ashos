@@ -82,7 +82,10 @@ def main(args):
         sys.exit()
 
     if efi:
-        os.system("pacstrap /mnt efibootmgr")
+        excode = int(os.system("pacstrap /mnt efibootmgr"))
+        if excode != 0:
+            print("Failed to download packages!")
+            sys.exit()
 
 
     os.system(f"echo 'UUID=\"{to_uuid(args[1])}\" / btrfs subvol=@,compress=zstd,noatime,ro 0 0' > /mnt/etc/fstab")
