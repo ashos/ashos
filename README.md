@@ -326,6 +326,8 @@ ast install <snapshots> archlinux-keyring
 ast etc-update
 ```
 
+* This allows you to configure your system by modifying ``/etc`` as usual, and then saving these changes
+
 #### Dual boot
 * astOS supports dual boot using the GRUB bootloader
 * When installing the system, use the existing EFI partition
