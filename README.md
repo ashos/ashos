@@ -15,7 +15,7 @@
   * [Package management](https://github.com/astos/astos#package-management)
 * [Additional documentation](https://github.com/astos/astos#additional-documentation)
   * [Updating the pacman keys](https://github.com/astos/astos#fixing-pacman-corrupt-packages--key-issues)
-  * [Saving configuration changes in /etc persistently](https://github.com/astos/astos#saving-configuration-changes-in-etc)
+  * [Saving configuration changes in /etc persistently](https://github.com/astos/astos#saving-configuration-changes-made-in-etc)
   * [Configuring dual boot](https://github.com/astos/astos#dual-boot)
   * [Updating ast itself](https://github.com/astos/astos#updating-ast-itself)
   * [Debugging ast](https://github.com/astos/astos#debuggin-ast)
