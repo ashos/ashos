@@ -644,6 +644,7 @@ def autoupgrade(snapshot):
         os.system("echo 0 > /.snapshots/ast/upstate")
         os.system("echo $(date) >> /.snapshots/ast/upstate")
     else:
+        unchr(snapshot)
         os.system("echo 1 > /.snapshots/ast/upstate")
         os.system("echo $(date) >> /.snapshots/ast/upstate")
 
