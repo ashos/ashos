@@ -534,9 +534,20 @@ def delete(snapshot):
 
 #   Update base
 def update_base():
-    prepare("0")
-    os.system(f"chroot /.snapshots/rootfs/snapshot-chr0 pacman -Syyu")
-    posttrans("0")
+    snapshot = "0"
+    if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
+        print(f"F: snapshot {snapshot} appears to be in use. If you're certain it's not in use clear lock with 'ast unlock {snapshot}'.")
+    else:
+        prepare(snapshot)
+        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu"))
+        if int(excode) == 0:
+            posttrans(snapshot)
+            print(f"Snapshot {snapshot} upgraded successfully.")
+        else:
+            unchr(snapshot)
+            print("F: upgrade failed and changes discarded.")
+
+
 
 #   Prepare snapshot to chroot dir to install or chroot into
 def prepare(snapshot):
