@@ -18,7 +18,7 @@
   * [Saving configuration changes in /etc persistently](https://github.com/astos/astos#saving-configuration-changes-made-in-etc)
   * [Configuring dual boot](https://github.com/astos/astos#dual-boot)
   * [Updating ast itself](https://github.com/astos/astos#updating-ast-itself)
-  * [Debugging ast](https://github.com/astos/astos#debuggin-ast)
+  * [Debugging ast](https://github.com/astos/astos#debugging-ast)
 * [Known bugs](https://github.com/astos/astos#known-bugs)
 * [Contributing](https://github.com/astos/astos#contributing)
 * [Community](https://github.com/astos/astos#community)
