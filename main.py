@@ -137,15 +137,16 @@ def main(args):
     os.system("arch-chroot /mnt ln -s /.snapshots/ast /var/lib/ast")
 
     clear()
-    os.system("arch-chroot /mnt passwd")
-    while True:
-        print("did your password set properly (y/n)?")
-        reply = input("> ")
-        if reply.casefold() == "y":
-            break
-        else:
-            clear()
-            os.system("arch-chroot /mnt passwd")
+    if not DesktopInstall: # Skip asking for password if doing a desktop install, since root account will be locked anyway (sudo used instead)
+        os.system("arch-chroot /mnt passwd")
+        while True:
+            print("did your password set properly (y/n)?")
+            reply = input("> ")
+            if reply.casefold() == "y":
+                break
+            else:
+                clear()
+                os.system("arch-chroot /mnt passwd")
 
     os.system("arch-chroot /mnt systemctl enable NetworkManager")
     os.system("echo {\\'name\\': \\'root\\', \\'children\\': [{\\'name\\': \\'0\\'}]} > /mnt/.snapshots/ast/fstree")
