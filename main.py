@@ -178,7 +178,7 @@ def main(args):
 
     if DesktopInstall == 1:
         os.system(f"echo '1' > /mnt/usr/share/ast/snap")
-        excode = int(os.system("pacstrap /mnt flatpak gnome gnome-extra gnome-themes-extra gdm pipewire pipewire-pulse sudo"))
+        excode = int(os.system("pacstrap /mnt flatpak gnome gnome-themes-extra gdm pipewire pipewire-pulse sudo"))
         if excode != 0:
             print("Failed to download packages!")
             sys.exit()
@@ -236,7 +236,7 @@ def main(args):
 
     elif DesktopInstall == 2:
         os.system(f"echo '1' > /mnt/usr/share/ast/snap")
-        excode = int(os.system("pacstrap /mnt flatpak plasma xorg kde-applications sddm pipewire pipewire-pulse sudo"))
+        excode = int(os.system("pacstrap /mnt flatpak plasma xorg konsole dolphin sddm pipewire pipewire-pulse sudo"))
         if excode != 0:
             print("Failed to download packages!")
             sys.exit()
