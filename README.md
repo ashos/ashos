@@ -197,6 +197,14 @@ ast tree-run <tree> <command>
 ```
 ast clone <snapshot>
 ```
+
+#### Clone a tree recursively  
+* This clones an entire tree recursively
+
+```
+ast clone-tree <snapshot>
+```
+
 #### Create new tree branch
 
 * Adds a new branch to specified snapshot
