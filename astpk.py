@@ -187,6 +187,19 @@ def extend_branch(snapshot, desc=""):
         if desc: write_desc(i, desc)
         print(f"Branch {i} added under snapshot {snapshot}.")
 
+#   Recursively clone an entire tree
+def clone_recursive(snapshot):
+    if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
+        print(f"F: cannot clone as tree {snapshot} doesn't exist.")
+    else:
+        parent = get_parent(fstree, snapshot)
+        children = return_children(fstree, snapshot)
+        ntree = clone_branch(snapshot)
+        new_children = children
+        for child in children:
+            clone_under(child, new_children[children.index(get_parent(child))])
+            new_children[children.index(child)] = findnew()
+
 #   Clone branch under same parent,
 def clone_branch(snapshot):
     if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
@@ -202,13 +215,12 @@ def clone_branch(snapshot):
         desc = str(f"clone of {snapshot}")
         write_desc(i, desc)
         print(f"Branch {i} added to parent of {snapshot}.")
+        return i
 
 #   Clone under specified parent
 def clone_under(snapshot, branch):
-    if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
+    if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")) or (not(os.path.exists(f"/.snapshots/rootfs/snapshot-{branch}"))):
         print(f"F: cannot clone as snapshot {snapshot} doesn't exist.")
-    if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{branch}")):
-        print(f"F: cannot clone as snapshot {branch} doesn't exist.")
     else:
         i = findnew()
         os.system(f"btrfs sub snap -r /.snapshots/rootfs/snapshot-{branch} /.snapshots/rootfs/snapshot-{i} >/dev/null 2>&1")
@@ -217,9 +229,10 @@ def clone_under(snapshot, branch):
         os.system(f"btrfs sub snap -r /.snapshots/boot/boot-{branch} /.snapshots/boot/boot-{i} >/dev/null 2>&1")
         add_node_to_parent(fstree,snapshot,i)
         write_tree(fstree)
-        desc = str(f"clone of {branch}")
+        desc = str(f"clone of {snapshot}")
         write_desc(i, desc)
         print(f"Branch {i} added under snapshot {snapshot}.")
+        return i
 
 #   Lock ast
 #   Currently this lock is ignored
@@ -918,8 +931,10 @@ def main(args):
         clone_under(args[args.index(arg)+1], args[args.index(arg)+2])
     elif arg == "diff":
         snapshot_diff(args[args.index(arg)+1], args[args.index(arg)+2])
-    elif arg == "clone" or arg == "tree-clone":
+    elif arg == "clone":
         clone_as_tree(args[args.index(arg)+1])
+    elif arg == "clone-tree":
+        clone_recursive(args[args.index(arg)+1])
     elif arg == "deploy":
         deploy(args[args.index(arg)+1])
     elif arg == "rollback":
