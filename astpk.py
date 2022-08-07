@@ -196,8 +196,10 @@ def clone_recursive(snapshot):
         children = return_children(fstree, snapshot)
         ntree = clone_branch(snapshot)
         new_children = children
+        print (children)
         for child in children:
-            clone_under(child, new_children[children.index(get_parent(child))])
+            print (child)
+            clone_under(child, new_children[children.index(get_parent(fstree, child))])
             new_children[children.index(child)] = findnew()
 
 #   Clone branch under same parent,
