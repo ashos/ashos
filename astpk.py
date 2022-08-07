@@ -808,6 +808,7 @@ def ast_help():
     print("\trun <snapshot> <command> - execute command inside another snapshot")
     print("\ttree-run <tree> <command> - execute command inside another snapshot and all snapshots below it")
     print("\tclone <snapshot> - create a copy of snapshot")
+    print("\tclone-tree <snapshot> - clone a tree recursively")
     print("\tbranch <snapshot> - create a new branch from snapshot")
     print("\tcbranch <snapshot> - copy snapshot under same parent branch")
     print("\tubranch <parent> <snapshot> - copy snapshot under specified parent")
