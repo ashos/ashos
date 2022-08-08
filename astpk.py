@@ -215,7 +215,7 @@ def clone_branch(snapshot):
         os.system(f"btrfs sub snap -r /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-{i} >/dev/null 2>&1")
         add_node_to_level(fstree,snapshot,i)
         write_tree(fstree)
-        desc = str(f"clone of {snapshot}")
+        desc = str(f"clone of {branch}")
         write_desc(i, desc)
         print(f"Branch {i} added to parent of {snapshot}.")
         return i
