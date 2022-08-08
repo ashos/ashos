@@ -222,8 +222,10 @@ def clone_branch(snapshot):
 
 #   Clone under specified parent
 def clone_under(snapshot, branch):
-    if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")) or (not(os.path.exists(f"/.snapshots/rootfs/snapshot-{branch}"))):
+    if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
         print(f"F: cannot clone as snapshot {snapshot} doesn't exist.")
+    if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{branch}"))
+        print(f"F: cannot clone as snapshot {branch} doesn't exist.")
     else:
         i = findnew()
         os.system(f"btrfs sub snap -r /.snapshots/rootfs/snapshot-{branch} /.snapshots/rootfs/snapshot-{i} >/dev/null 2>&1")
