@@ -224,7 +224,7 @@ def clone_branch(snapshot):
 def clone_under(snapshot, branch):
     if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
         print(f"F: cannot clone as snapshot {snapshot} doesn't exist.")
-    if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{branch}"))
+    if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{branch}")):
         print(f"F: cannot clone as snapshot {branch} doesn't exist.")
     else:
         i = findnew()
