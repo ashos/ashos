@@ -247,7 +247,6 @@ ast base-update
 ## Package management
 
 #### Software installation
-* Run ```ast deploy <snapshot>``` and reboot after installing new software for changes to apply (unless using live install, more info below)
 * Software can also be installed using pacman in a chroot
 * AUR can be used under the chroot
 * Flatpak can be used for persistent package installation
@@ -256,6 +255,7 @@ ast base-update
 ```
 ast install <snapshot> <package>
 ```
+
 * After installing you can sync the newly installed packages to all the branches of the tree with
 * Syncing the tree also automatically updates all the snapshots
 
@@ -267,11 +267,6 @@ ast sync <tree>
 
 ```
 ast force-sync <tree>
-```
-
-* ast also supports installing packages without rebooting
-```
-ast install --live <snapshot> <package>
 ```
 
 #### Removing software
