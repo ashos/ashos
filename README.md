@@ -359,6 +359,10 @@ exit
 ast deploy <snapshot>
 ```
 
+If Windows is detected, ast should return output along the lines of `Found Windows Boot Manager on...`
+
+You may need to install `ntfs-3g` first and re-deploy if you don't see a Windows entry.
+
 #### Updating ast itself
 * ast doesn't get updated alongside the system when `ast upgrade` is used
 * sometimes it may be necessary to update ast itself
