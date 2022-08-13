@@ -339,7 +339,18 @@ def sync_tree(tree,treename,forceOffline):
                 prepare(sarg)
  #               os.system(f"cp --reflink=auto -r /.snapshots/var/var-{arg}/lib/systemd/* /.snapshots/var/var-chr{sarg}/lib/systemd/ >/dev/null 2>&1")
  #               os.system(f"cp --reflink=auto -r /.snapshots/var/var-{arg}/lib/systemd/* /.snapshots/rootfs/snapshot-chr{sarg}/var/lib/systemd/ >/dev/null 2>&1")
+                os.system("mkdir -p /.snapshots/tmp-db/local/")
+                os.system("rm -rf /.snapshots/tmp-db/local/*")
+                pkg_list_to = str(subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-chr{sarg} pacman -Qq", shell=True))[2:][:-1].split("\\n")[:-1]
+                pkg_list_from = str(subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{arg} pacman -Qq", shell=True))[2:][:-1].split("\\n")[:-1]
+                # Get packages to be inherited
+                pkg_list_to, pkg_list_from = [i for i in pkg_list_to if i not in pkg_list_from], [j for j in pkg_list_from if j not in pkg_list_to]
+                os.system(f"cp -r /.snapshots/rootfs/snapshot-chr{sarg}/usr/share/ast/db/local/* /.snapshots/tmp-db/local/")
                 os.system(f"cp --reflink=auto -n -r /.snapshots/rootfs/snapshot-{arg}/* /.snapshots/rootfs/snapshot-chr{sarg}/ >/dev/null 2>&1")
+                os.system(f"rm -rf /.snapshots/rootfs/snapshot-chr{sarg}/usr/share/ast/db/local/*")
+                os.system(f"cp -r /.snapshots/tmp-db/local/* /.snapshots/rootfs/snapshot-chr{sarg}/usr/share/ast/db/local/")
+                for entry in pkg_list_from:
+                    os.system(f"cp -r /.snapshots/rootfs/snapshot-{arg}/usr/share/ast/db/local/{entry}-* /.snapshots/rootfs/snapshot-chr{sarg}/usr/share/ast/db/local/")
                 # os.system(f"cp --reflink=auto -r /.snapshots/rootfs/snapshot-{arg}/etc/* /.snapshots/rootfs/snapshot-chr{sarg}/etc/ >/dev/null 2>&1") # Commented out due to causing issues
                 posttrans(sarg)
         print(f"Tree {treename} synced.")
