@@ -352,6 +352,7 @@ def sync_tree(tree,treename,forceOffline):
                 for entry in pkg_list_from:
                     os.system(f"bash -c 'cp -r /.snapshots/rootfs/snapshot-{arg}/usr/share/ast/db/local/{entry}-[0-9]* /.snapshots/rootfs/snapshot-chr{sarg}/usr/share/ast/db/local/'")
                 # os.system(f"cp --reflink=auto -r /.snapshots/rootfs/snapshot-{arg}/etc/* /.snapshots/rootfs/snapshot-chr{sarg}/etc/ >/dev/null 2>&1") # Commented out due to causing issues
+                os.system("rm -rf /.snapshots/tmp-db/local/*")
                 posttrans(sarg)
         print(f"Tree {treename} synced.")
 
