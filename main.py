@@ -300,7 +300,7 @@ def main(args):
 
     elif DesktopInstall == 3:
         os.system(f"echo '1' > /mnt/usr/share/ast/snap")
-        excode = int(os.system("pacstrap /mnt flatpak mate pluma caja mate-terminal gdm pipewire pipewire-pulse sudo"))
+        excode = int(os.system("pacstrap /mnt flatpak mate pluma caja mate-terminal gdm pipewire pipewire-pulse sudo ttf-dejavu mate-extra"))
         if excode != 0:
             print("Failed to download packages!")
             sys.exit()
