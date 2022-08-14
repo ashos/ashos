@@ -344,7 +344,7 @@ def sync_tree(tree,treename,forceOffline):
                 pkg_list_to = str(subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-chr{sarg} pacman -Qq", shell=True))[2:][:-1].split("\\n")[:-1]
                 pkg_list_from = str(subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{arg} pacman -Qq", shell=True))[2:][:-1].split("\\n")[:-1]
                 # Get packages to be inherited
-                pkg_list_to, pkg_list_from = [i for i in pkg_list_to if i not in pkg_list_from], [j for j in pkg_list_from if j not in pkg_list_to]
+                pkg_list_from = [j for j in pkg_list_from if j not in pkg_list_to]
                 os.system(f"cp -r /.snapshots/rootfs/snapshot-chr{sarg}/usr/share/ast/db/local/* /.snapshots/tmp-db/local/")
                 os.system(f"cp --reflink=auto -n -r /.snapshots/rootfs/snapshot-{arg}/* /.snapshots/rootfs/snapshot-chr{sarg}/ >/dev/null 2>&1")
                 os.system(f"rm -rf /.snapshots/rootfs/snapshot-chr{sarg}/usr/share/ast/db/local/*")
