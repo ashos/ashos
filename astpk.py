@@ -132,7 +132,7 @@ def get_part():
 
 #   Get tmp partition state
 def get_tmp():
-    mount = str(subprocess.check_output("mount | grep 'on / type'", shell=True))
+    mount = str(subprocess.check_output("cat /proc/mounts | grep ' / btrfs'", shell=True))
     if "tmp0" in mount:
         return("tmp0")
     else:
