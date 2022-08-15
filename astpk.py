@@ -711,6 +711,12 @@ def switchtmp():
         os.system("sed -i 's,@.snapshots/rootfs/snapshot-tmp0,@.snapshots/rootfs/snapshot-tmp,g' /.snapshots/rootfs/snapshot-tmp/etc/fstab") # Write fstab for new deployment
         os.system("sed -i 's,@.snapshots/etc/etc-tmp0,@.snapshots/etc/etc-tmp,g' /.snapshots/rootfs/snapshot-tmp/etc/fstab")
         os.system("sed -i 's,@.snapshots/boot/boot-tmp0,@.snapshots/boot/boot-tmp,g' /.snapshots/rootfs/snapshot-tmp/etc/fstab")
+        
+        # This line here is a patch for https://github.com/astos/astos/commit/817675de2a060d8cdf242da1c7a9b7af1ab5fede
+        # This only affects some installations
+        os.system("cat /.snapshots/rootfs/snapshot-tmp/etc/fstab | grep -v ' / btrfs subvol=@,c' > /.snapshots/rootfs/snapshot-tmp/etc/fstab")
+        
+        
         sfile = open("/.snapshots/rootfs/snapshot-tmp0/usr/share/ast/snap","r")
         snap = sfile.readline()
         snap = snap.replace(" ", "")
@@ -722,6 +728,10 @@ def switchtmp():
         os.system("sed -i 's,@.snapshots/rootfs/snapshot-tmp,@.snapshots/rootfs/snapshot-tmp0,g' /.snapshots/rootfs/snapshot-tmp0/etc/fstab")
         os.system("sed -i 's,@.snapshots/etc/etc-tmp,@.snapshots/etc/etc-tmp0,g' /.snapshots/rootfs/snapshot-tmp0/etc/fstab")
         os.system("sed -i 's,@.snapshots/boot/boot-tmp,@.snapshots/boot/boot-tmp0,g' /.snapshots/rootfs/snapshot-tmp0/etc/fstab")
+        
+        os.system("cat /.snapshots/rootfs/snapshot-tmp0/etc/fstab | grep -v ' / btrfs subvol=@,c' > /.snapshots/rootfs/snapshot-tmp0/etc/fstab")
+        
+        
         sfile = open("/.snapshots/rootfs/snapshot-tmp/usr/share/ast/snap", "r")
         snap = sfile.readline()
         snap = snap.replace(" ","")
