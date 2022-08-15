@@ -91,8 +91,10 @@ def main(args):
             print("Failed to download packages!")
             sys.exit()
             
-
-    for mntdir in mntdirs:
+            
+    os.system(f"echo 'UUID=\"{to_uuid(args[1])}\" / btrfs subvol=@,compress=zstd,noatime,ro 0 0' > /mnt/etc/fstab")
+            
+    for mntdir in mntdirs[1:]:
         os.system(f"echo 'UUID=\"{to_uuid(args[1])}\" /{mntdir} btrfs subvol=@{mntdir},compress=zstd,noatime 0 0' >> /mnt/etc/fstab")
 
     if efi:
