@@ -466,7 +466,7 @@ def live_install(pkg):
     os.system(f"mount --bind /etc /.snapshots/rootfs/snapshot-{tmp}/etc >/dev/null 2>&1")
     os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp >/dev/null 2>&1")
     print("please wait, finishing installation...")
-    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} pacman -S --overwrite \\* --noconfirm {pkg} >/dev/null 2>&1"))
+    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite \\* --noconfirm {pkg} >/dev/null 2>&1"))
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
     if not excode:
@@ -547,11 +547,19 @@ def delete(snapshot):
         os.system(f"btrfs sub del /.snapshots/etc/etc-{snapshot} >/dev/null 2>&1")
 #        os.system(f"btrfs sub del /.snapshots/var/var-{snapshot} >/dev/null 2>&1")
         os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot} >/dev/null 2>&1")
+        if (os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}")):
+            os.system(f"btrfs sub del /.snapshots/boot/boot-chr{snapshot} >/dev/null 2>&1")
+            os.system(f"btrfs sub del /.snapshots/etc/etc-chr{snapshot} >/dev/null 2>&1")
+            os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snapshot} >/dev/null 2>&1")
         for child in children: # This deletes the node itself along with it's children
             os.system(f"btrfs sub del /.snapshots/boot/boot-{child} >/dev/null 2>&1")
             os.system(f"btrfs sub del /.snapshots/etc/etc-{child} >/dev/null 2>&1")
  #           os.system(f"btrfs sub del /.snapshots/var/var-{child} >/dev/null 2>&1")
             os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{child} >/dev/null 2>&1")
+            if (os.path.exists(f"/.snapshots/rootfs/snapshot-chr{child}")):
+                os.system(f"btrfs sub del /.snapshots/boot/boot-chr{child} >/dev/null 2>&1")
+                os.system(f"btrfs sub del /.snapshots/etc/etc-chr{child} >/dev/null 2>&1")
+                os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{child} >/dev/null 2>&1")
         remove_node(fstree,snapshot) # Remove node from tree or root
         write_tree(fstree)
         print(f"Snapshot {snapshot} removed.")
@@ -791,7 +799,13 @@ def switchtmp():
 
 #   Show diff of packages between 2 snapshots TODO: make this function not depend on bash
 def snapshot_diff(snap1, snap2):
-    os.system(f"bash -c \"diff <(ls /.snapshots/rootfs/snapshot-{snap1}/usr/share/ast/db/local) <(ls /.snapshots/rootfs/snapshot-{snap2}/usr/share/ast/db/local) | grep '^>\|^<' | sort\"")
+    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap1}"):
+        print(f"Snapshot {snap1} not found.")
+    elif not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap2}"):
+        print(f"Snapshot {snap2} not found.")
+    else:
+        os.system(f"bash -c \"diff <(ls /.snapshots/rootfs/snapshot-{snap1}/usr/share/ast/db/local) <(ls /.snapshots/rootfs/snapshot-{snap2}/usr/share/ast/db/local) | grep '^>\|^<' | sort\"")
+
 
 #   Remove temporary chroot for specified snapshot only
 #   This unlocks the snapshot for use by other functions
