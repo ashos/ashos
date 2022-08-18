@@ -943,7 +943,7 @@ def aur_setup(snap):
     for pkg in required:
         excode = int(install(snap, f"--needed --noconfirm {pkg}", False))
         if excode:
-            return excode
+            return str(excode)
     prepare(snap)
     os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} useradd aur")
     os.system(f"chmod +w /.snapshots/rootfs/snapshot-chr{snap}/etc/sudoers")
@@ -956,13 +956,14 @@ def aur_setup(snap):
     if excode:
         print("F: failed to download yay-bin")
         unchr(snap)
-        return str(excode)
+        return excode
     excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'cd /home/aur/yay-bin && makepkg -si'"))
     if excode:
         print("F: failed installing yay-bin")
         unchr(snap)
-        return str(excode)
+        return excode
     posttrans(snap)
+    return 0
 
 # Set up AUR support for live snapshot
 def aur_setup_live(snap):
