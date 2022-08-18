@@ -449,7 +449,7 @@ def live_install(pkg,is_aur):
     tmp = get_tmp()
     part = get_part()
     options = get_persnap_options(tmp)
-    if options[aur] == "True":
+    if options["aur"] == "True":
         aur = True
     else:
         aur = False
