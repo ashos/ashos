@@ -445,16 +445,40 @@ def untmp():
     os.system(f"btrfs sub del /.snapshots/boot/boot-{tmp} >/dev/null 2>&1")
 
 #   Install live
-def live_install(pkg):
+def live_install(pkg,is_aur):
     tmp = get_tmp()
     part = get_part()
+    options = get_persnap_options(tmp)
+    if options[aur] == "True":
+        aur = True
+    else:
+        aur = False
+    if aur and not aur_check(tmp):
+        aur_setup(tmp)
+    ### REVIEW_LATER - error checking, handle the situtaion better altogether
+    if is_aur and not aur:
+        print("F: AUR is not enabled in current live snapshot, but is enabled in target.\nDo you with to enable AUR for live snapshot? (y/n)")
+        reply = input("> ")
+        while reply.casefold() != "y" and reply.casefold() != "n":
+            print("Please enter 'y' or 'n':")
+            reply = input("> ")
+        if reply == "y":
+            aur = True
+            if not aur_check(tmp):
+                aur_setup(tmp)
+        else:
+            aur = False
+
     os.system(f"mount --bind /.snapshots/rootfs/snapshot-{tmp} /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
     os.system(f"mount --bind /home /.snapshots/rootfs/snapshot-{tmp}/home >/dev/null 2>&1")
     os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var >/dev/null 2>&1")
     os.system(f"mount --bind /etc /.snapshots/rootfs/snapshot-{tmp}/etc >/dev/null 2>&1")
     os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp >/dev/null 2>&1")
     print("please wait, finishing installation...")
-    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite \\* --noconfirm {pkg} >/dev/null 2>&1"))
+    if not aur:
+        excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite \\* --noconfirm {pkg} >/dev/null 2>&1"))
+    else:
+        excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} su aur 'yay -Sy --overwrite \\* --noconfirm {pkg}' >/dev/null 2>&1"))
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
     if not excode:
@@ -688,8 +712,18 @@ def refresh(snapshot):
 
 #   Noninteractive update
 def autoupgrade(snapshot):
+    options = get_persnap_options(snapshot)
+    if options["aur"] == "True":
+        aur = True
+    else:
+        aur = False
+    if aur and not aur_check(snapshot):
+        aur_setup(snapshot)
     prepare(snapshot)
-    excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman --noconfirm -Syyu"))
+    if not aur:
+        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman --noconfirm -Syyu"))
+    else:
+        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c 'yay --noconfirm -Syy'"))
     if int(excode) == 0:
         posttrans(snapshot)
         os.system("echo 0 > /.snapshots/ast/upstate")
@@ -887,7 +921,7 @@ def aur_check(snap):
 def aur_setup(snap):
     required = ["sudo", "git", "base-devel"]
     for pkg in required:
-        excode = int(install(snap, f"--needed {pkg}", False))
+        excode = int(install(snap, f"--needed --noconfirm {pkg}", False))
         if excode:
             return excode
     prepare(snap)
@@ -972,7 +1006,12 @@ def main(args):
         args_2.remove(args_2[0])
         excode = install(csnapshot, str(" ").join(args_2))
         if live and not excode: # only perform the live_install if the first install was successful
-            live_install(str(" ").join(args_2))
+            options = get_persnap_options(csnapshot) # Check if AUR is enabled in target snapshot
+            if options["aur"] == "True":
+                aur = True
+            else:
+                aur = False
+            live_install(str(" ").join(args_2), aur)
     elif arg == "run":
         args_2 = args
         args_2.remove(args_2[0])
