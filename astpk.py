@@ -465,7 +465,10 @@ def live_install(pkg,is_aur):
     else:
         aur = False
     if aur and not aur_check(tmp):
-        aur_setup_live(tmp)
+        excode = aur_setup_live(tmp)
+        if excode:
+            print("F: Live installation failed!")
+            return excode
 
     ### REVIEW_LATER - error checking, handle the situtaion better altogether
     if is_aur and not aur:
@@ -477,7 +480,9 @@ def live_install(pkg,is_aur):
         if reply == "y":
             aur = True
             if not aur_check(tmp):
-                aur_setup_live(tmp)
+                excode = aur_setup_live(tmp)
+                print("F: Live installation failed!")
+                return excode
         else:
             aur = False
 
@@ -940,10 +945,9 @@ def aur_check(snap):
 # Set up AUR support for snapshot
 def aur_setup(snap):
     required = ["sudo", "git", "base-devel"]
-    for pkg in required:
-        excode = int(install(snap, f"--needed --noconfirm {pkg}", False))
-        if excode:
-            return str(excode)
+    excode = int(install(snap, f"--needed --noconfirm {' '.join(required)}", False))
+    if excode:
+        return str(excode)
     prepare(snap)
     os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} useradd aur")
     os.system(f"chmod +w /.snapshots/rootfs/snapshot-chr{snap}/etc/sudoers")
@@ -967,20 +971,25 @@ def aur_setup(snap):
 
 # Set up AUR support for live snapshot
 def aur_setup_live(snap):
-    required = ["sudo", "git", "base-devel"]
-    for pkg in required:
-        excode = int(install(snap, f"--needed --noconfirm {pkg}", False))
-        if excode:
-            return excode
-    os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} useradd aur")
+    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} pacman -S sudo git base-devel"))
+    if excode:
+        return excode
+    os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} useradd aur")
     os.system(f"chmod +w /.snapshots/rootfs/snapshot-{snap}/etc/sudoers")
     os.system(f"echo 'aur ALL=(ALL:ALL) NOPASSWD: ALL' >> /.snapshots/rootfs/snapshot-{snap}/etc/sudoers")
     os.system(f"chmod -w /.snapshots/rootfs/snapshot-{snap}/etc/sudoers")
-    os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} mkdir -p /home/aur")
-    os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} chown -R aur /home/aur >/dev/null 2>&1")
+    os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} mkdir -p /home/aur")
+    os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} chown -R aur /home/aur >/dev/null 2>&1")
     # TODO: no error checking here
-    os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'cd /home/aur && git clone https://aur.archlinux.org/yay-bin.git' >/dev/null 2>&1")
-    os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'cd /home/aur/yay-bin && makepkg -si'")
+    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'cd /home/aur && git clone https://aur.archlinux.org/yay-bin.git' >/dev/null 2>&1"))
+    if excode:
+        print("F: failed to download yay-bin")
+        return excode
+    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'cd /home/aur/yay-bin && makepkg -si'"))
+    if excode:
+        print("F: failed installing yay-bin")
+        return excode
+    return 0
 
 # Clear all temporary snapshots
 def tmpclear():
