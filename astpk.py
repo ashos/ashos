@@ -961,7 +961,7 @@ def aur_setup(snap):
         print("F: failed to download yay-bin")
         unchr(snap)
         return excode
-    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'cd /home/aur/yay-bin && makepkg -si'"))
+    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'rm -rf /home/aur/yay-bin && cd /home/aur/yay-bin && makepkg -si'"))
     if excode:
         print("F: failed installing yay-bin")
         unchr(snap)
@@ -977,7 +977,7 @@ def aur_setup_live(snap):
     os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var >/dev/null 2>&1")
     os.system(f"mount --bind /etc /.snapshots/rootfs/snapshot-{tmp}/etc >/dev/null 2>&1")
     os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp >/dev/null 2>&1")
-    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} pacman -S sudo git base-devel"))
+    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} pacman -S --noconfirm --needed sudo git base-devel"))
     if excode:
         return excode
     os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} useradd aur")
@@ -987,7 +987,7 @@ def aur_setup_live(snap):
     os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} mkdir -p /home/aur")
     os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} chown -R aur /home/aur >/dev/null 2>&1")
     # TODO: no error checking here
-    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'cd /home/aur && git clone https://aur.archlinux.org/yay-bin.git' >/dev/null 2>&1"))
+    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'rm -rf /home/aur/yay-bin && cd /home/aur && git clone https://aur.archlinux.org/yay-bin.git' >/dev/null 2>&1"))
     if excode:
         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
