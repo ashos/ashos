@@ -495,7 +495,7 @@ def live_install(pkg,is_aur):
     if not aur:
         excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite \\* --noconfirm {pkg} >/dev/null 2>&1"))
     else:
-        excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} su aur 'yay -Sy --overwrite \\* --noconfirm {pkg}' >/dev/null 2>&1"))
+        excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} su aur 'paru -Sy --overwrite \\* --noconfirm {pkg}' >/dev/null 2>&1"))
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
     if not excode:
@@ -539,7 +539,7 @@ def install(snapshot,pkg,check_aur=True):
         if not aur:
             excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --overwrite '/var/*'"))
         else:
-            excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c \"yay -S {pkg} --overwrite '/var/*'\""))
+            excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c \"paru -S {pkg} --overwrite '/var/*'\""))
 
         if int(excode) == 0:
             posttrans(snapshot)
@@ -707,7 +707,7 @@ def upgrade(snapshot):
         if not aur:
             excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu")) # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
         else:
-            excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c 'yay -Syyu'"))
+            excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c 'paru -Syyu'"))
         if int(excode) == 0:
             posttrans(snapshot)
             print(f"Snapshot {snapshot} upgraded successfully.")
@@ -748,7 +748,7 @@ def autoupgrade(snapshot):
     if not aur:
         excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman --noconfirm -Syyu"))
     else:
-        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c 'yay --noconfirm -Syy'"))
+        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c 'paru --noconfirm -Syy'"))
     if int(excode) == 0:
         posttrans(snapshot)
         os.system("echo 0 > /.snapshots/ast/upstate")
@@ -940,7 +940,7 @@ def get_persnap_options(snap):
 
 # Check if AUR is setup right
 def aur_check(snap):
-    return os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}/usr/bin/yay")
+    return os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}/usr/bin/paru")
 
 # Set up AUR support for snapshot
 def aur_setup(snap):
@@ -956,14 +956,14 @@ def aur_setup(snap):
     os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} mkdir -p /home/aur")
     os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} chown -R aur /home/aur >/dev/null 2>&1")
     # TODO: more checking here
-    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'rm -rf /home/aur/yay-bin && cd /home/aur && git clone https://aur.archlinux.org/yay-bin.git' >/dev/null 2>&1"))
+    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'rm -rf /home/aur/paru-bin && cd /home/aur && git clone https://aur.archlinux.org/paru-bin.git' >/dev/null 2>&1"))
     if excode:
-        print("F: failed to download yay-bin")
+        print("F: failed to download paru-bin")
         unchr(snap)
         return excode
-    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'cd /home/aur/yay-bin && makepkg -si'"))
+    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'cd /home/aur/paru-bin && makepkg -si'"))
     if excode:
-        print("F: failed installing yay-bin")
+        print("F: failed installing paru-bin")
         unchr(snap)
         return excode
     posttrans(snap)
@@ -987,17 +987,17 @@ def aur_setup_live(snap):
     os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} mkdir -p /home/aur")
     os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} chown -R aur /home/aur >/dev/null 2>&1")
     # TODO: no error checking here
-    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'rm -rf /home/aur/yay-bin && cd /home/aur && git clone https://aur.archlinux.org/yay-bin.git' >/dev/null 2>&1"))
+    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'rm -rf /home/aur/paru-bin && cd /home/aur && git clone https://aur.archlinux.org/paru-bin.git' >/dev/null 2>&1"))
     if excode:
         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
-        print("F: failed to download yay-bin")
+        print("F: failed to download paru-bin")
         return excode
-    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'cd /home/aur/yay-bin && makepkg -si'"))
+    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'cd /home/aur/paru-bin && makepkg -si'"))
     if excode:
         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
-        print("F: failed installing yay-bin")
+        print("F: failed installing paru-bin")
         return excode
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
