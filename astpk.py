@@ -495,7 +495,7 @@ def install(snapshot,pkg,check_aur=True):
         if not aur:
             excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --overwrite '/var/*'"))
         else:
-            excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} \"su aur -c 'yay -S {pkg} --overwrite '/var/*'\""))
+            excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c \"yay -S {pkg} --overwrite '/var/*'\""))
 
         if int(excode) == 0:
             posttrans(snapshot)
@@ -660,7 +660,7 @@ def upgrade(snapshot):
         if not aur:
             excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu")) # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
         else:
-            excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} \"su aur -c 'yay -Syyu'\""))
+            excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c 'yay -Syyu'"))
         if int(excode) == 0:
             posttrans(snapshot)
             print(f"Snapshot {snapshot} upgraded successfully.")
