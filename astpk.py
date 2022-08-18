@@ -873,7 +873,7 @@ def get_persnap_options(snap):
     with open(f"/.snapshots/etc/etc-{snap}/ast.conf", "r") as optfile:
         for line in optfile:
             left, right = line.split("::") # Split options with '::'
-            options[left] = right
+            options[left] = right[:-2] # Remove newline here
     return options
 
 # Check if AUR is setup right
