@@ -484,8 +484,18 @@ def install(snapshot,pkg):
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"): # Make sure snapshot is not in use by another ast process
         print(f"F: snapshot {snapshot} appears to be in use. If you're certain it's not in use clear lock with 'ast unlock {snapshot}'.")
     else:
+        options = get_persnap_options(snapshot)
+        aur = False
+        if options["aur"] == 'True':
+            aur = True
+            if aur and not aur_check(snapshot):
+                aur_setup(snapshot)
         prepare(snapshot)
-        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --overwrite '/var/*'"))
+        if not aur:
+            excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --overwrite '/var/*'"))
+        else:
+            excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} \"su aur -c 'yay -S {pkg} --overwrite '/var/*'\""))
+
         if int(excode) == 0:
             posttrans(snapshot)
             print(f"Package {pkg} installed in snapshot {snapshot} successfully.")
@@ -639,8 +649,17 @@ def upgrade(snapshot):
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
         print(f"F: snapshot {snapshot} appears to be in use. If you're certain it's not in use clear lock with 'ast unlock {snapshot}'.")
     else:
+        options = get_persnap_options(snapshot)
+        aur = False
+        if options["aur"] == 'True':
+            aur = True
+            if aur and not aur_check(snapshot):
+                aur_setup(snapshot)
         prepare(snapshot)
-        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu")) # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
+        if not aur:
+            excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu")) # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
+        else:
+            excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} \"su aur -c 'yay -Syyu'\""))
         if int(excode) == 0:
             posttrans(snapshot)
             print(f"Snapshot {snapshot} upgraded successfully.")
@@ -847,6 +866,38 @@ def ast_sync():
     else:
         print("F: failed to download ast")
     os.chdir(cdir)
+
+#   Get per-snapshot configuration options from /etc/ast.conf
+def get_persnap_options(snap):
+    options = {"aur":"False"} # defaults here
+    with open(f"/.snapshots/etc/etc-{snap}/ast.conf", "r") as optfile:
+        for line in optfile:
+            left, right = line.split("::") # Split options with '::'
+            options[left] = right
+    return options
+
+# Check if AUR is setup right
+def aur_check(snap):
+    return os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}/usr/bin/yay")
+
+# Set up AUR support for snapshot
+def aur_setup(snap):
+    required = ["sudo", "git", "base-devel"]
+    for pkg in required:
+        excode = int(install(snap, pkg))
+        if excode:
+            return 1
+    prepare(snap)
+    os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} useradd aur")
+    os.system(f"chmod +w /.snapshots/rootfs/snapshot-chr{snap}/etc/sudoers")
+    os.system(f"echo 'aur ALL=(ALL:ALL) NOPASSWD: ALL' >> /.snapshots/rootfs/snapshot-chr{snap}/etc/sudoers")
+    os.system(f"chmod -w /.snapshots/rootfs/snapshot-chr{snap}/etc/sudoers")
+    os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} mkdir /home/aur")
+    os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} chown -R aur /home/aur")
+    # TODO: no error checking here
+    os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'cd /home/aur && git clone https://aur.archlinux.org/yay-bin.git'")
+    os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'cd /home/aur/yay-bin && makepkg -si'")
+    posttrans(snap)
 
 # Clear all temporary snapshots
 def tmpclear():
