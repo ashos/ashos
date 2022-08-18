@@ -409,6 +409,17 @@ def chroot(snapshot):
         os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot}")
         posttrans(snapshot)
 
+#   Edit per-snapshot configuration
+def per_snap_conf(snap):
+    if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
+        print(f"F: cannot chroot as snapshot {snapshot} doesn't exist.")
+    elif snapshot == "0":
+        print("F: changing base snapshot is not allowed.")
+    else:
+        prepare(snap)
+        os.system(f"$EDITOR /.snapshots/rootfs/snapshot-chr{snap}/etc/ast.conf")
+        posttrans(snap)
+
 #   Run command in snapshot
 def chrrun(snapshot,cmd):
     if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
@@ -454,7 +465,8 @@ def live_install(pkg,is_aur):
     else:
         aur = False
     if aur and not aur_check(tmp):
-        aur_setup(tmp)
+        aur_setup_live(tmp)
+
     ### REVIEW_LATER - error checking, handle the situtaion better altogether
     if is_aur and not aur:
         print("F: AUR is not enabled in current live snapshot, but is enabled in target.\nDo you with to enable AUR for live snapshot? (y/n)")
@@ -465,7 +477,7 @@ def live_install(pkg,is_aur):
         if reply == "y":
             aur = True
             if not aur_check(tmp):
-                aur_setup(tmp)
+                aur_setup_live(tmp)
         else:
             aur = False
 
@@ -936,6 +948,23 @@ def aur_setup(snap):
     os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'cd /home/aur/yay-bin && makepkg -si'")
     posttrans(snap)
 
+# Set up AUR support for live snapshot
+def aur_setup_live(snap):
+    required = ["sudo", "git", "base-devel"]
+    for pkg in required:
+        excode = int(install(snap, f"--needed --noconfirm {pkg}", False))
+        if excode:
+            return excode
+    os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} useradd aur")
+    os.system(f"chmod +w /.snapshots/rootfs/snapshot-{snap}/etc/sudoers")
+    os.system(f"echo 'aur ALL=(ALL:ALL) NOPASSWD: ALL' >> /.snapshots/rootfs/snapshot-chr{snap}/etc/sudoers")
+    os.system(f"chmod -w /.snapshots/rootfs/snapshot-{snap}/etc/sudoers")
+    os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} mkdir -p /home/aur")
+    os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} chown -R aur /home/aur >/dev/null 2>&1")
+    # TODO: no error checking here
+    os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'cd /home/aur && git clone https://aur.archlinux.org/yay-bin.git' >/dev/null 2>&1")
+    os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'cd /home/aur/yay-bin && makepkg -si'")
+
 # Clear all temporary snapshots
 def tmpclear():
     os.system(f"btrfs sub del /.snapshots/etc/etc-chr* >/dev/null 2>&1")
@@ -1021,6 +1050,8 @@ def main(args):
         chrrun(csnapshot, str(" ").join(args_2))
     elif arg == "add-branch" or arg == "branch":
         extend_branch(args[args.index(arg)+1])
+    elif arg == "edit-conf" or arg == "edit":
+        per_snap_conf(args[args.index(arg)+1])
     elif arg == "tmpclear" or arg == "tmp":
         tmpclear()
     elif arg == "clone-branch" or arg == "cbranch":
