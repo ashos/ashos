@@ -887,7 +887,7 @@ def aur_check(snap):
 def aur_setup(snap):
     required = ["sudo", "git", "base-devel"]
     for pkg in required:
-        excode = int(install(snap, pkg, False))
+        excode = int(install(snap, f"--needed {pkg}", False))
         if excode:
             return excode
     prepare(snap)
