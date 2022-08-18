@@ -929,10 +929,10 @@ def aur_setup(snap):
     os.system(f"chmod +w /.snapshots/rootfs/snapshot-chr{snap}/etc/sudoers")
     os.system(f"echo 'aur ALL=(ALL:ALL) NOPASSWD: ALL' >> /.snapshots/rootfs/snapshot-chr{snap}/etc/sudoers")
     os.system(f"chmod -w /.snapshots/rootfs/snapshot-chr{snap}/etc/sudoers")
-    os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} mkdir /home/aur")
-    os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} chown -R aur /home/aur")
+    os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} mkdir -p /home/aur")
+    os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} chown -R aur /home/aur >/dev/null 2>&1")
     # TODO: no error checking here
-    os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'cd /home/aur && git clone https://aur.archlinux.org/yay-bin.git'")
+    os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'cd /home/aur && git clone https://aur.archlinux.org/yay-bin.git' >/dev/null 2>&1")
     os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'cd /home/aur/yay-bin && makepkg -si'")
     posttrans(snap)
 
