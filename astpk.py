@@ -476,7 +476,7 @@ def live_unlock():
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
 
 #   Install packages
-def install(snapshot,pkg):
+def install(snapshot,pkg,check_aur=True):
     if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
         print(f"F: cannot install as snapshot {snapshot} doesn't exist.")
     elif snapshot == "0":
@@ -486,10 +486,11 @@ def install(snapshot,pkg):
     else:
         options = get_persnap_options(snapshot)
         aur = False
-        if options["aur"] == 'True':
-            aur = True
-            if aur and not aur_check(snapshot):
-                aur_setup(snapshot)
+        if check_aur:
+            if options["aur"] == 'True':
+                aur = True
+                if aur and not aur_check(snapshot):
+                    aur_setup(snapshot)
         prepare(snapshot)
         if not aur:
             excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --overwrite '/var/*'"))
@@ -873,7 +874,7 @@ def get_persnap_options(snap):
     with open(f"/.snapshots/etc/etc-{snap}/ast.conf", "r") as optfile:
         for line in optfile:
             left, right = line.split("::") # Split options with '::'
-            options[left] = right[:-2] # Remove newline here
+            options[left] = right[:-1] # Remove newline here
     return options
 
 # Check if AUR is setup right
@@ -884,9 +885,9 @@ def aur_check(snap):
 def aur_setup(snap):
     required = ["sudo", "git", "base-devel"]
     for pkg in required:
-        excode = int(install(snap, pkg))
+        excode = int(install(snap, pkg, False))
         if excode:
-            return 1
+            return excode
     prepare(snap)
     os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} useradd aur")
     os.system(f"chmod +w /.snapshots/rootfs/snapshot-chr{snap}/etc/sudoers")
