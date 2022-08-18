@@ -410,15 +410,15 @@ def chroot(snapshot):
         posttrans(snapshot)
 
 #   Edit per-snapshot configuration
-def per_snap_conf(snap):
+def per_snap_conf(snapshot):
     if not (os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}")):
         print(f"F: cannot chroot as snapshot {snapshot} doesn't exist.")
     elif snapshot == "0":
         print("F: changing base snapshot is not allowed.")
     else:
-        prepare(snap)
-        os.system(f"$EDITOR /.snapshots/rootfs/snapshot-chr{snap}/etc/ast.conf")
-        posttrans(snap)
+        prepare(snapshot)
+        os.system(f"$EDITOR /.snapshots/rootfs/snapshot-chr{snapshot}/etc/ast.conf")
+        posttrans(snapshot)
 
 #   Run command in snapshot
 def chrrun(snapshot,cmd):
