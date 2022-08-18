@@ -956,12 +956,12 @@ def aur_setup(snap):
     if excode:
         print("F: failed to download yay-bin")
         unchr(snap)
-        return excode
+        return str(excode)
     excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'cd /home/aur/yay-bin && makepkg -si'"))
     if excode:
         print("F: failed installing yay-bin")
         unchr(snap)
-        return excode
+        return str(excode)
     posttrans(snap)
 
 # Set up AUR support for live snapshot
