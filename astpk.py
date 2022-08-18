@@ -871,6 +871,8 @@ def ast_sync():
 #   Get per-snapshot configuration options from /etc/ast.conf
 def get_persnap_options(snap):
     options = {"aur":"False"} # defaults here
+    if not os.path.exists(f"/.snapshots/etc/etc-{snap}/ast.conf"):
+        return options
     with open(f"/.snapshots/etc/etc-{snap}/ast.conf", "r") as optfile:
         for line in optfile:
             left, right = line.split("::") # Split options with '::'
