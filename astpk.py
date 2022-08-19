@@ -524,12 +524,12 @@ def live_unlock():
 # Returns True if AUR is enabled, False if not
 # if AUR is enabled then sets it up inside snapshot
 def setup_aur_if_enabled(snapshot):
-    prepare(snapshot)
     options = get_persnap_options(snapshot)
     aur = False
     if options["aur"] == 'True':
         aur = True
         if aur and not aur_check(snapshot):
+            prepare(snapshot)
             excode = int(aur_setup(snapshot))
             if excode:
                 unchr(snapshot)
