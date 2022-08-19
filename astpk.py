@@ -481,8 +481,9 @@ def live_install(pkg,is_aur):
             aur = True
             if not aur_check(tmp):
                 excode = aur_setup_live(tmp)
-                print("F: Live installation failed!")
-                return excode
+                if excode:
+                    print("F: Live installation failed!")
+                    return excode
         else:
             aur = False
 
