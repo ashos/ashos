@@ -952,7 +952,6 @@ def aur_setup(snap):
         print("F: failed to install necessary packages to target!")
         unchr(snap)
         return str(excode)
-    prepare(snap)
     os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} useradd aur")
     os.system(f"chmod +w /.snapshots/rootfs/snapshot-chr{snap}/etc/sudoers")
     os.system(f"echo 'aur ALL=(ALL:ALL) NOPASSWD: ALL' >> /.snapshots/rootfs/snapshot-chr{snap}/etc/sudoers")
