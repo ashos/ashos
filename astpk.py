@@ -496,7 +496,7 @@ def live_install(pkg,is_aur):
     if not aur:
         excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite \\* --noconfirm {pkg} >/dev/null 2>&1"))
     else:
-        excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} su aur 'paru -Sy --overwrite \\* --noconfirm {pkg}' >/dev/null 2>&1"))
+        excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} su aur -c 'paru -Sy --overwrite \\* --noconfirm {pkg}' >/dev/null 2>&1"))
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
     if not excode:
