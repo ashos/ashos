@@ -1060,6 +1060,10 @@ def main(args):
         csnapshot = args_2[0]
         args_2.remove(args_2[0])
         excode = install(csnapshot, str(" ").join(args_2))
+        options_live = get_persnap_options(tmp)
+        aur = False
+        if options_live["aur"] == "True":
+            aur = True
         if live and not excode: # only perform the live_install if the first install was successful
             live_install(str(" ").join(args_2), aur)
     elif arg == "run":
