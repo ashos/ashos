@@ -316,6 +316,7 @@ ast rollback
 * astOS has a per-snapshot configuration system
 * Using this system we can toggle some functionality - most importantly support for the Arch User Repository
 * astOS uses the [paru AUR helper](https://github.com/morganamilo/paru) to provide this functionality
+* If you already have paru installed, please remove it from the snapshot first ``ast remove <snapshot> paru```, then proceed to the other steps
 * To enable AUR support first open the snapshot configuration
 
 ```
