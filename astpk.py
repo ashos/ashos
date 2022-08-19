@@ -472,7 +472,7 @@ def live_install(pkg,is_aur):
 
     ### REVIEW_LATER - error checking, handle the situtaion better altogether
     if is_aur and not aur:
-        print("F: AUR is not enabled in current live snapshot, but is enabled in target.\nDo you with to enable AUR for live snapshot? (y/n)")
+        print("F: AUR is not enabled in current live snapshot, but is enabled in target.\nEnable AUR for live snapshot? (y/n)")
         reply = input("> ")
         while reply.casefold() != "y" and reply.casefold() != "n":
             print("Please enter 'y' or 'n':")
