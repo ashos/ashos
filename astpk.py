@@ -947,7 +947,7 @@ def aur_check(snap):
 def aur_setup(snap):
     required = ["sudo", "git", "base-devel"]
     prepare(snap)
-    excode = int(f"chroot /.snapshots/rootfs/snapshot-chr{snap} pacman -Sy --needed --noconfirm {' '.join(required)}")
+    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} pacman -Sy --needed --noconfirm {' '.join(required)}"))
     if excode:
         print("F: failed to install necessary packages to target!")
         unchr(snap)
