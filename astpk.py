@@ -523,8 +523,8 @@ def live_unlock():
 
 # Returns True if AUR is enabled, False if not
 # if AUR is enabled then sets it up inside snapshot
-# snapshot must be prepare()d by the calling function first
 def setup_aur_if_enabled(snapshot):
+    prepare(snapshot)
     options = get_persnap_options(snapshot)
     aur = False
     if options["aur"] == 'True':
@@ -535,6 +535,7 @@ def setup_aur_if_enabled(snapshot):
                 unchr(snapshot)
                 print("F: Setting up AUR failed!")
                 sys.exit()
+            posttrans(snapshot)
     return aur
 
 
@@ -547,8 +548,8 @@ def install(snapshot,pkg):
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"): # Make sure snapshot is not in use by another ast process
         print(f"F: snapshot {snapshot} appears to be in use. If you're certain it's not in use clear lock with 'ast unlock {snapshot}'.")
     else:
-        prepare(snapshot)
         aur = setup_aur_if_enabled(snapshot)
+        prepare(snapshot)
         if not aur:
             excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --overwrite '/var/*'"))
         else:
@@ -707,8 +708,8 @@ def upgrade(snapshot):
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
         print(f"F: snapshot {snapshot} appears to be in use. If you're certain it's not in use clear lock with 'ast unlock {snapshot}'.")
     else:
-        prepare(snapshot)
         aur = setup_aur_if_enabled(snapshot)
+        prepare(snapshot)
         if not aur:
             excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu")) # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
         else:
@@ -740,8 +741,8 @@ def refresh(snapshot):
 
 #   Noninteractive update
 def autoupgrade(snapshot):
-    prepare(snapshot)
     aur = setup_aur_if_enabled(snapshot)
+    prepare(snapshot)
     if not aur:
         excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman --noconfirm -Syyu"))
     else:
