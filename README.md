@@ -13,6 +13,7 @@
   * [Post installation](https://github.com/astos/astos#post-installation-setup)
   * [Snapshot management and deployments](https://github.com/astos/astos#snapshot-management)
   * [Package management](https://github.com/astos/astos#package-management)
+  * [Snapshot configuration and AUR](https://github.com/astos/astos#snapshot-configuration-and-aur)
 * [Additional documentation](https://github.com/astos/astos#additional-documentation)
   * [Updating the pacman keys](https://github.com/astos/astos#fixing-pacman-corrupt-packages--key-issues)
   * [Saving configuration changes in /etc persistently](https://github.com/astos/astos#saving-configuration-changes-made-in-etc)
@@ -310,6 +311,25 @@ ast rollback
 ```
 
 * Then you can reboot back to a working system
+
+## Snapshot configuration and AUR
+* astOS has a per-snapshot configuration system
+* Using this system we can toggle some functionality - most importantly support for the Arch User Repository
+* astOS uses the [paru AUR helper](https://github.com/morganamilo/paru) to provide this functionality
+* To enable AUR support first open the snapshot configuration
+
+```
+EDITOR=nano ast edit-conf <snapshot>
+```
+
+* Now we can enable AUR by editing the file like so:
+
+```
+aur::True
+```
+
+* Save changes and quit
+* Now AUR Support is enabled, you can use ``ast install`` and ``ast upgrade`` as usual with AUR packages
 
 ## Extras
 
