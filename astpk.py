@@ -946,8 +946,11 @@ def aur_check(snap):
 # Set up AUR support for snapshot
 def aur_setup(snap):
     required = ["sudo", "git", "base-devel"]
-    excode = int(install(snap, f"--needed --noconfirm {' '.join(required)}", False))
+    prepare(snap)
+    excode = int(f"chroot /.snapshots/rootfs/snapshot-chr{snap} pacman -Sy --needed --noconfirm {' '.join(required)}")
     if excode:
+        print("F: failed to install necessary packages to target!")
+        unchr(snap)
         return str(excode)
     prepare(snap)
     os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} useradd aur")
@@ -973,13 +976,14 @@ def aur_setup(snap):
 # Set up AUR support for live snapshot
 def aur_setup_live(snap):
     tmp = snap
+    print("setting up AUR...")
     os.system(f"mount --bind /.snapshots/rootfs/snapshot-{tmp} /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
     os.system(f"mount --bind /home /.snapshots/rootfs/snapshot-{tmp}/home >/dev/null 2>&1")
     os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var >/dev/null 2>&1")
     os.system(f"mount --bind /etc /.snapshots/rootfs/snapshot-{tmp}/etc >/dev/null 2>&1")
     os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp >/dev/null 2>&1")
 
-    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} pacman -S --noconfirm --needed sudo git base-devel"))
+    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} pacman -S --noconfirm --needed sudo git base-devel >/dev/null 2>&1"))
     if excode:
         return excode
     os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} useradd aur")
@@ -995,7 +999,7 @@ def aur_setup_live(snap):
         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
         print("F: failed to download paru-bin")
         return excode
-    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'cd /home/aur/paru-bin && makepkg -si'"))
+    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'cd /home/aur/paru-bin && makepkg --noconfirm -si >/dev/null 2>&1'"))
     if excode:
         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
