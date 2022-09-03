@@ -41,7 +41,13 @@ def main(args):
         print("Select a timezone (type list to list):")
         zone = input("> ")
         if zone == "list":
-            os.system("ls /usr/share/zoneinfo | less")
+            zoneinfo_path = '/usr/share/zoneinfo'
+            zones = []
+            for root, _dirs, files in os.walk(zoneinfo_path, followlinks=True):
+                for file in files:
+                    zones.append(os.path.join(root, file).replace(f"{zoneinfo_path}/", ""))
+            zones = "\n".join(sorted(zones))
+            os.system(f"echo '{zones}' | less")
         else:
             timezone = str(f"/usr/share/zoneinfo/{zone}")
             break
