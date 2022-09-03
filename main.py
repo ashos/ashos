@@ -50,6 +50,9 @@ def main(args):
             os.system(f"echo '{zones}' | less")
         else:
             timezone = str(f"/usr/share/zoneinfo/{zone}")
+            if not os.path.isfile(timezone):
+                print("Invalid timezone!")
+                continue
             break
 
     clear()
