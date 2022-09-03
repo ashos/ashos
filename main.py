@@ -94,13 +94,13 @@ def main(args):
     excode = int(os.system("pacstrap /mnt base linux linux-firmware nano python3 python-anytree bash dhcpcd arch-install-scripts btrfs-progs networkmanager grub"))
     if excode != 0:
         print("Failed to download packages!")
-        sys.exit()
+        sys.exit(1)
 
     if efi:
         excode = int(os.system("pacstrap /mnt efibootmgr"))
         if excode != 0:
             print("Failed to download packages!")
-            sys.exit()
+            sys.exit(1)
             
             
     os.system(f"echo 'UUID=\"{to_uuid(args[1])}\" / btrfs subvol=@,compress=zstd,noatime,ro 0 0' > /mnt/etc/fstab")
@@ -198,7 +198,7 @@ def main(args):
         excode = int(os.system("pacstrap /mnt flatpak gnome gnome-themes-extra gdm pipewire pipewire-pulse sudo"))
         if excode != 0:
             print("Failed to download packages!")
-            sys.exit()
+            sys.exit(1)
         clear()
         print("Enter username (all lowercase, max 8 letters)")
         username = input("> ")
@@ -256,7 +256,7 @@ def main(args):
         excode = int(os.system("pacstrap /mnt flatpak plasma xorg konsole dolphin sddm pipewire pipewire-pulse sudo"))
         if excode != 0:
             print("Failed to download packages!")
-            sys.exit()
+            sys.exit(1)
         clear()
         print("Enter username (all lowercase, max 8 letters)")
         username = input("> ")
@@ -316,7 +316,7 @@ def main(args):
         excode = int(os.system("pacstrap /mnt flatpak mate pluma caja mate-terminal gdm pipewire pipewire-pulse sudo ttf-dejavu mate-extra"))
         if excode != 0:
             print("Failed to download packages!")
-            sys.exit()
+            sys.exit(1)
         clear()
         print("Enter username (all lowercase, max 8 letters)")
         username = input("> ")
