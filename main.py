@@ -1,15 +1,36 @@
 #!/usr/bin/python3
 
+import argparse
 import os
 import sys
 import subprocess
 
 # TODO: the installer needs a proper rewrite
 
-args = list(sys.argv)
-
 def clear():
     os.system("clear")
+
+def get_args(args=None):
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument('install_partition',
+            type=str,
+            help='The btrfs partition where astos will be installed. ' + \
+                 'Example: /dev/sda2'
+            )
+    arg_parser.add_argument('grub_drive',
+            type=str,
+            help='The drive where the grub bootloader will be installed. ' + \
+                 'Example: /dev/sda'
+            )
+    arg_parser.add_argument('efi_partition',
+            type=str,
+            help='The vfat partition to contain the EFI directory. ' + \
+                 'Required only for UEFI systems. ' + \
+                 'Example: /dev/sda1',
+            nargs='?',
+            default=None
+            )
+    return arg_parser.parse_args(args)
 
 def to_uuid(part):
     uuid = str(subprocess.check_output(f"blkid -s UUID -o value {part}", shell=True))
@@ -60,14 +81,14 @@ def main(args):
     hostname = input("> ")
 
     os.system("pacman -Syy --noconfirm archlinux-keyring")
-    os.system(f"mkfs.btrfs -f {args[1]}")
+    os.system(f"mkfs.btrfs -f {args.install_partition}")
 
     if os.path.exists("/sys/firmware/efi"):
         efi = True
     else:
         efi = False
 
-    os.system(f"mount {args[1]} /mnt")
+    os.system(f"mount {args.install_partition} /mnt")
     btrdirs = ["@","@.snapshots","@home","@var","@etc","@boot"]
     mntdirs = ["",".snapshots","home","var","etc","boot"]
 
@@ -78,7 +99,7 @@ def main(args):
 
     for mntdir in mntdirs:
         os.system(f"mkdir /mnt/{mntdir}")
-        os.system(f"mount {args[1]} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
+        os.system(f"mount {args.install_partition} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
 
     for i in ("tmp", "root"):
         os.system(f"mkdir -p /mnt/{i}")
@@ -89,7 +110,7 @@ def main(args):
 
     if efi:
         os.system("mkdir /mnt/boot/efi")
-        os.system(f"mount {args[3]} /mnt/boot/efi")
+        os.system(f"mount {args.efi_partition} /mnt/boot/efi")
 
     excode = int(os.system("pacstrap /mnt base linux linux-firmware nano python3 python-anytree bash dhcpcd arch-install-scripts btrfs-progs networkmanager grub"))
     if excode != 0:
@@ -103,18 +124,18 @@ def main(args):
             sys.exit(1)
             
             
-    os.system(f"echo 'UUID=\"{to_uuid(args[1])}\" / btrfs subvol=@,compress=zstd,noatime,ro 0 0' > /mnt/etc/fstab")
+    os.system(f"echo 'UUID=\"{to_uuid(args.install_partition)}\" / btrfs subvol=@,compress=zstd,noatime,ro 0 0' > /mnt/etc/fstab")
             
     for mntdir in mntdirs[1:]:
-        os.system(f"echo 'UUID=\"{to_uuid(args[1])}\" /{mntdir} btrfs subvol=@{mntdir},compress=zstd,noatime 0 0' >> /mnt/etc/fstab")
+        os.system(f"echo 'UUID=\"{to_uuid(args.install_partition)}\" /{mntdir} btrfs subvol=@{mntdir},compress=zstd,noatime 0 0' >> /mnt/etc/fstab")
 
     if efi:
-        os.system(f"echo 'UUID=\"{to_uuid(args[3])}\" /boot/efi vfat umask=0077 0 2' >> /mnt/etc/fstab")
+        os.system(f"echo 'UUID=\"{to_uuid(args.efi_partition)}\" /boot/efi vfat umask=0077 0 2' >> /mnt/etc/fstab")
 
     os.system("echo '/.snapshots/ast/root /root none bind 0 0' >> /mnt/etc/fstab")
     os.system("echo '/.snapshots/ast/tmp /tmp none bind 0 0' >> /mnt/etc/fstab")
 
-    astpart = to_uuid(args[1])
+    astpart = to_uuid(args.install_partition)
 
     os.system(f"mkdir -p /mnt/usr/share/ast/db")
     os.system(f"echo '0' > /mnt/usr/share/ast/snap")
@@ -173,8 +194,8 @@ def main(args):
         os.system(f"echo '{astpart}' > /mnt/.snapshots/ast/part")
 
     os.system(f"arch-chroot /mnt sed -i s,Arch,astOS,g /etc/default/grub")
-    os.system(f"arch-chroot /mnt grub-install {args[2]}")
-    os.system(f"arch-chroot /mnt grub-mkconfig {args[2]} -o /boot/grub/grub.cfg")
+    os.system(f"arch-chroot /mnt grub-install {args.grub_drive}")
+    os.system(f"arch-chroot /mnt grub-mkconfig {args.grub_drive} -o /boot/grub/grub.cfg")
     os.system("sed -i '0,/subvol=@/{s,subvol=@,subvol=@.snapshots/rootfs/snapshot-tmp,g}' /mnt/boot/grub/grub.cfg")
     os.system("arch-chroot /mnt ln -s /.snapshots/ast/ast /usr/local/sbin/ast")
     os.system("btrfs sub snap -r /mnt /mnt/.snapshots/rootfs/snapshot-0")
@@ -385,13 +406,13 @@ def main(args):
     os.system("umount /mnt/boot")
 #    os.system("mkdir /mnt/.snapshots/var/var-tmp")
 #    os.system("mkdir /mnt/.snapshots/boot/boot-tmp")
-#    os.system(f"mount {args[1]} -o subvol=@var,compress=zstd,noatime /mnt/.snapshots/var/var-tmp")
-    os.system(f"mount {args[1]} -o subvol=@boot,compress=zstd,noatime /mnt/.snapshots/boot/boot-tmp")
+#    os.system(f"mount {args.install_partition} -o subvol=@var,compress=zstd,noatime /mnt/.snapshots/var/var-tmp")
+    os.system(f"mount {args.install_partition} -o subvol=@boot,compress=zstd,noatime /mnt/.snapshots/boot/boot-tmp")
 #    os.system("cp --reflink=auto -r /mnt/.snapshots/var/var-tmp/* /mnt/var")
     os.system("cp --reflink=auto -r /mnt/.snapshots/boot/boot-tmp/* /mnt/boot")
     os.system("umount /mnt/etc")
 #    os.system("mkdir /mnt/.snapshots/etc/etc-tmp")
-    os.system(f"mount {args[1]} -o subvol=@etc,compress=zstd,noatime /mnt/.snapshots/etc/etc-tmp")
+    os.system(f"mount {args.install_partition} -o subvol=@etc,compress=zstd,noatime /mnt/.snapshots/etc/etc-tmp")
     os.system("cp --reflink=auto -r /mnt/.snapshots/etc/etc-tmp/* /mnt/etc")
 
     if DesktopInstall:
@@ -404,12 +425,12 @@ def main(args):
         os.system("cp --reflink=auto -r /mnt/.snapshots/boot/boot-0/* /mnt/.snapshots/rootfs/snapshot-tmp/boot")
 
     os.system("umount -R /mnt")
-    os.system(f"mount {args[1]} -o subvolid=0 /mnt")
+    os.system(f"mount {args.install_partition} -o subvolid=0 /mnt")
     os.system("btrfs sub del /mnt/@")
     os.system("umount -R /mnt")
     clear()
     print("Installation complete")
     print("You can reboot now :)")
 
-main(args)
+main(get_args())
 
