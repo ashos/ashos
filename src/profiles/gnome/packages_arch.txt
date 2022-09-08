@@ -1,0 +1,23 @@
+### Arch Linux gnome debloated ###
+
+[packages]
+gnome-shell
+gnome-terminal
+# or maybe better urxvt
+gnome-tweak-tool
+gnome-control-center
+xdg-user-dirs
+gdm
+gnome-keyring
+networkmanager
+# iwd even better
+# gnome-shell-extension-pop-shell-bin (from aur)
+
+[services]
+% sudo systemctl enable gdm3
+% sudo systemctl start --now gdm3
+
+#gdm: either name of services to be enabled
+#OR
+#all the commands that ast needs to run inside the chroot <---- I think this is a more versatile idea (systemd, openrc, etc.)
+

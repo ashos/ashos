@@ -1,0 +1,12 @@
+[packages]
+flatpak
+mate
+pluma
+caja
+mate-terminal
+gdm
+pipewire
+pipewire-pulse
+sudo
+ttf-dejavu
+mate-extra

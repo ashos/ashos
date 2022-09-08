@@ -1,0 +1,9 @@
+[packages]
+xfce4
+xorg
+gdm3
+
+[services]
+% sudo systemctl enable gdm3
+% sudo systemctl start --now gdm3
+

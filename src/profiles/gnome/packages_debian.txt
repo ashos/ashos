@@ -1,0 +1,23 @@
+[packages]
+gnome-shell
+gnome-session
+gnome-terminal
+gnome-tweaks
+#gnome-tweak-tool #not found
+#gnome-control-center #necessary?
+xdg-user-dirs
+gdm3
+gnome-keyring
+network-manager
+### iwd even better
+
+[services]
+[postinstall]
+& bash -c 'curl -o /tmp/zzz-tbsm.sh -LO https://raw.githubusercontent.com/loh-tar/tbsm/master/src/tbsm'
+& echo DONE
+& bash -c 'chmod +x /etc/profile.d/zzz-tbsm.sh'
+
+# & sudo curl -o /etc/profile.d/zzz-tbsm.sh -LO https://raw.githubusercontent.com/loh-tar/tbsm/master/src/tbsm
+#& sudo curl -o /tmp/zzz-tbsm.sh -LO https://raw.githubusercontent.com/loh-tar/tbsm/master/src/tbsm
+#& sudo cp -a /tmp/zzz-tbsm.sh /etc/profile.d/zzz-tbsm.sh
+#& sudo chmod +x /etc/profile.d/zzz-tbsm.sh
