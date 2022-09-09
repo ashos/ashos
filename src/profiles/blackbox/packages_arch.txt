@@ -1,0 +1,19 @@
+[packages]
+which
+#glibc
+#gcc-libs
+#cantarell-fonts
+xorg-server
+xorg-xinit
+blackbox
+
+[packages::optional]
+xterm
+
+[postinstall]
+& curl -o /etc/profile.d/zzz-tbsm.sh -LO https://raw.githubusercontent.com/i2/tbsm/main/src/tbsm
+& chmod +x /etc/profile.d/zzz-tbsm.sh
+
+[services]
+
+# 'which' is needed for tbsm

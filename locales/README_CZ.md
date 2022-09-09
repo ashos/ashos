@@ -313,4 +313,3 @@ sudo chmod 666 /var/run/docker.sock
 ---
 
 **Projekt je licencován pod licencí AGPLv3**
-

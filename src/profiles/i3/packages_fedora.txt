@@ -1,0 +1,14 @@
+[packages]
+xorg-x11-server-Xorg
+xorg-x11-xinit
+i3
+
+[packages::optional]
+#xterm
+#rxvt-unicode ### even better but needs changes in /etc/system.jwmrc
+
+[postinstall]
+& curl -o /etc/profile.d/zzz-tbsm.sh -LO https://raw.githubusercontent.com/i2/tbsm/main/src/tbsm
+& chmod +x /etc/profile.d/zzz-tbsm.sh
+
+[services]

@@ -1,0 +1,20 @@
+# /etc/login.defs default values for PATH environment variable
+# (they are minimal, add the rest in the shell startup files)
+
+Arch Linux:
+ENV_SUPATH	PATH=/usr/local/sbin:/usr/local/bin:/usr/bin
+ENV_PATH	PATH=/usr/local/sbin:/usr/local/bin:/usr/bin
+-----
+Debian:
+ENV_SUPATH	PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV_PATH	PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games
+-----
+Fedora:
+#ENV_SUPATH	PATH=/sbin:/bin:/usr/sbin:/usr/bin
+#ENV_PATH	PATH=/bin:/usr/bin
+-----
+
+Most comprehensive:
+ENV_SUPATH	PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV_PATH	PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games
+
