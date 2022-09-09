@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import os
-import subprocess
+#import subprocess
 import sys
 from src.installer_core import * # NOQA
 #from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_timezone, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
@@ -17,8 +17,8 @@ def initram_update_luks():
         os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}")
 
 #   1. Define variables
-KERNEL = "" # options: https://wiki.archlinux.org/title/kernel
-packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano" # linux-firmware os-prober bash tmux
+KERNEL = "-cachyos" # options: -cachyos, -cachyos-cfs, -cachyos-cacule, -cachyos-bmq, -cachyos-pds, -cachyos-tt
+packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano" # linux-firmware tmux os-prober bash
 super_group = "wheel"
 v = "" # GRUB version number in /boot/grubN
 tz = get_timezone()
@@ -29,13 +29,7 @@ hostname = get_hostname()
 pre_bootstrap()
 
 #   2. Bootstrap and install packages in chroot
-if KERNEL == "":
-    excode = os.system(f"sudo pacstrap /mnt --needed {packages}")
-else:
-    if KERNEL not in ("-hardened", "-lts", "-zen"): # AUR needs to be enabled
-        subprocess.call(f'./src/distros/{distro}/aur/aurutils.sh', shell=True)
-        #subprocess.check_output(['./src/distros/arch/aur/aurutils.sh'])
-    excode = os.system(f"pacman -Sqg base | sed 's/^linux$/&{KERNEL}/' | pacstrap /mnt --needed {packages}")
+excode = os.system(f"sudo pacstrap /mnt --needed {packages}")
 if excode != 0:
     sys.exit("Failed to bootstrap!")
 if is_efi:
