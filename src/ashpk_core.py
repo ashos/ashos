@@ -444,9 +444,8 @@ def install(snapshot, pkg):
         print("F: Changing base snapshot is not allowed.")
     else:
         prepare(snapshot)
-        try:
-            install_package(snapshot, pkg)
-        except Exception:
+        excode = install_package(snapshot, pkg)
+        if excode:
             chr_delete(snapshot)
             print("F: Install failed and changes discarded.")
         else:
