@@ -73,18 +73,20 @@ def init_system_copy(snapshot, FROM):
 def install_package(snapshot, pkg):
     try:
         subprocess.run(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --overwrite '/var/*'", shell=True, check=True)
+        return 0
     except subprocess.CalledProcessError as e:
         print(f"F: Install failed and changes discarded: {e.output}.")
-        sys.exit(1)
+        return 1
 
 #   Install atomic-operation in live snapshot
 def install_package_live(tmp, pkg):
     try:
         subprocess.run(f"chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite \\* --noconfirm {pkg} >/dev/null 2>&1", shell=True, check=True)
         print("Done!")
+        return 0
     except subprocess.CalledProcessError as e:
         print(f"F: Live install failed and changes discarded: {e.output}.")
-        sys.exit(1)
+        return 1
 
 #   Refresh snapshot
 def refresh(snapshot):

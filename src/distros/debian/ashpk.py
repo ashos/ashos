@@ -72,18 +72,20 @@ def install_package(snapshot, pkg):
     #excode = str(os.system(f'chroot /.snapshots/rootfs/snapshot-chr{snapshot} apt-get -o Dpkg::Options::="--force-overwrite" install -y {pkg}'))
     try:
         subprocess.run(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apt-get install -f -y {pkg}", shell=True, check=True) ### --overwrite '/var/*'
+        return 0
     except subprocess.CalledProcessError as e:
         print(f"F: Install failed and changes discarded: {e.output}.")
-        sys.exit(1)
+        return 1
 
 #   Install atomic-operation in live snapshot
 def install_package_live(tmp, pkg):
     try:
         subprocess.run(f"chroot /.snapshots/rootfs/snapshot-{tmp} apt-get install -y {pkg} >/dev/null 2>&1", shell=True, check=True) ### --overwrite \\*
         print("Done!")
+        return 0
     except subprocess.CalledProcessError as e:
         print(f"F: Live install failed and changes discarded: {e.output}.")
-        sys.exit(1)
+        return 1
 
 #   Refresh snapshot
 def refresh(snapshot):
