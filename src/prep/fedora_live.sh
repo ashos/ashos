@@ -1,12 +1,16 @@
 #!/bin/sh
 
 if [ -z "$HOME" ]; then HOME=~ ; fi
-
 prep_packages="git dnf"
 
+su
+
+# Prevent error of running out of space in /
+mount / -o remount,size=4G /run/archiso/cowspace
+
 # Sync time
-#sudo date -s "$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d' ' -f5-8)Z"
-#sudo date -s "$(curl -I google.com 2>&1 | grep Date: | cut -d' ' -f3-9)Z"
+#date -s "$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d' ' -f5-8)Z"
+#date -s "$(curl -I google.com 2>&1 | grep Date: | cut -d' ' -f3-9)Z"
 
 # Ignore signature checking in pacman.conf (bad idea - use fix below)
 #sed -e '/^SigLevel/ s|^#*|SigLevel = Never\n#|' -i /etc/pacman.conf
@@ -14,6 +18,7 @@ prep_packages="git dnf"
 
 # Fix signature invalid error
 rm -rf /etc/pacman.d/gnupg ~/.gnupg
+rm -r /var/lib/pacman/db.lck
 pacman -Syy
 gpg --refresh-keys
 killall gpg-agent
@@ -32,10 +37,9 @@ echo "alias d='df -h | grep -v sda'" | tee -a $HOME/.zshrc
 echo "setw -g mode-keys vi" | tee -a $HOME/.tmux.conf
 echo "set -g history-limit 999999" | tee -a $HOME/.tmux.conf
 
-#git clone http://github.com/i2/ashos-dev
-#git config --global --add safe.directory ./ashos-dev # prevent fatal error "unsafe repository is owned by someone else"
-#cd ashos-dev
-#git checkout debian
-#/bin/sh ./src/prep/parted_gpt_example.sh /dev/sda
-#python3 init.py /dev/sda2 /dev/sda /dev/sda1
+#git clone http://github.com/ashos/ashos
+#git config --global --add safe.directory ./ashos # prevent fatal error "unsafe repository is owned by someone else"
+#cd ashos
+#/bin/sh ./src/prep/parted_gpt_example.sh $2
+#python3 init.py $1 $2 $3
 

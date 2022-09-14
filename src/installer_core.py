@@ -163,6 +163,10 @@ def post_bootstrap(distro, super_group):
 ###    os.system("sudo ln -srf /mnt/.snapshots/ash/root /mnt/root")
 ###    os.system("sudo ln -srf /mnt/.snapshots/ash/tmp /mnt/tmp")
     os.system("echo '0' | sudo tee /mnt/usr/share/ash/snap")
+    os.system("echo 'mutable_dirs::' | sudo tee /mnt/etc/ash.conf")
+    os.system("echo 'mutable_dirs_shared::' | sudo tee -a /mnt/etc/ash.conf")
+    if distro in ("arch", "cachyos"):
+        os.system("echo 'aur::False' | sudo tee -a /mnt/etc/ash.conf")
   # Update fstab
     for mntdir in mntdirs:
         os.system(f"echo 'UUID=\"{to_uuid(btrfs_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{'' if mntdir else ',ro'} 0 0' | sudo tee -a /mnt/etc/fstab") # ro only for / entry
@@ -269,7 +273,9 @@ def use_luks():
 
 # ---------------------------------------------------------------------------- #
 
-print("Welcome to the AshOS installer!\n\n\n\n\n")
+print("Welcome to the AshOS installer!\n")
+with open('logo.txt', 'r') as f:
+    print(f.read())
 
 #   Define variables
 choice, distro_suffix = get_multiboot(distro)
