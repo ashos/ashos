@@ -1,0 +1,30 @@
+[packages]
+bash
+xorg
+jwm
+
+[packages::optional]
+# xterm
+
+[postinstall]
+cat >> /etc/profile << EOF
+# source *.sh files from /etc/profile.d if they are readable
+if [ -d /etc/profile.d ]; then
+    for i in /etc/profile.d/*.sh; do
+        if [ -r $i ]; then
+            . $i
+        fi
+    done
+    unset i
+fi
+EOF
+& mkdir /etc/profile.d/
+& fetch https://raw.githubusercontent.com/i2/tbsm/main/src/tbsm -o /etc/profile.d/zzz-tbsm.sh
+& chmod +x /etc/profile.d/zzz-tbsm.sh
+
+# cat "exec jwm" >> ~/.xinitrc
+
+[services]
+
+# 'which' and 'bash' are needed for tbsm
+# there is also xorg-minimal

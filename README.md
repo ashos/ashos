@@ -76,7 +76,7 @@ In AshOS, there are several keywords:
 * Thanks to its reliabilty and automatic upgrades, AshOS is well suitable for single use or embedded devices
 * It also makes for a good workstation or general use distribution utilizing development containers and flatpak for desktop applications
 
-**IMPORTANT NOTE:** First try AshOS in a virtual machine and get comfortable with it before installing it on bare metal. Running installer as is wipes the disk!
+**IMPORTANT NOTE:** First try AshOS in a virtual machine and get comfortable with it before installing it on bare metal. AshOS installer is ***ruthless** and it assumes user knows what they are doing. Running installer as is wipes the disk!
 
 As AshOS strives to be minimal solid and follow a LEGO like structure (start small, customize as you go), we primarily focus development on the base, meaning by default no Desktop Environment (not even Window Manager) is installed. This is by design as otherwise team has to support many DEs on many distros. What is provided is `profiles`. As DEs/WMs are just packages, with power of snapshotting, one can use ash to install the desired DE/WM.
 For instance to install GNOME in snapshot 1:
@@ -380,12 +380,13 @@ ash rollback
 ## Snapshot configuration and AUR
 * AshOS has a per-snapshot configuration system
 * Using this system we can toggle some functionality - most importantly support for the Arch User Repository
+* AshOS supports the AUR natively
 * AshOS uses the [paru AUR helper](https://github.com/morganamilo/paru) to provide this functionality
-* If you already have paru installed, please remove it from the snapshot first ``ash remove <snapshot> paru``, then proceed to the other steps
-* To enable AUR support first open the snapshot configuration
+* If you already have paru installed, please make sure it is removed from the snapshot first: ``ash remove <snapshot> paru``, then proceed to the other steps
+* To enable AUR support, first open the snapshot configuration:
 
 ```
-EDITOR=nano ash edit-conf <snapshot>
+EDITOR=nano ash edit-conf <snapshot> # set the EDITOR variable
 ```
 
 * Now we can enable AUR by editing the file like so:
@@ -497,8 +498,8 @@ Within the forest/tree of AshOS, one can make any snapshot (other than base `0`)
 
 #### Debugging ash
 
-- sometimes it may be necessary to debug ash
-- the following command is useful as it shows outputs of commands when running ashpk.py:
+* sometimes it may be necessary to debug ash
+* the following command is useful as it shows outputs of commands when running ashpk.py:
 
 ```
 sed -e 's| >/dev/null 2>&1||g' /usr/bin/ash > ashpk.py

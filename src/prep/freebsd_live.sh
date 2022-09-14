@@ -1,11 +1,10 @@
 #!/bin/sh
 
 if [ -z "$HOME" ]; then HOME=~ ; fi
-
 network="em0"
-prep_packages="git make fakeroot"
+prep_packages="git"
 
-su -
+su
 
 dhclient $network
 
@@ -27,7 +26,6 @@ echo "set -g history-limit 999999" | tee -a $HOME/.tmux.conf
 #git clone http://github.com/i2/ashos-dev
 #git config --global --add safe.directory ./ashos-dev # prevent fatal error "unsafe repository is owned by someone else"
 #cd ashos-dev
-#git checkout debian
 #/bin/sh ./src/prep/parted_gpt_example.sh $2
-#sudo python3 init.py $1 $2 $3
+#python3 init.py $1 $2 $3
 
