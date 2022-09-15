@@ -161,7 +161,6 @@ def clone_as_tree(snapshot, desc):
             os.system(f"touch /.snapshots/rootfs/snapshot-{i}/usr/share/ash/mutable")
         append_base_tree(fstree, i)
         write_tree(fstree)
-        #desc = str(f"clone of {snapshot}") ###
         if not desc:
             description = f"clone of {snapshot}"
         else:
@@ -478,7 +477,7 @@ def install_live(snapshot, pkg):
     os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var >/dev/null 2>&1")
     os.system(f"mount --bind /etc /.snapshots/rootfs/snapshot-{tmp}/etc >/dev/null 2>&1")
     os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp >/dev/null 2>&1")
-#######    ash_chroot_mounts(tmp) #this was the culprit for not being to live install. WHY?
+###    ash_chroot_mounts(tmp) #this was the culprit for live install to fail. Investigate.
     print("Please wait as installation is finishing.")
     excode = install_package_live(snapshot, tmp, pkg)
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
@@ -501,7 +500,7 @@ def install_profile_live(profile):
     excode1 = install_package_live(tmp, pkg) ### REVIEW_LATER snapshot argument needed
     excode2 = service_enable(tmp, profile, tmp_prof)
     if excode1 == 0 and excode2 == 0:
-        print(f"Profile {profile} installed in current/live snapshot.") ###
+        print(f"Profile {profile} installed in current/live snapshot.") ### REVIEW_LATER
     else:
         print("F: Install failed and changes discarded.")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
@@ -640,7 +639,7 @@ def prepare(snapshot):
     chr_delete(snapshot)
     os.system(f"btrfs sub snap /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-chr{snapshot} >/dev/null 2>&1")
     os.system(f"btrfs sub snap /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-chr{snapshot} >/dev/null 2>&1")
-  # Pacman gets weird when chroot directory is not a mountpoint, so the following mount is necessary ### REVIEW
+  # Pacman gets weird when chroot directory is not a mountpoint, so the following mount is necessary ### REVIEW_LATER
     os.system(f"mount --bind --make-slave /.snapshots/rootfs/snapshot-chr{snapshot} /.snapshots/rootfs/snapshot-chr{snapshot} >/dev/null 2>&1")
     os.system(f"mount --rbind --make-rslave /dev /.snapshots/rootfs/snapshot-chr{snapshot}/dev >/dev/null 2>&1")
     os.system(f"mount --bind --make-slave /home /.snapshots/rootfs/snapshot-chr{snapshot}/home >/dev/null 2>&1")
@@ -744,7 +743,7 @@ def rollback():
     tmp = get_tmp()
     i = find_new()
 ###    clone_as_tree(tmp)
-    clone_as_tree(tmp, "") ### REVIEW_LATER clone_as_tree(tmp, "rollback")
+    clone_as_tree(tmp, "") ### REVIEW_LATER clone_as_tree(tmp, "rollback") will do.
     write_desc(i, "rollback")
     deploy(i)
 
@@ -893,23 +892,23 @@ def sync_time():
         os.system('sudo date -s "$(curl -I google.com 2>&1 | grep Date: | cut -d" " -f3-6)Z"')
 
 #   Sync tree helper function ### REVIEW_LATER might need to put it in distro-specific ashpk.py
-def sync_tree_helper(CHR, arg, snap):
-    os.system("mkdir -p /.snapshots/tmp-db/local/") ### REVIEW_LATER
+def sync_tree_helper(CHR, s_f, s_t):
+    os.system("mkdir -p /.snapshots/tmp-db/local/") ### REVIEW_LATER Still resembling Arch pacman folder structure!
     os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW_LATER
-    pkg_list_to = pkg_list(CHR, snap)
-    pkg_list_from = pkg_list("", arg)
+    pkg_list_to = pkg_list(CHR, s_t)
+    pkg_list_from = pkg_list("", s_f)
     # Get packages to be inherited
     pkg_list_from = [j for j in pkg_list_from if j not in pkg_list_to]
-    os.system(f"cp -r /.snapshots/rootfs/snapshot-{CHR}{snap}/usr/share/ash/db/local/* /.snapshots/tmp-db/local/") ### REVIEW_LATER Still resembling Arch
-    os.system(f"cp --reflink=auto -n -r /.snapshots/rootfs/snapshot-{arg}/* /.snapshots/rootfs/snapshot-{CHR}{snap}/ >/dev/null 2>&1")
-    os.system(f"rm -rf /.snapshots/rootfs/snapshot-{CHR}{snap}/usr/share/ash/db/local/*") ### REVIEW_LATER
-    os.system(f"cp -r /.snapshots/tmp-db/local/* /.snapshots/rootfs/snapshot-{CHR}{snap}/usr/share/ash/db/local/") ### REVIEW_LATER
+    os.system(f"cp -r /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/* /.snapshots/tmp-db/local/") ### REVIEW_LATER
+    os.system(f"cp --reflink=auto -n -r /.snapshots/rootfs/snapshot-{s_f}/* /.snapshots/rootfs/snapshot-{CHR}{s_t}/ >/dev/null 2>&1")
+    os.system(f"rm -rf /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/*") ### REVIEW_LATER
+    os.system(f"cp -r /.snapshots/tmp-db/local/* /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/") ### REVIEW_LATER
     for entry in pkg_list_from:
-        os.system(f"bash -c 'cp -r /.snapshots/rootfs/snapshot-{arg}/usr/share/ash/db/local/{entry}-[0-9]* /.snapshots/rootfs/snapshot-{CHR}{snap}/usr/share/ash/db/local/'") ### REVIEW_LATER
-    os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW_LATER
+        os.system(f"bash -c 'cp -r /.snapshots/rootfs/snapshot-{s_f}/usr/share/ash/db/local/{entry}-[0-9]* /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/'") ### REVIEW_LATER
+    os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW_LATER (originally inside the loop, but I took it out)
 
 #   Sync tree and all its snapshots
-def sync_tree(tree, treename, force_offline, not_live):
+def sync_tree(tree, treename, force_offline, live):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{treename}"):
         print(f"F: Cannot sync as tree {treename} doesn't exist.")
     else:
@@ -917,27 +916,27 @@ def sync_tree(tree, treename, force_offline, not_live):
             update_tree(tree, treename)
         order = recurse_tree(tree, treename)
         if len(order) > 2:
-            order.remove(order[0]) ### I do not like these repetetitve removes
+            order.remove(order[0]) ### TODO: Better way instead of these repetitive removes
             order.remove(order[0])
         while True:
             if len(order) < 2:
                 break
-            arg = order[0]
-            sarg = order[1]
-            print(arg, sarg)
+            snap_from = order[0]
+            snap_to = order[1]
+            print(snap_from, snap_to)
             order.remove(order[0])
             order.remove(order[0])
-            if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{sarg}"):
-                print(f"F: Snapshot {sarg} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {sarg}'.")
+            if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap_to}"):
+                print(f"F: Snapshot {snap_to} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap_to}'.")
                 print("Tree sync canceled.")
                 return
             else:
-                prepare(sarg)
-                sync_tree_helper("chr", arg, sarg)
-                post_transactions(sarg)
-                if not not_live and int(sarg) == int(get_current_snapshot()): # Live sync
+                prepare(snap_to)
+                sync_tree_helper("chr", snap_from, snap_to) # Pre-sync
+                if live and int(snap_to) == int(get_current_snapshot()): # Live sync
                     tmp = get_tmp()
-                    sync_tree_helper("", arg, tmp)
+                    sync_tree_helper("", snap_from, tmp) # Post-sync
+                post_transactions(snap_to) ### Moved here from the line immediately after first sync_tree_helper
         print(f"Tree {treename} synced.")
 
 #   Clear all temporary snapshots
@@ -1007,6 +1006,27 @@ def update_tree(tree, treename):
             auto_upgrade(sarg)
         print(f"Tree {treename} updated.")
 
+#   Upgrade snapshot
+def upgrade(snapshot, baseup=False):
+    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
+        print(f"F: Cannot upgrade as snapshot {snapshot} doesn't exist.")
+    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
+        print(f"F: Snapshot {snapshot} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snapshot}'.")
+    elif snapshot == "0" and not baseup:
+        print("F: Changing base snapshot is not allowed.")
+    else:
+#        prepare(snapshot) ### REVIEW_LATER Moved to a distro-specific function as it needs to go after setup_aur_if_enabled()
+      # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
+        excode = upgrade_helper(snapshot)
+        if int(excode) == 0:
+            post_transactions(snapshot)
+            print(f"Snapshot {snapshot} upgraded successfully.")
+            return 0
+        else:
+            chr_delete(snapshot)
+            print("F: Upgrade failed and changes discarded.")
+            return 1
+
 #   Write new description (default) or append to an existing one (i.e. toggle immutability)
 def write_desc(snapshot, desc, mode='w'):
     with open(f"/.snapshots/ash/snapshots/{snapshot}-desc", mode) as descfile:
@@ -1030,8 +1050,8 @@ def main():
         global fstreepath # ---
         fstreepath = str("/.snapshots/ash/fstree") # Path to fstree file
         fstree = importer.import_(import_tree_file("/.snapshots/ash/fstree")) # Import fstree file
-        #if isChroot == True and ("--chroot" not in args): ### LATER
-        #    print("Please don't use ash inside a chroot!") ### LATER
+        #if isChroot == True and ("--chroot" not in args): ### TODO
+        #    print("Please don't use ash inside a chroot!") ### TODO
       # Recognize argument and call appropriate function
         parser = ArgumentParser(prog='ash', description='Any Snapshot Hierarchical OS')
         subparsers = parser.add_subparsers(dest='command', required=True, help='Different commands for ash')
@@ -1170,7 +1190,7 @@ def main():
         trem_par.add_argument("snapshot", type=int, help="snapshot number")
         g1tr = trem_par.add_mutually_exclusive_group(required=True)
         g1tr.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='package(s) to be uninstalled')
-        g1tr.add_argument('--profile', '-P', type=str, required=False, help='profile(s) to be uninstalled') ###LATER nargs='+' for multiple profiles
+        g1tr.add_argument('--profile', '-P', type=str, required=False, help='profile(s) to be uninstalled') ### TODO nargs='+' for multiple profiles
         trem_par.set_defaults(func=lambda snapshot, pkg, profile: remove_from_tree(fstree, snapshot, pkg, profile))
       # tree-run
         trun_par = subparsers.add_parser("trun", aliases=["tree-run"], allow_abbrev=True, help='Execute command(s) inside another snapshot and all snapshots below it')
@@ -1181,8 +1201,8 @@ def main():
         tsync_par = subparsers.add_parser("sync", aliases=["tree-sync", "tsync"], allow_abbrev=True, help='Sync packages and configuration changes recursively (requires an internet connection)')
         tsync_par.add_argument("treename", type=int, help="snapshot number")
         tsync_par.add_argument('-f', '--force-offline', action='store_true', required=False, help='Snapshots would not get updated (potentially riskier)')
-        tsync_par.add_argument('--not-live', '-nl', action='store_true', required=False, help='make snapshot install not live')
-        tsync_par.set_defaults(func=lambda treename, force_offline, not_live: sync_tree(fstree, treename, force_offline, not_live))
+        tsync_par.add_argument('--not-live', '-nl', action='store_true', required=False, help='Disable live sync')
+        tsync_par.set_defaults(func=lambda treename, force_offline, not_live: sync_tree(fstree, treename, force_offline, not not_live))
       # tree-upgrade
         tupg_par = subparsers.add_parser("tupgrade", aliases=["tree-upgrade", "tup"], allow_abbrev=True, help='Update all packages in a snapshot recursively')
         tupg_par.add_argument("snapshot", type=int, help="snapshot number")
@@ -1237,7 +1257,7 @@ def triage_install(snapshot, live, profile, pkg, not_live):
 ###        Is there a situation where live install is not triggered?
 ###            print("install_live() was not called!")
 
-def triage_uninstall(snapshot, profile, pkg, live, not_live): ### LATER add live, not_live
+def triage_uninstall(snapshot, profile, pkg, live, not_live): ### TODO add live, not_live
     if profile:
         #excode = install_profile(snapshot, profile)
         print("TODO")
