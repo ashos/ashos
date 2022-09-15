@@ -13,7 +13,7 @@
   * [Post installation](https://github.com/ashos/ashos#post-installation-setup)
   * [Snapshot management and deployments](https://github.com/ashos/ashos#snapshot-management)
   * [Package management](https://github.com/ashos/ashos#package-management)
-  * [Snapshot configuration and AUR](https://github.com/ashos/ashos#snapshot-configuration-and-aur)
+  * [Snapshot configuration](https://github.com/ashos/ashos#snapshot-configuration)
 * [Additional documentation](https://github.com/ashos/ashos#additional-documentation)
   * [Updating the pacman keys](https://github.com/ashos/ashos#fixing-pacman-corrupt-packages--key-issues)
   * [Saving configuration changes made in /etc persistent](https://github.com/ashos/ashos#saving-configuration-changes-made-in-etc-persistent)
@@ -31,6 +31,8 @@
 * [ToDos](https://github.com/ashos/ashos#todos)
 * [Distro-Specific Notes](https://github.com/ashos/ashos#distro-notes)
   * [Debian](https://github.com/ashos/ashos#debian)
+  * [Arch](https://github.com/ashos/ashos#arch-linux)
+    * [AUR](https://github.com/ashos/ashos#aur)
 
 ---
 
@@ -39,10 +41,10 @@
 You always wanted to try Fedora Rawhide but after a few days, its fragility got on your nerves. Then, maybe you tried Fedora Silverblue Rawhide but then its complicated and slow git-like ostree operations killed your mood! Well, no more! Now you can try this bleeding edge distro (and many more distros like Debian sid) with more peace of mind.
 
 AshOS is a unique meta-distribution that:
-- aims to bring immutability even to distros that do not have this very useful feature i.e. Arch Linux, Gentoo, etc.
-- wraps around *any* Linux distribution that can be bootstrapped (pretty much any major distribution)
-- targets to become a universal installer for different distros and different Desktop Environments/Window Managers
-- can install, deploy and multi-boot any number of distros
+* aims to bring immutability even to distros that do not have this very useful feature i.e. Arch Linux, Gentoo, etc.
+* wraps around *any* Linux distribution that can be bootstrapped (pretty much any major distribution)
+* targets to become a universal installer for different distros and different Desktop Environments/Window Managers
+* can install, deploy and multi-boot any number of distros
 
 Initially inspired by Arch Linux, AshOS uses an immutable (read-only) root filesystem to set itself apart from any other distro out there.
 Software is installed and configured into individual snapshot trees, which can then be deployed and booted into.
@@ -51,9 +53,9 @@ It does not invent yet another package format or package manager, but instead re
 Ashes are one of the oldest trees in the world and they inspired naming AshOS.
 
 In AshOS, there are several keywords:
-- Vanilla: we try to be as close to the "vanilla" version of target distribution that is being installed.
-- Minimalism: we adhere to a lego build system. Start small and build as complex a system as you would like. The main focus of development is on having a solid minimal installed snapshot, based on which user can have infinite immutable permutations!
-- Generality: As we want the most common denominator between distros, when there is a choice between convenience and comprehensiveness/generality, we go with the latter. To clarify with an example, it might be easier to use grub-btrfs instead of implementing our own GRUB update mechanism, but because that particular package might not be available in all distros, we develop an AshOS specific solution. This way, we can potentially cater to any distro in future!
+* Vanilla: we try to be as close to the "vanilla" version of target distribution that is being installed.
+* Minimalism: we adhere to a lego build system. Start small and build as complex a system as you would like. The main focus of development is on having a solid minimal installed snapshot, based on which user can have infinite immutable permutations!
+* Generality: As we want the most common denominator between distros, when there is a choice between convenience and comprehensiveness/generality, we go with the latter. To clarify with an example, it might be easier to use grub-btrfs instead of implementing our own GRUB update mechanism, but because that particular package might not be available in all distros, we develop an AshOS specific solution. This way, we can potentially cater to any distro in future!
 
 **This has several advantages:**
 
@@ -70,7 +72,7 @@ In AshOS, there are several keywords:
   * For example: you can have a single Gnome desktop installed and then have 2 snapshots on top - one with your video games, with the newest kernel and drivers, and the other for work, with the LTS kernel and more stable software, you can then easily switch between these depending on what you're trying to do
   * You can also easily try out software without having to worry about breaking your system or polluting it with unnecessary files, for example you can try out a new desktop environment in a snapshot and then delete the snapshot after, without modifying your main system at all
   * This can also be used for multi-user systems, where each user has a completely separate system with different software, and yet they can share certain packages such as kernels and drivers
-  * AshOS allows you to install software by chrooting into snapshots, therefore you can use software such as the AUR to install additional packages
+  * AshOS allows you to install software by chrooting into snapshots, therefore (for example in Arch flavor) you can use software such as the AUR to install additional packages
   * AshOS is, very customizable, you can choose exactly which software you want to use (just like Arch Linux)
 
 * Thanks to its reliabilty and automatic upgrades, AshOS is well suitable for single use or embedded devices
@@ -377,26 +379,15 @@ ash rollback
 
 * Then you can reboot back to a working system
 
-## Snapshot configuration and AUR
+## Snapshot configuration
 * AshOS has a per-snapshot configuration system
-* Using this system we can toggle some functionality - most importantly support for the Arch User Repository
-* AshOS supports the AUR natively
-* AshOS uses the [paru AUR helper](https://github.com/morganamilo/paru) to provide this functionality
-* If you already have paru installed, please make sure it is removed from the snapshot first: ``ash remove <snapshot> paru``, then proceed to the other steps
-* To enable AUR support, first open the snapshot configuration:
+* Using this system we can toggle some functionality - for instance support for the Arch User Repository (look under Arch notes below)
 
 ```
 EDITOR=nano ash edit-conf <snapshot> # set the EDITOR variable
 ```
 
-* Now we can enable AUR by editing the file like so:
-
-```
-aur::True
-```
-
 * Save changes and quit
-* Now AUR Support is enabled, you can use ``ash install`` and ``ash upgrade`` as usual with AUR packages
 
 ## Extras
 
@@ -544,6 +535,26 @@ sudo chmod 666 /var/run/docker.sock
 ## Debian
 * When issuing `sudo python3 init.py /dev/sdXY /dev/sdX /dev/sdXZ`, it might seem installer has frozen but it is actually doing its thing! Please be patient and you will get a prompt to initiate install in about 30 seconds! For some reason, it was not showing what is going on in a nice way, so I put a `set echo off` command.
 * Make sure not to miss sudo in the command above, otherwise there would be permission error when writing to /mnt/.snapshots/...
+
+## Arch Linux
+### AUR
+* AshOS supports the AUR natively
+* AshOS uses the [paru AUR helper](https://github.com/morganamilo/paru) to provide this functionality
+* If you already have paru installed, please make sure it is removed from the snapshot first: ``ash remove <snapshot> paru``, then proceed to the other steps
+* To enable AUR support, first open the snapshot configuration:
+
+```
+EDITOR=nano ash edit-conf <snapshot> # set the EDITOR variable
+```
+
+* Now we can enable AUR by editing the file like so:
+
+```
+aur::True
+```
+
+* Save changes and quit
+* Now AUR Support is enabled, you can use ``ash install`` and ``ash upgrade`` as usual with AUR packages
 
 ---
 
