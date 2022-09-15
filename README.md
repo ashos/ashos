@@ -16,7 +16,7 @@
   * [Snapshot configuration](https://github.com/ashos/ashos#snapshot-configuration)
 * [Additional documentation](https://github.com/ashos/ashos#additional-documentation)
   * [Updating the pacman keys](https://github.com/ashos/ashos#fixing-pacman-corrupt-packages--key-issues)
-  * [Saving configuration changes made in /etc persistent](https://github.com/ashos/ashos#saving-configuration-changes-made-in-etc-persistent)
+  * [Saving configuration changes made in /etc persistently](https://github.com/ashos/ashos#saving-configuration-changes-made-in-etc-persistently)
   * [Configuring dual boot](https://github.com/ashos/ashos#dual-boot)
   * [Updating ash itself](https://github.com/ashos/ashos#updating-ash-itself)
   * [Miscellaneous](https://github.com/ashos/ashos#miscellaneous)
@@ -33,6 +33,7 @@
   * [Debian](https://github.com/ashos/ashos#debian)
   * [Arch](https://github.com/ashos/ashos#arch-linux)
     * [AUR](https://github.com/ashos/ashos#aur)
+  * [EndeavourOS](https://github.com/ashos/ashos#endeavouros)
 
 ---
 
@@ -140,21 +141,21 @@ mkfs.btrfs /dev/*** # Create a btrfs filesystem, don't skip this step!
 Run installer
 
 ```
-python3 init.py /dev/<root_partition> /dev/<drive> [/dev/<efi part>] [distro_id] ["distro_name"]# Skip the EFI partition if installing in BIOS mode
+python3 setup.py /dev/<root_partition> /dev/<drive> [/dev/<efi part>] [distro_id] ["distro_name"]# Skip the EFI partition if installing in BIOS mode
 
 Here are 3 example scenarios:
 
-example 1 (BIOS): python3 init.py /dev/vda1 /dev/sda
+example 1 (BIOS): python3 setup.py /dev/vda1 /dev/sda
 This is a simpe case when using same distro's iso file
 
-example 2 (UEFI): python3 init.py /dev/nvm0p2 /dev/nvm0 /dev/nvm0p1 fedora "Fedora Linux"
+example 2 (UEFI): python3 setup.py /dev/nvm0p2 /dev/nvm0 /dev/nvm0p1 fedora "Fedora Linux"
 When installing a distro using another distro's iso, the last two arguments are necessary
 
-example 3 (UEFI): python3 init.py /dev/sda2 /dev/sda /dev/sda1 cachyos "CachyOS Linux"
+example 3 (UEFI): python3 setup.py /dev/sda2 /dev/sda /dev/sda1 cachyos "CachyOS Linux"
 If for any reason, there is a mismatch between what distro actually is and its /etc/os-release file, it is [usually] mandatory to pass two additional arguments. Here even though we are using Cachyos iso file (which is based on Arch Linux), by investigating in /etc/os-release file, you would see ID and NAME are same as Arch Linux. In a single boot install, it is okay to not pass the last two arguments, but if you want a multiboot system (say dual boot with Arch Linux), they are required.
 
 ```
-The arguments inside square brackets are optional. Regarding the fourth argument: say if you want to install Alpine Linux using Arch Linux iso, run `python3 init.py /dev/vda2 /dev/vda /dev/vda1 alpine`.
+The arguments inside square brackets are optional. Regarding the fourth argument: say if you want to install Alpine Linux using Arch Linux iso, run `python3 setup.py /dev/vda2 /dev/vda /dev/vda1 alpine`.
 
 ## Post installation setup
 * Post installation setup is not necessary if you install one of the desktop editions (Gnome or KDE)
@@ -411,7 +412,7 @@ and as a last resort, run: (CAUTION: This might have undesired effects)
 ash fixdb <snapshots>
 ```
 
-#### Saving configuration changes made in ``/etc`` persistent
+#### Saving configuration changes made in ``/etc`` persistently
 * Normally configuration should be done with ``ash chroot``, but sometimes you may want to apply changes you've made to the booted system persistently
 * To do this use the following command
 
@@ -533,7 +534,7 @@ sudo chmod 666 /var/run/docker.sock
 * For packages-distro.conf, the leanest display manager (either Xorg or Wayland) that is included in the official repo for the given distro would be included. For instance for Arch Linux, this would be 'slim', even though there are slimmer display managers like 'ly', 'tbsm', 'cdm' etc. but unfortunately there are in AUR at the time of writing this document.
 
 ## Debian
-* When issuing `sudo python3 init.py /dev/sdXY /dev/sdX /dev/sdXZ`, it might seem installer has frozen but it is actually doing its thing! Please be patient and you will get a prompt to initiate install in about 30 seconds! For some reason, it was not showing what is going on in a nice way, so I put a `set echo off` command.
+* When issuing `sudo python3 setup.py /dev/sdXY /dev/sdX /dev/sdXZ`, it might seem installer has frozen but it is actually doing its thing! Please be patient and you will get a prompt to initiate install in about 30 seconds! For some reason, it was not showing what is going on in a nice way, so I put a `set echo off` command.
 * Make sure not to miss sudo in the command above, otherwise there would be permission error when writing to /mnt/.snapshots/...
 
 ## Arch Linux
@@ -556,6 +557,12 @@ aur::True
 * Save changes and quit
 * Now AUR Support is enabled, you can use ``ash install`` and ``ash upgrade`` as usual with AUR packages
 
+## EndeavourOS
+* Start the boot process from iso file
+* When GRUB is prompted, press keys 'e' and then END to add 'single' to the end of kernel parameters. When prompted about rescue mode, press Enter.
+* This will drop you to single user mode instead of default Desktop Environment
+* if internet access is not be available, run `sudo dhclient`
+* Otherwise if installing from within desktop environment, comment out "su" in endevouros_live.sh as it will ask for a password. Instead run the script as sudo.
 ---
 
 **This project is licensed under the AGPLv3.**
