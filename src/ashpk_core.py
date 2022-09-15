@@ -1006,6 +1006,27 @@ def update_tree(tree, treename):
             auto_upgrade(sarg)
         print(f"Tree {treename} updated.")
 
+#   Upgrade snapshot
+def upgrade(snapshot, baseup=False):
+    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
+        print(f"F: Cannot upgrade as snapshot {snapshot} doesn't exist.")
+    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
+        print(f"F: Snapshot {snapshot} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snapshot}'.")
+    elif snapshot == "0" and not baseup:
+        print("F: Changing base snapshot is not allowed.")
+    else:
+#        prepare(snapshot) ### REVIEW_LATER Moved to a distro-specific function as it needs to go after setup_aur_if_enabled()
+      # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
+        excode = upgrade_helper(snapshot)
+        if int(excode) == 0:
+            post_transactions(snapshot)
+            print(f"Snapshot {snapshot} upgraded successfully.")
+            return 0
+        else:
+            chr_delete(snapshot)
+            print("F: Upgrade failed and changes discarded.")
+            return 1
+
 #   Write new description (default) or append to an existing one (i.e. toggle immutability)
 def write_desc(snapshot, desc, mode='w'):
     with open(f"/.snapshots/ash/snapshots/{snapshot}-desc", mode) as descfile:

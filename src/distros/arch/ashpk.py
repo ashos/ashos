@@ -146,7 +146,7 @@ def install_package_live(snapshot, tmp, pkg):
         aur_in_tmp = True
     else:
         aur_in_tmp = False
-        print("AUR is not enable. Please enable it")
+        print("F: AUR is not enabled!")
     if aur_in_tmp and not aur_check(tmp):
         excode = aur_setup_live(tmp)
         if excode:
@@ -177,7 +177,7 @@ def install_package_live(snapshot, tmp, pkg):
                     return excode
         else:
             aur_2 = False
-    #print("please wait, finishing installation...")
+    #print("please wait, finishing installation...") ### Moved outside to ashpk_core.py
     if not aur_2:
         excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite \\* --noconfirm {pkg} >/dev/null 2>&1"))
     else:
@@ -233,24 +233,15 @@ def uninstall_package(snapshot, pkg):
             chr_delete(snapshot)
             print("F: Remove failed and changes discarded.")
 
-#   Upgrade snapshot
-def upgrade(snapshot, baseup=False):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
-        print(f"F: Cannot upgrade as snapshot {snapshot} doesn't exist.")
-    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
-        print(f"F: Snapshot {snapshot} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snapshot}'.")
-    elif snapshot == "0" and not baseup:
-        print("F: Changing base snapshot is not allowed.")
+#   Upgrade atomic-operation
+def upgrade_helper(snapshot):
+    aur = setup_aur_if_enabled(snapshot)
+    prepare(snapshot) ### REVIEW_LATER tried it outside of this function in ashpk_core before setup_aur_if_enabled and it works fine!
+    if not aur:
+        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu"))
     else:
-        prepare(snapshot)
-      # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
-        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu")
-        if excode == 0:
-            post_transactions(snapshot)
-            print(f"Snapshot {snapshot} upgraded successfully.")
-        else:
-            chr_delete(snapshot)
-            print("F: Upgrade failed and changes discarded.")
+        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c 'paru -Syyu'"))
+    return excode
 
 # Returns True if AUR is enabled, False if not
 # if AUR is enabled then sets it up inside snapshot
@@ -265,7 +256,7 @@ def setup_aur_if_enabled(snapshot):
             if excode:
                 chr_delete(snapshot)
                 print("F: Setting up AUR failed!")
-                sys.exit()
+                sys.exit(1) #### REVIEW_LATER changed from sys.exit()
             post_transactions(snapshot)
     return aur
 
