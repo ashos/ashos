@@ -893,7 +893,7 @@ def sync_time():
 
 #   Sync tree helper function ### REVIEW_LATER might need to put it in distro-specific ashpk.py
 def sync_tree_helper(CHR, s_f, s_t):
-    os.system("mkdir -p /.snapshots/tmp-db/local/") ### REVIEW_LATER Still resembling Arch
+    os.system("mkdir -p /.snapshots/tmp-db/local/") ### REVIEW_LATER Still resembling Arch pacman folder structure!
     os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW_LATER
     pkg_list_to = pkg_list(CHR, s_t)
     pkg_list_from = pkg_list("", s_f)
