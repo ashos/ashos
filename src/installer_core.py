@@ -2,7 +2,7 @@
 
 import os
 import subprocess
-from init import args, distro, distro_name, override_distro
+from setup import args, distro, distro_name, override_distro
 
 # ------------------------------ CORE FUNCTIONS ------------------------------ #
 
@@ -134,7 +134,8 @@ def grub_ash(distro, v):
   # grub-install rewrites default core.img, so run grub-mkimage AFTER!
     if distro != "fedora": # https://bugzilla.redhat.com/show_bug.cgi?id=1917213
         if is_efi:
-            os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --modules="{luks_grub_args}"')
+            #os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --modules="{luks_grub_args}"')
+            os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --bootloader-id={distro} --modules="{luks_grub_args}" --target=x86_64-efi') # --efi-directory=/boot/efi 
         else:
             os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --modules="{luks_grub_args}"')
     if is_luks: # Make LUKS2 compatible grub image
@@ -169,7 +170,7 @@ def post_bootstrap(distro, super_group):
         os.system("echo 'aur::False' | sudo tee -a /mnt/etc/ash.conf")
   # Update fstab
     for mntdir in mntdirs:
-        os.system(f"echo 'UUID=\"{to_uuid(btrfs_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{'' if mntdir else ',ro'} 0 0' | sudo tee -a /mnt/etc/fstab") # ro only for / entry
+        os.system(f"echo 'UUID=\"{to_uuid(btrfs_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{'' if mntdir else ',ro'} 0 0' | sudo tee -a /mnt/etc/fstab") # ro only for / entry ### complex but one-liner
     if is_efi:
         os.system(f"echo 'UUID=\"{to_uuid(args[3])}\" /boot/efi vfat umask=0077 0 2' | sudo tee -a /mnt/etc/fstab")
     os.system("echo '/.snapshots/ash/root /root none bind 0 0' | sudo tee -a /mnt/etc/fstab")
