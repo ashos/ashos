@@ -331,7 +331,7 @@ ash sync <tree>
 * If you wish to sync without updating (could cause package duplication in database) then use
 
 ```
-ash force-sync <tree>
+ash sync <tree> -f
 ```
 
 * ash also supports installing packages without rebooting. This is no longer needed. ### REVIEW_LATER

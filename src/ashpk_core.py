@@ -102,6 +102,7 @@ def chr_delete(snapshot):
         if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
             subprocess.check_output(f"btrfs sub del /.snapshots/boot/boot-chr{snapshot}", shell=True)
             subprocess.check_output(f"btrfs sub del /.snapshots/etc/etc-chr{snapshot}", shell=True)
+            #os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snapshot}/* >/dev/null 2>&1") ### REVIEW_LATER
             subprocess.check_output(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snapshot}", shell=True)
     except subprocess.CalledProcessError as e:
         print(f"F: Failed to delete chroot snapshot {snapshot}: {e.output}.")
@@ -483,7 +484,7 @@ def install_live(snapshot, pkg):
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1") ### REVIEW_LATER not safe
     if not excode:
-        print("done!")
+        print(f"Package(s) {pkg} live installed in snapshot {snapshot} successfully.")
     else:
         print("F: Live installation failed!")
 
@@ -501,8 +502,10 @@ def install_profile_live(profile):
     excode2 = service_enable(tmp, profile, tmp_prof)
     if excode1 == 0 and excode2 == 0:
         print(f"Profile {profile} installed in current/live snapshot.") ### REVIEW_LATER
+        return 0
     else:
         print("F: Install failed and changes discarded.")
+        return 1
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
 
@@ -934,8 +937,7 @@ def sync_tree(tree, treename, force_offline, live):
                 prepare(snap_to)
                 sync_tree_helper("chr", snap_from, snap_to) # Pre-sync
                 if live and int(snap_to) == int(get_current_snapshot()): # Live sync
-                    tmp = get_tmp()
-                    sync_tree_helper("", snap_from, tmp) # Post-sync
+                    sync_tree_helper("", snap_from, get_tmp()) # Post-sync
                 post_transactions(snap_to) ### Moved here from the line immediately after first sync_tree_helper
         print(f"Tree {treename} synced.")
 
@@ -1200,7 +1202,7 @@ def main():
       # tree-sync
         tsync_par = subparsers.add_parser("sync", aliases=["tree-sync", "tsync"], allow_abbrev=True, help='Sync packages and configuration changes recursively (requires an internet connection)')
         tsync_par.add_argument("treename", type=int, help="snapshot number")
-        tsync_par.add_argument('-f', '--force-offline', action='store_true', required=False, help='Snapshots would not get updated (potentially riskier)')
+        tsync_par.add_argument('-f', '--force', '--force-offline', action='store_true', required=False, help='Snapshots would not get updated (potentially riskier)')
         tsync_par.add_argument('--not-live', '-nl', action='store_true', required=False, help='Disable live sync')
         tsync_par.set_defaults(func=lambda treename, force_offline, not_live: sync_tree(fstree, treename, force_offline, not not_live))
       # tree-upgrade
@@ -1243,20 +1245,18 @@ def main():
 
 def triage_install(snapshot, live, profile, pkg, not_live):
     if profile:
-        install_profile(snapshot, profile)
-        #install_profile(snapshot, " ".join(profile))
+        excode = install_profile(snapshot, profile)
     elif pkg:
-        install(snapshot, " ".join(pkg))
+        excode = install(snapshot, " ".join(pkg))
   # If installing into current snapshot and no not_live flag, use live install
-    #if (snapshot == get_current_snapshot() and not_live) or live:
-    if live or (snapshot == int(get_current_snapshot()) and not not_live):
+    if snapshot == int(get_current_snapshot()) and not not_live:
+        live = True
+  # Perform the live install only if install above was successful 
+    if live and not excode:
         if profile:
-            #install_profile_live(" ".join(profile))
             install_profile_live(profile)
         elif pkg:
             install_live(snapshot, " ".join(pkg))
-###        Is there a situation where live install is not triggered?
-###            print("install_live() was not called!")
 
 def triage_uninstall(snapshot, profile, pkg, live, not_live): ### TODO add live, not_live
     if profile:
