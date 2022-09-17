@@ -1248,7 +1248,8 @@ def triage_install(snapshot, live, profile, pkg, not_live):
     elif pkg:
         install(snapshot, " ".join(pkg))
   # If installing into current snapshot and no not_live flag, use live install
-    if (snapshot == get_current_snapshot() and not_live) or live:
+    #if (snapshot == get_current_snapshot() and not_live) or live:
+    if live or (snapshot == int(get_current_snapshot()) and not not_live):
         if profile:
             #install_profile_live(" ".join(profile))
             install_profile_live(profile)

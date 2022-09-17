@@ -50,10 +50,10 @@ ash_chroot()
 
 #   3. Package manager database and config files
 os.system("sudo cp -r /mnt/var/lib/pacman/. /mnt/usr/share/ash/db/")
-# EndeavourOS specific configs
+# If using EndeavourOS iso
 os.system(f"sudo cp -a /etc/pacman.d/{distro}-mirrorlist /mnt/etc/pacman.d/")
 os.system("sudo cp -a /etc/pacman.conf /mnt/etc/pacman.conf")
-# If using archiso instead of EOS iso
+# If using Arch iso
 #os.system(f"sudo curl -L {EOS_mirrorlist} -o /mnt/etc/pacman.d/{distro}-mirrorlist")
 #os.system(f"sudo curl -L {EOS_pacman} -o /mnt/etc/pacman.conf")
 os.system("sed -i 's|[#?]DBPath.*$|DBPath       = /usr/share/ash/db/|g' /mnt/etc/pacman.conf")
@@ -90,4 +90,6 @@ unmounts()
 clear()
 print("Installation complete!")
 print("You can reboot now :)")
+
+# cat $HOME/ashos-installer.log | curl -F "sprunge=<-" sprunge.us
 

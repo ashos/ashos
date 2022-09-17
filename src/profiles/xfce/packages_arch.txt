@@ -1,4 +1,5 @@
-#icu
+[packages]
+which
 glibc
 xorg-server
 xfce4

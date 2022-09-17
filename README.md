@@ -33,6 +33,7 @@
   * [Debian](https://github.com/ashos/ashos#debian)
   * [Arch](https://github.com/ashos/ashos#arch-linux)
     * [AUR](https://github.com/ashos/ashos#aur)
+    * [Fixing pacman corrupt packages or key issues](https://github.com/ashos/ashos#fixing-pacman-corrupt-packages-or-key-issues)
   * [EndeavourOS](https://github.com/ashos/ashos#endeavouros)
 
 ---
@@ -84,10 +85,10 @@ In AshOS, there are several keywords:
 As AshOS strives to be minimal solid and follow a LEGO like structure (start small, customize as you go), we primarily focus development on the base, meaning by default no Desktop Environment (not even Window Manager) is installed. This is by design as otherwise team has to support many DEs on many distros. What is provided is `profiles`. As DEs/WMs are just packages, with power of snapshotting, one can use ash to install the desired DE/WM.
 For instance to install GNOME in snapshot 1:
 ```
-sudo ash clone 0
-sudo ash install-profile gnome 1
-sudo ash deploy 1
-sudo reboot
+`ash clone 0` : create snapshot #1
+`ash install 1 -P gnome` : install gnome in snapshot #1
+`ash deploy 1`
+`reboot`
 ```
 
 ---
@@ -108,9 +109,9 @@ sudo reboot
 * You need an internet connection to install AshOS
 * AshOS used to ship with 3 installation profiles, one for minimal installs and two for desktop (Gnome, KDE Plasma). To make it more modular, we redesigned it and by default it only installs a bare minimum base snapshot. Once that is done, you can install any desktop environment you would like. For instance for GNOME, once booted in base snapshot, run:
 ```
-sudo ash branch 0 # This produces node #N
-sudo ash install --profile N gnome
-sudo ash deploy N
+ash branch 0 # This produces node #N
+ash install N --profile gnome
+ash deploy N
 ```
 * Support for more DE's will be added but it will not be part of the base install.
 * The installation script is easily configurable and adjusted for your needs (but it works just fine without any modifications)
@@ -173,7 +174,7 @@ The arguments inside square brackets are optional. Regarding the fourth argument
 ## Additional documentation
 * For further information that is not covered in this project, it is advised to refer to the the target distro i.e. [Arch wiki](https://wiki.archlinux.org/)
 * Report issues/bugs on the [Github issues page](https://github.com/ashos/ashos/issues)
-* **HINT: you can use `ash --help` to get a quick cheatsheet of all available commands**
+* **HINT: you can use `ash help` to get a quick cheatsheet of all available commands**
 * **Ideally, we would like to keep Ash as a single file executable**
 * ash script is divided into 2 files: common code (ashpk_core.py) and distro specific code (i.e gentoo.py). Note that neither of these files can be run standalone (import one script into the other is not intended). The division is just to ease using files as templates in developing Ash for other distributions. At the time of installing a distro, the two files are simply concatenated.
 * To not need additional fonts, we use ASCII style when printing ash tree. For a nicer output, feel free to replace AsciiStyle() with ContStyle(), ContRoundStyle(), or DoubleStyle()
@@ -273,7 +274,7 @@ ash clone-tree <snapshot>
 * Adds a new branch to specified snapshot
 
 ```
-ash branch <snapshot to branch from>
+ash branch <snapshot-to-branch-from>
 ```
 #### Clone snapshot under same parent
 
@@ -333,9 +334,9 @@ ash sync <tree>
 ash force-sync <tree>
 ```
 
-* ash also supports installing packages without rebooting. This is no longer needed. ###
+* ash also supports installing packages without rebooting. This is no longer needed. ### REVIEW_LATER
 ```
-ash install --live <snapshot> <package>
+ash install <snapshot> -p <package> --live
 ```
 
 #### Removing software
@@ -391,26 +392,6 @@ EDITOR=nano ash edit-conf <snapshot> # set the EDITOR variable
 * Save changes and quit
 
 ## Extras
-
-#### Fixing pacman corrupt packages / key issues
-* Arch's pacman package manager sometimes requires a refresh of the PGP keys
-* To fix this issue we can simply reinstall they arch keyring
-
-```
-ash install <snapshots> archlinux-keyring
-```
-
-If this didn't solve the issue, run:
-
-```
-ash refresh <snapshots>
-```
-
-and as a last resort, run: (CAUTION: This might have undesired effects)
-
-```
-ash fixdb <snapshots>
-```
 
 #### Saving configuration changes made in ``/etc`` persistently
 * Normally configuration should be done with ``ash chroot``, but sometimes you may want to apply changes you've made to the booted system persistently
@@ -556,6 +537,26 @@ aur::True
 
 * Save changes and quit
 * Now AUR Support is enabled, you can use ``ash install`` and ``ash upgrade`` as usual with AUR packages
+
+### Fixing pacman corrupt packages or key issues
+* Arch's pacman package manager sometimes requires a refresh of the PGP keys
+* To fix this issue we can simply reinstall they arch keyring
+
+```
+ash install <snapshots> archlinux-keyring
+```
+
+If this didn't solve the issue, run:
+
+```
+ash refresh <snapshots>
+```
+
+and as a last resort, run: (CAUTION: This might have undesired effects)
+
+```
+ash fixdb <snapshots>
+```
 
 ## EndeavourOS
 * Start the boot process from iso file
