@@ -146,7 +146,7 @@ def install_package_live(snapshot, tmp, pkg):
         aur_in_tmp = True
     else:
         aur_in_tmp = False
-        print("F: AUR is not enabled!")
+        print("F: AUR is not enabled!") ### REVIEW_NOW!!!
     if aur_in_tmp and not aur_check(tmp):
         excode = aur_setup_live(tmp)
         if excode:
