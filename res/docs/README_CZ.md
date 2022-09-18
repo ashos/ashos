@@ -2,7 +2,7 @@
 
 ### Neměnná distribuce založená na archi využívající snapshoty btrfs.
 
-![astos-logo](logo.png)
+![ashos-logo](../logos/logo.png)
 
 ---
 

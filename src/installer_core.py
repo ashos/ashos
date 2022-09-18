@@ -276,7 +276,7 @@ def use_luks():
 # ---------------------------------------------------------------------------- #
 
 print("Welcome to the AshOS installer!\n")
-with open('logo.txt', 'r') as f:
+with open('res/logos/logo.txt', 'r') as f:
     print(f.read())
 
 #   Define variables

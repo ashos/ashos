@@ -1,1 +1,0 @@
-src/docs/ascii_logo/logo_w64.txt
