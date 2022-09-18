@@ -110,7 +110,7 @@ def chr_delete(snapshot):
         print(f"Snapshot chroot {snapshot} deleted.")
 
 #   Run command in snapshot
-def chr_run(snapshot, cmd): ### make cmd to cmds (VERY IMPORTANT FOR install_profile()
+def chr_run(snapshot, cmd): ### make cmd to cmds (IMPORTANT for install_profile)
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
         print(f"F: Cannot chroot as snapshot {snapshot} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"): # Make sure snapshot is not in use by another ash process
@@ -119,7 +119,6 @@ def chr_run(snapshot, cmd): ### make cmd to cmds (VERY IMPORTANT FOR install_pro
         print("F: Changing base snapshot is not allowed.")
     else:
         prepare(snapshot)
-        #os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} {cmd}") ### Before argparse
         os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} {' '.join(cmd)}")
         post_transactions(snapshot)
 
@@ -458,7 +457,6 @@ def install(snapshot, pkg):
     elif snapshot == "0":
         print("F: Changing base snapshot is not allowed.")
     else:
-#        prepare(snapshot) ### REVIEW_LATER This originally came after setup_aur_if_enabled but it works here as well!
         excode = install_package(snapshot, pkg)
         if int(excode) == 0:
             post_transactions(snapshot)
@@ -1136,18 +1134,18 @@ def main():
         inst_par = subparsers.add_parser("install", aliases=['in'], allow_abbrev=True, help='install package(s) inside a snapshot')
         inst_par.add_argument("snapshot", type=int, help="snapshot number")
         g1i = inst_par.add_mutually_exclusive_group(required=True)
-        g1i.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='install package') ### switch pkg and package
+        g1i.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='install package')
         g1i.add_argument('--profile', '-P', type=str, required=False, help='install profile')
         g2i = inst_par.add_mutually_exclusive_group(required=False)
-        g2i.add_argument('--live', '-l', action='store_true', required=False, help='make snapshot install live')
-        g2i.add_argument('--not-live', '-nl', action='store_false', required=False, help='make snapshot install not live')
+        g2i.add_argument('--live', '-l', action='store_true', required=False, help='Enable live install for snapshot')
+        g2i.add_argument('--not-live', '-nl', action='store_true', required=False, help='Disable live install for snapshot')
         inst_par.set_defaults(func=triage_install)
       # live chroot
         lc_par = subparsers.add_parser("live-chroot", aliases=['lchroot', 'lc'], allow_abbrev=True, help='Open a shell inside currently booted snapshot with read-write access. Changes are discarded on new deployment.')
         lc_par.set_defaults(func=live_unlock)
       # new
         new_par = subparsers.add_parser("new", aliases=['new-tree'], allow_abbrev=True, help='Create a new base snapshot')
-        new_par.add_argument("--desc", "--description", "-d", nargs='+', required=False, help="description for the snapshot")
+        new_par.add_argument("--desc", "--description", "-d", nargs='+', required=False, help="Description for the snapshot")
         new_par.set_defaults(func=new_snapshot)
       # upself
         upself_par = subparsers.add_parser("upself", aliases=['ash-update'], allow_abbrev=True, help="Update ash itself")
@@ -1216,7 +1214,7 @@ def main():
         uninst_par = subparsers.add_parser("uninstall", aliases=["unin", "uninst", "unins", "un"], allow_abbrev=True, help='Uninstall package(s) from a snapshot')
         uninst_par.add_argument("snapshot", type=int, help="snapshot number")
         g1u = uninst_par.add_mutually_exclusive_group(required=True)
-        g1u.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='package(s) to be uninstalled') ### switch pkg and package
+        g1u.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='package(s) to be uninstalled')
         g1u.add_argument('--profile', '-P', type=str, required=False, help='profile(s) to be uninstalled')
         g2u = uninst_par.add_mutually_exclusive_group(required=False)
         g2u.add_argument('--live', '-l', action='store_true', required=False, help='make snapshot install live')

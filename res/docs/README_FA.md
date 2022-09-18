@@ -3,15 +3,15 @@
   <br>
   [<a href="res/docs/README_CZ.md">Čeština</a>] | [<a href="res/docs/README_zh-CN.md">中文</a>] | [<a href="docs/README_FA.md">فارسی</a>]
   <br>
-  <b>We need your help to translate this README. <a href="https://github.com/i2/ashos-dev/tree/main/res/docs">Look here!</a></b>
+  <b>ما به همکاری شما برای بازگردانی این نوشته نیازمندیم. <a href="https://github.com/i2/ashos-dev/tree/main/res/docs">اینجا را نگاه کنید!</a></b>
 </p>
 
 # AshOS (Any Snapshot Hierarchical OS)
-### An immutable tree-shaped meta-distribution using snapshots
+### یک فرا-سیستم عامل تغییر ناپذیر با بکارگیری اسنپشات ها
 
 ---
 
-## Table of contents
+## فهرست مطالب
 * [What is AshOS?](https://github.com/ashos/ashos#what-is-ashos)
 * [AshOS compared to other similar distributions](https://github.com/ashos/ashos#ashos-compared-to-other-similar-distributions)
 * [ash and AshOS documentation](https://github.com/ashos/ashos#additional-documentation)
@@ -180,7 +180,7 @@ The arguments inside square brackets are optional. Regarding the fourth argument
 ## Additional documentation
 * For further information that is not covered in this project, it is advised to refer to the the target distro i.e. [Arch wiki](https://wiki.archlinux.org/)
 * Report issues/bugs on the [Github issues page](https://github.com/ashos/ashos/issues)
-* **HINT: you can use `ash --help` to get a quick cheatsheet of all available commands**
+* **HINT: you can use `ash help` to get a quick cheatsheet of all available commands**
 * **Ideally, we would like to keep Ash as a single file executable**
 * ash script is divided into 2 files: common code (ashpk_core.py) and distro specific code (i.e gentoo.py). Note that neither of these files can be run standalone (import one script into the other is not intended). The division is just to ease using files as templates in developing Ash for other distributions. At the time of installing a distro, the two files are simply concatenated.
 * To not need additional fonts, we use ASCII style when printing ash tree. For a nicer output, feel free to replace AsciiStyle() with ContStyle(), ContRoundStyle(), or DoubleStyle()
