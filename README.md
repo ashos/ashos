@@ -1,7 +1,13 @@
+<p align="center">
+  <img src="res/logos/logo.png" alt="AshOS">
+  <br>
+  [<a href="res/docs/README_CZ.md">Čeština</a>] | [<a href="res/docs/README_zh-CN.md">中文</a>] | [<a href="docs/README_FA.md">فارسی</a>]
+  <br>
+  <b>We need your help to translate this README. <a href="https://github.com/i2/ashos-dev/tree/main/res/docs">Look here!</a></b>
+</p>
+
 # AshOS (Any Snapshot Hierarchical OS)
 ### An immutable tree-shaped meta-distribution using snapshots
-
-![ashos-logo](logo.png)
 
 ---
 

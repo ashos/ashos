@@ -1,7 +1,7 @@
 # astOS (Arch Snapshot Tree OS)
 ### 一个运用了Btrfs快照的基于Arch的发行版  
 
-![astos-logo](logo.jpg)
+![ashos-logo](../logos/logo.png)
 
 ---
 
