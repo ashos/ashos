@@ -2,7 +2,7 @@
 
 import os
 import subprocess
-from setup import args, distro, distro_name, override_distro
+from setup import args, distro, distro_name
 
 # ------------------------------ CORE FUNCTIONS ------------------------------ #
 
@@ -125,10 +125,10 @@ def get_username():
     return u
 
 #   GRUB and EFI
-def grub_ash(distro, v):
-    os.system(f"sudo sed -i 's/^GRUB_DISTRIBUTOR.*$/GRUB_DISTRIBUTOR={distro_name}/' -i /mnt/etc/default/grub")
+def grub_ash(v):
+    os.system(f"sudo sed -i 's/^GRUB_DISTRIBUTOR.*$/GRUB_DISTRIBUTOR={distro_name}/' -i /mnt/etc/default/grub") ### -i
     if is_luks:
-        os.system("sudo sed -i 's/^#GRUB_ENABLE_CRYPTODISK.*$/GRUB_ENABLE_CRYPTODISK=y/' -i /mnt/etc/default/grub")
+        os.system("sudo sed -i 's/^#GRUB_ENABLE_CRYPTODISK.*$/GRUB_ENABLE_CRYPTODISK=y/' -i /mnt/etc/default/grub") ### -i
         os.system(f"sudo sed -i -E 's|^#?GRUB_CMDLINE_LINUX=\"|GRUB_CMDLINE_LINUX=\"cryptdevice=UUID={to_uuid(args[1])}:luks_root cryptkey=rootfs:/etc/crypto_keyfile.bin|' /mnt/etc/default/grub")
         os.system(f"sed -e 's|DISTRO|{distro}|' -e 's|LUKS_UUID_NODASH|{to_uuid(args[1]).replace('-', '')}|' \
                         -e '/^#/d' ./src/prep/grub_luks2.conf | sudo tee /mnt/etc/grub_luks2.conf")
@@ -158,7 +158,7 @@ def check_efi():
     return os.path.exists("/sys/firmware/efi")
 
 #   Post bootstrap
-def post_bootstrap(distro, super_group):
+def post_bootstrap(super_group):
   # Database and config files
     os.system("sudo chmod 700 /mnt/.snapshots/ash/root")
     os.system("sudo chmod 1777 /mnt/.snapshots/ash/tmp")
@@ -167,7 +167,7 @@ def post_bootstrap(distro, super_group):
     os.system("echo '0' | sudo tee /mnt/usr/share/ash/snap")
     os.system("echo 'mutable_dirs::' | sudo tee /mnt/etc/ash.conf")
     os.system("echo 'mutable_dirs_shared::' | sudo tee -a /mnt/etc/ash.conf")
-    if distro in ("arch", "cachyos"):
+    if distro in ("arch", "cachyos", "endeavouros"):
         os.system("echo 'aur::False' | sudo tee -a /mnt/etc/ash.conf")
   # Update fstab
     for mntdir in mntdirs:
@@ -195,10 +195,12 @@ def post_bootstrap(distro, super_group):
     create_user(username, super_group)
     set_password(username)
   # Modify OS release information (optional)
-    os.system(f"sudo sed -i '/^ID/ s|{distro}|{distro}_ashos|' /mnt/etc/os-release")
-    if override_distro: # Update only if user overrides OS release file
-        os.system(f"sudo sed -i '/^NAME=/ s|^NAME=.*$|NAME=\"{distro_name}\"|' /mnt/etc/os-release")
-        os.system(f"sudo sed -i '/^PRETTY_NAME=/ s|^PRETTY_NAME=.*$|PRETTY_NAME=\"{distro_name}\"|' /mnt/etc/os-release")
+    os.system(f"sudo sed -i 's|^ID.*$|ID={distro}_ashos|' /mnt/etc/os-release")
+    os.system(f"sudo sed -i 's|^NAME=.*$|NAME=\"{distro_name}\"|' /mnt/etc/os-release")
+    os.system(f"sudo sed -i 's|^PRETTY_NAME=.*$|PRETTY_NAME=\"{distro_name}\"|' /mnt/etc/os-release")
+#    if override_distro: # Update only if user overrides OS release file
+#        os.system(f"sudo sed -i '/^NAME=/ s|^NAME=.*$|NAME=\"{distro_name}\"|' /mnt/etc/os-release")
+#        os.system(f"sudo sed -i '/^PRETTY_NAME=/ s|^PRETTY_NAME=.*$|PRETTY_NAME=\"{distro_name}\"|' /mnt/etc/os-release")
 
 #   Common steps before bootstrapping
 def pre_bootstrap():

@@ -18,7 +18,7 @@ def initram_update_luks():
 
 #   1. Define variables
 KERNEL = "-cachyos" # options: -cachyos, -cachyos-cfs, -cachyos-cacule, -cachyos-bmq, -cachyos-pds, -cachyos-tt
-packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano" # linux-firmware tmux os-prober bash
+packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano arch-install-scripts" # linux-firmware os-prober bash tmux (arch-install-scripts only needed for AUR - will remove it later)
 super_group = "wheel"
 v = "" # GRUB version number in /boot/grubN
 tz = get_timezone()
@@ -55,14 +55,14 @@ os.system(f"sudo ln -srf /mnt{tz} /mnt/etc/localtime")
 os.system("sudo chroot /mnt sudo hwclock --systohc")
 
 #   Post bootstrap
-post_bootstrap(distro, super_group)
+post_bootstrap(super_group)
 
 #   5. Services (init, network, etc.)
 os.system("sudo chroot /mnt systemctl enable NetworkManager")
 
 #   6. Boot and EFI
 initram_update_luks()
-grub_ash(distro, v)
+grub_ash(v)
 
 #   BTRFS snapshots
 deploy_base_snapshot()

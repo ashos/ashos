@@ -1,7 +1,7 @@
 <p align="center">
-  <img src="res/logos/logo.png" alt="AshOS">
+  <img src="../logos/logo.png" alt="AshOS">
   <br>
-  [<a href="res/docs/README_CZ.md">Čeština</a>] | [<a href="res/docs/README_zh-CN.md">中文</a>] | [<a href="docs/README_FA.md">فارسی</a>]
+  [<a href="README_CZ.md">Čeština</a>] | [<a href="README_zh-CN.md">中文</a>] | [<a href="README_FA.md">فارسی</a>]
   <br>
   <b>ما به همکاری شما برای بازگردانی این نوشته نیازمندیم. <a href="https://github.com/i2/ashos-dev/tree/main/res/docs">اینجا را نگاه کنید!</a></b>
 </p>

@@ -146,7 +146,6 @@ def install_package(snapshot, pkg):
         return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --needed --overwrite '/var/*'")
 
 #   Install atomic-operation in live snapshot
-###def install_package_live(tmp, pkg, is_aur):
 def install_package_live(snapshot, tmp, pkg):
     try:
       # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt

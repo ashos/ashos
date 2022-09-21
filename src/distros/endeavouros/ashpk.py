@@ -130,58 +130,64 @@ def init_system_copy(snapshot, FROM):
 
 #   Install atomic-operation
 def install_package(snapshot, pkg):
-    aur = setup_aur_if_enabled(snapshot)
-    prepare(snapshot) ### REVIEW_LATER tried it outside of this function in ashpk_core before setup_aur_if_enabled and it works fine!
-    if not aur:
-        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --overwrite '/var/*'"))
+    try:
+      # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
+        subprocess.check_output(f"pacman -Si {pkg}", shell=True) # --sysroot
+    except subprocess.CalledProcessError:
+        aur = setup_aur_if_enabled(snapshot) ### ToDo: do a paru -Si {pkg} check to avoid setup_aur if package already installed!
+        prepare(snapshot)
+        if aur:
+            return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c \"paru -S {pkg} --needed --overwrite '/var/*'\"")
+        else:
+            print("F: AUR is not enabled!")
+            return 1
     else:
-        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c \"paru -S {pkg} --overwrite '/var/*'\""))
-    return excode
+        prepare(snapshot)
+        return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --needed --overwrite '/var/*'")
 
 #   Install atomic-operation in live snapshot
-###def install_package_live(tmp, pkg, is_aur):
 def install_package_live(snapshot, tmp, pkg):
-    options = get_persnap_options(tmp)
-    if options["aur"] == "True":
-        aur_in_tmp = True
-    else:
-        aur_in_tmp = False
-        print("F: AUR is not enabled!")
-    if aur_in_tmp and not aur_check(tmp):
-        excode = aur_setup_live(tmp)
-        if excode:
-            os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
-            os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
-            print("F: Live installation failed!")
-            return excode
-    if get_persnap_options(snapshot)["aur"] == "True":
-        aur_in_destination_snapshot = True
-    else:
-        aur_in_destination_snapshot = False
-    ### REVIEW_LATER - error checking, handle the situation better altogether
-    aur_2 = None # Otherwise error "referenced before assignment" when the following if doesn't get triggered
-    if aur_in_destination_snapshot and not aur_in_tmp:
-        print("F: AUR is not enabled in current live snapshot, but is enabled in target.\nEnable AUR for live snapshot? (y/n)")
-        reply = input("> ")
-        while reply.casefold() != "y" and reply.casefold() != "n":
-            print("Please enter 'y' or 'n':")
-            reply = input("> ")
-        if reply == "y":
-            aur_2 = True
-            if not aur_check(tmp):
-                excode = aur_setup_live(tmp)
-                if excode:
-                    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
-                    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
-                    print("F: Live installation failed!")
-                    return excode
+    try:
+      # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
+        subprocess.check_output(f"pacman -Si {pkg}", shell=True) # --sysroot
+    except subprocess.CalledProcessError:
+        options = get_persnap_options(tmp)
+        if options["aur"] == "True":
+            aur_in_tmp = True
         else:
-            aur_2 = False
-    #print("please wait, finishing installation...") ### Moved outside to ashpk_core.py
-    if not aur_2:
-        excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite \\* --noconfirm {pkg} >/dev/null 2>&1"))
+            aur_in_tmp = False
+        if aur_in_tmp and not aur_check(tmp):
+            excode = aur_setup_live(tmp)
+            if excode:
+                os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
+                os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
+                print("F: Live installation failed!")
+                return excode
+        if get_persnap_options(snapshot)["aur"] == "True":
+            aur_in_destination_snapshot = True
+        else:
+            aur_in_destination_snapshot = False
+            print("F: AUR not enabled in target snapshot!") ### REVIEW_LATER
+        ### REVIEW_LATER - error checking, handle the situation better altogether
+        if aur_in_destination_snapshot and not aur_in_tmp:
+            print("F: AUR is not enabled in current live snapshot, but is enabled in target.\nEnable AUR for live snapshot? (y/n)")
+            reply = input("> ")
+            while reply.casefold() != "y" and reply.casefold() != "n":
+                print("Please enter 'y' or 'n':")
+                reply = input("> ")
+            if reply == "y":
+                if not aur_check(tmp):
+                    excode = aur_setup_live(tmp)
+                    if excode:
+                        os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
+                        os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
+                        print("F: Live installation failed!")
+                        return excode
+            else:
+                print("F: Not enabling AUR for live snapshot!")
+                excode = 1
     else:
-        excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} su aur -c 'paru -Sy --overwrite \\* --noconfirm {pkg}' >/dev/null 2>&1"))
+        excode = os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite \\* --noconfirm {pkg} >/dev/null 2>&1")
     return excode
 
 #   Get list of packages installed in a snapshot
