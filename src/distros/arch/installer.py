@@ -61,14 +61,14 @@ os.system(f"sudo ln -srf /mnt{tz} /mnt/etc/localtime")
 os.system("sudo chroot /mnt sudo hwclock --systohc")
 
 #   Post bootstrap
-post_bootstrap(distro, super_group)
+post_bootstrap(super_group)
 
 #   5. Services (init, network, etc.)
 os.system("sudo chroot /mnt systemctl enable NetworkManager")
 
 #   6. Boot and EFI
 initram_update_luks()
-grub_ash(distro, v)
+grub_ash(v)
 
 #   BTRFS snapshots
 deploy_base_snapshot()

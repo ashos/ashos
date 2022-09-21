@@ -6,14 +6,14 @@ import sys
 args = list(sys.argv[0:4]) # just first 3 arguments (exclude distro arguments)
 use_arch_iso_for_this = False # Set True if using arch iso to install other distro
 
-try: # If distro to be installed does not match live environment, use argument 4 and 5
+try: # If distro to be installed does not match live environment, use argument 4 and 5 (examples: README.md)
     distro = sys.argv[4]
     distro_name = sys.argv[5]
-    override_distro = True
+#    override_distro = True
 except IndexError:
     distro = subprocess.check_output(['./src/detect_os.sh', 'id']).decode('utf-8').replace('"', "").strip()
     distro_name = subprocess.check_output(['./src/detect_os.sh', 'name']).decode('utf-8').replace('"', "").strip()
-    override_distro = False
+#    override_distro = False
 
 if distro:
     try: # CAUTION: comment lines 19-26 if prefer to prepare manually

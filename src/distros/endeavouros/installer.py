@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import os
-import subprocess
+#import subprocess
 import sys
 from src.installer_core import * # NOQA
 #from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_timezone, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
@@ -31,13 +31,7 @@ EOS_pacman = "https://raw.githubusercontent.com/endeavouros-team/EndeavourOS-cal
 pre_bootstrap()
 
 #   2. Bootstrap and install packages in chroot
-if KERNEL == "":
-    excode = os.system(f"sudo pacstrap /mnt --needed {packages}")
-else:
-    if KERNEL not in ("-hardened", "-lts", "-zen"): # AUR needs to be enabled
-        subprocess.call(f'./src/distros/{distro}/aur/aurutils.sh', shell=True)
-        #subprocess.check_output(['./src/distros/arch/aur/aurutils.sh'])
-    excode = os.system(f"pacman -Sqg base | sed 's/^linux$/&{KERNEL}/' | pacstrap /mnt --needed {packages}")
+excode = os.system(f"sudo pacstrap /mnt --needed {packages}")
 if excode != 0:
     sys.exit("Failed to bootstrap!")
 if is_efi:
@@ -69,14 +63,14 @@ os.system(f"sudo ln -srf /mnt{tz} /mnt/etc/localtime")
 os.system("sudo chroot /mnt sudo hwclock --systohc")
 
 #   Post bootstrap
-post_bootstrap(distro, super_group)
+post_bootstrap(super_group)
 
 #   5. Services (init, network, etc.)
 os.system("sudo chroot /mnt systemctl enable NetworkManager")
 
 #   6. Boot and EFI
 initram_update_luks()
-grub_ash(distro, v)
+grub_ash(v)
 
 #   BTRFS snapshots
 deploy_base_snapshot()
@@ -90,6 +84,4 @@ unmounts()
 clear()
 print("Installation complete!")
 print("You can reboot now :)")
-
-# cat $HOME/ashos-installer.log | curl -F "sprunge=<-" sprunge.us
 
