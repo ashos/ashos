@@ -3,8 +3,6 @@
 if [ -z "$HOME" ]; then HOME=~ ; fi
 prep_packages="git make fakeroot"
 
-su
-
 # Prevent error of running out of space in /
 mount / -o remount,size=4G /run/archiso/cowspace
 

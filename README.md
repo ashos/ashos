@@ -8,6 +8,7 @@
 
 # AshOS (Any Snapshot Hierarchical OS)
 ### An immutable tree-shaped meta-distribution using snapshots
+###### (for mere mortals!)
 
 ---
 
@@ -99,13 +100,14 @@ For instance to install GNOME in snapshot 1:
 
 ---
 ## AshOS compared to other similar distributions
-* **NixOS** - compared to nixOS, AshOS is a more traditional system with how it's setup and maintained. While nixOS is entirely configured using the Nix programming language, AshOS uses the native package manager of target distribution, for instance pacman for Arch, apt-get for Debian, etc. AshOS consumes less storage, and configuring your system is faster and easier (less reproducible however), it also gives you more customization options. AshOS is FHS compliant, ensuring proper software compatability.
+* **NixOS / GNU Guix** - compared to nixOS, AshOS is a more traditional system with how it's setup and maintained. While nixOS is entirely configured using the Nix programming language, AshOS uses the native package manager of target distribution, for instance pacman for Arch, apt-get for Debian, etc. AshOS consumes less storage, and configuring your system is faster and easier (less reproducible however), it also gives you more customization options. AshOS is FHS compliant, ensuring proper software compatability. **Unlike NixOS, you don't need to have a Ph.D. in computer science to just run an immutable os**
   * AshOS allows declarative configuration using Ansible, for somewhat similar functionality to NixOS
 * **Fedora Silverblue/Kinoite** - AshOS is more customizable, but does require more manual setup. AshOS supports dual boot, unlike Silverblue.
 * **OpenSUSE MicroOS** - AshOS is a more customizable system, but once again requires a bit more manual setup. MicroOS works similarly in the way it utilizes btrfs snapshots. AshOS has an official KDE install, but also supports other desktop environments, while MicroOS only properly supports Gnome. AshOS supports dual boot, as well as live-patching the system and installing packages without reboot
 
 ---
 ## Installation
+* (Note: All scripts during install should be run with super user privileges)
 * AshOS is installed from the official live iso for target distribution. For example [Arch Linux](https://archlinux.org/download/), [Debian](https://www.debian.org/CD/http-ftp/)/[Debian netinstaller](https://www.debian.org/distrib/netinst) etc.
 * Arch iso can be generally used to bootstrap other distros except: Use Debian iso to bootstrap Debian, Ubuntu iso to bootstrap Ubuntu
 * Depending on the live iso, it is **very important** that scripts in `./src/prep/` be executed (preparing live environment as well as partition/formatting) otherwise there would be error because time is not in sync etc. By default the installer will call these scripts, but if you want to do them manually, just comment the respective lines

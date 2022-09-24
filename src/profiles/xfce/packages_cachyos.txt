@@ -1,0 +1,13 @@
+[packages]
+which
+glibc
+xorg-server
+xfce4
+slim
+
+[postinstall]
+& echo "exec startxfce4" > $HOME/.xinitrc
+
+[services]
+% sudo systemctl enable slim
+#% sudo systemctl start --now slim

@@ -28,6 +28,7 @@ from re import sub
 distro = subprocess.check_output(['/usr/bin/detect_os.sh', 'id']).decode('utf-8').replace('"', "").strip()
 distro_name = subprocess.check_output(['/usr/bin/detect_os.sh', 'name']).decode('utf-8').strip()
 GRUB = subprocess.check_output("ls /boot | grep grub", encoding='utf-8', shell=True).strip()
+DEBUG = " >/dev/null 2>&1" # options: "", " >/dev/null 2>&1"
 
 # ------------------------------ CORE FUNCTIONS ------------------------------ #
 
@@ -47,18 +48,18 @@ def append_base_tree(tree, val):
     Node(val, parent=tree.root)
 
 def ash_chroot_mounts(i, CHR=""):
-    os.system(f"mount --bind --make-slave /.snapshots/rootfs/snapshot-{CHR}{i} /.snapshots/rootfs/snapshot-{CHR}{i} >/dev/null 2>&1")
-    os.system(f"mount --rbind --make-rslave /dev /.snapshots/rootfs/snapshot-{CHR}{i}/dev >/dev/null 2>&1")
-    os.system(f"mount --bind --make-slave /etc /.snapshots/rootfs/snapshot-{CHR}{i}/etc >/dev/null 2>&1")
-    os.system(f"mount --bind --make-slave /home /.snapshots/rootfs/snapshot-{CHR}{i}/home >/dev/null 2>&1")
-    os.system(f"mount --types proc /proc /.snapshots/rootfs/snapshot-{CHR}{i}/proc >/dev/null 2>&1")
-    os.system(f"mount --bind --make-slave /run /.snapshots/rootfs/snapshot-{CHR}{i}/run >/dev/null 2>&1")
-    os.system(f"mount --rbind --make-rslave /sys /.snapshots/rootfs/snapshot-{CHR}{i}/sys >/dev/null 2>&1")
-    os.system(f"mount --bind --make-slave /tmp /.snapshots/rootfs/snapshot-{CHR}{i}/tmp >/dev/null 2>&1")
-    os.system(f"mount --bind --make-slave /var /.snapshots/rootfs/snapshot-{CHR}{i}/var >/dev/null 2>&1")
+    os.system(f"mount --bind --make-slave /.snapshots/rootfs/snapshot-{CHR}{i} /.snapshots/rootfs/snapshot-{CHR}{i}{DEBUG}")
+    os.system(f"mount --rbind --make-rslave /dev /.snapshots/rootfs/snapshot-{CHR}{i}/dev{DEBUG}")
+    os.system(f"mount --bind --make-slave /etc /.snapshots/rootfs/snapshot-{CHR}{i}/etc{DEBUG}")
+    os.system(f"mount --bind --make-slave /home /.snapshots/rootfs/snapshot-{CHR}{i}/home{DEBUG}")
+    os.system(f"mount --types proc /proc /.snapshots/rootfs/snapshot-{CHR}{i}/proc{DEBUG}")
+    os.system(f"mount --bind --make-slave /run /.snapshots/rootfs/snapshot-{CHR}{i}/run{DEBUG}")
+    os.system(f"mount --rbind --make-rslave /sys /.snapshots/rootfs/snapshot-{CHR}{i}/sys{DEBUG}")
+    os.system(f"mount --bind --make-slave /tmp /.snapshots/rootfs/snapshot-{CHR}{i}/tmp{DEBUG}")
+    os.system(f"mount --bind --make-slave /var /.snapshots/rootfs/snapshot-{CHR}{i}/var{DEBUG}")
     if is_efi():
-        os.system(f"mount --rbind --make-rslave /sys/firmware/efi/efivars /.snapshots/rootfs/snapshot-{CHR}{i}/sys/firmware/efi/efivars >/dev/null 2>&1")
-    os.system(f"cp --dereference /etc/resolv.conf /.snapshots/rootfs/snapshot-{CHR}{i}/etc/ >/dev/null 2>&1") ### REVIEW_LATER Maybe not needed?
+        os.system(f"mount --rbind --make-rslave /sys/firmware/efi/efivars /.snapshots/rootfs/snapshot-{CHR}{i}/sys/firmware/efi/efivars{DEBUG}")
+    os.system(f"cp --dereference /etc/resolv.conf /.snapshots/rootfs/snapshot-{CHR}{i}/etc/{DEBUG}") ### REVIEW_LATER Maybe not needed?
 
 #   Update ash itself
 def ash_update():
@@ -71,8 +72,8 @@ def ash_update():
                                 'https://raw.githubusercontent.com/ashos/ashos/main/src/distros/{d}/ashpk.py'", shell=True)
         os.system(f"cat {tmp_ash}/ashpk_core.py {tmp_ash}/ashpk.py > {tmp_ash}/ash")
         os.system(f"chmod +x {tmp_ash}/ash")
-    except subprocess.CalledProcessError as e:
-        print(f"F: Failed to download ash: {e.output}.")
+    except subprocess.CalledProcessError:
+        print(f"F: Failed to download ash.")
     else:
         if os.system(f"diff {tmp_ash}/ash /.snapshots/ash/ash"):
             os.system(f"cp -a {tmp_ash}/ash /.snapshots/ash/ash")
@@ -102,10 +103,10 @@ def chr_delete(snapshot):
         if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
             subprocess.check_output(f"btrfs sub del /.snapshots/boot/boot-chr{snapshot}", shell=True)
             subprocess.check_output(f"btrfs sub del /.snapshots/etc/etc-chr{snapshot}", shell=True)
-            #os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snapshot}/* >/dev/null 2>&1") ### REVIEW_LATER
+            #os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snapshot}/*{DEBUG}") ### REVIEW_LATER
             subprocess.check_output(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snapshot}", shell=True)
-    except subprocess.CalledProcessError as e:
-        print(f"F: Failed to delete chroot snapshot {snapshot}: {e.output}.")
+    except subprocess.CalledProcessError:
+        print(f"F: Failed to delete chroot snapshot {snapshot}.")
     else:
         print(f"Snapshot chroot {snapshot} deleted.")
 
@@ -154,9 +155,9 @@ def clone_as_tree(snapshot, desc):
         else:
             immutability = "-r"
         i = find_new()
-        os.system(f"btrfs sub snap {immutability} /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-{i} >/dev/null 2>&1")
-        os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-{i} >/dev/null 2>&1")
-        os.system(f"btrfs sub snap {immutability} /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-{i} >/dev/null 2>&1")
+        os.system(f"btrfs sub snap {immutability} /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-{i}{DEBUG}")
+        os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-{i}{DEBUG}")
+        os.system(f"btrfs sub snap {immutability} /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-{i}{DEBUG}")
         if immutability == "": # Mark newly created snapshot as mutable too
             os.system(f"touch /.snapshots/rootfs/snapshot-{i}/usr/share/ash/mutable")
         append_base_tree(fstree, i)
@@ -178,9 +179,9 @@ def clone_branch(snapshot):
         else:
             immutability = "-r"
         i = find_new()
-        os.system(f"btrfs sub snap {immutability} /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-{i} >/dev/null 2>&1")
-        os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-{i} >/dev/null 2>&1")
-        os.system(f"btrfs sub snap {immutability} /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-{i} >/dev/null 2>&1")
+        os.system(f"btrfs sub snap {immutability} /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-{i}{DEBUG}")
+        os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-{i}{DEBUG}")
+        os.system(f"btrfs sub snap {immutability} /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-{i}{DEBUG}")
         if immutability == "": # Mark newly created snapshot as mutable too
             os.system(f"touch /.snapshots/rootfs/snapshot-{i}/usr/share/ash/mutable")
         add_node_to_level(fstree, snapshot, i)
@@ -217,9 +218,9 @@ def clone_under(snapshot, branch):
         else:
             immutability = "-r"
         i = find_new()
-        os.system(f"btrfs sub snap {immutability} /.snapshots/boot/boot-{branch} /.snapshots/boot/boot-{i} >/dev/null 2>&1")
-        os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-{branch} /.snapshots/etc/etc-{i} >/dev/null 2>&1")
-        os.system(f"btrfs sub snap {immutability} /.snapshots/rootfs/snapshot-{branch} /.snapshots/rootfs/snapshot-{i} >/dev/null 2>&1")
+        os.system(f"btrfs sub snap {immutability} /.snapshots/boot/boot-{branch} /.snapshots/boot/boot-{i}{DEBUG}")
+        os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-{branch} /.snapshots/etc/etc-{i}{DEBUG}")
+        os.system(f"btrfs sub snap {immutability} /.snapshots/rootfs/snapshot-{branch} /.snapshots/rootfs/snapshot-{i}{DEBUG}")
         if immutability == "": # Mark newly created snapshot as mutable too
             os.system(f"touch /.snapshots/rootfs/snapshot-{i}/usr/share/ash/mutable")
         add_node_to_parent(fstree, snapshot, i)
@@ -233,7 +234,7 @@ def clone_under(snapshot, branch):
 def delete_node(snapshots, quiet):
     for snapshot in snapshots:
         if not quiet: ### NEWLY ADDED
-            print(f"Are you sure you want to delete snapshot {snapshot}? (y/N)")
+            print(f"Are you sure you want to delete snapshot {snapshot}? (y/n)")
             choice = input("> ")
             run = True
             if choice.casefold() != "y":
@@ -251,22 +252,22 @@ def delete_node(snapshots, quiet):
             print("F: Cannot delete deployed snapshot.")
         elif run == True:
             children = return_children(fstree, snapshot)
-            os.system(f"btrfs sub del /.snapshots/boot/boot-{snapshot} >/dev/null 2>&1")
-            os.system(f"btrfs sub del /.snapshots/etc/etc-{snapshot} >/dev/null 2>&1")
-            os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot} >/dev/null 2>&1")
+            os.system(f"btrfs sub del /.snapshots/boot/boot-{snapshot}{DEBUG}")
+            os.system(f"btrfs sub del /.snapshots/etc/etc-{snapshot}{DEBUG}")
+            os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}")
             # Make sure temporary chroot directories are deleted as well
             if (os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}")):
-                os.system(f"btrfs sub del /.snapshots/boot/boot-chr{snapshot} >/dev/null 2>&1")
-                os.system(f"btrfs sub del /.snapshots/etc/etc-chr{snapshot} >/dev/null 2>&1")
-                os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snapshot} >/dev/null 2>&1")
+                os.system(f"btrfs sub del /.snapshots/boot/boot-chr{snapshot}{DEBUG}")
+                os.system(f"btrfs sub del /.snapshots/etc/etc-chr{snapshot}{DEBUG}")
+                os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snapshot}{DEBUG}")
             for child in children: # This deletes the node itself along with its children
-                os.system(f"btrfs sub del /.snapshots/boot/boot-{child} >/dev/null 2>&1")
-                os.system(f"btrfs sub del /.snapshots/etc/etc-{child} >/dev/null 2>&1")
-                os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{child} >/dev/null 2>&1")
+                os.system(f"btrfs sub del /.snapshots/boot/boot-{child}{DEBUG}")
+                os.system(f"btrfs sub del /.snapshots/etc/etc-{child}{DEBUG}")
+                os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{child}{DEBUG}")
                 if (os.path.exists(f"/.snapshots/rootfs/snapshot-chr{child}")):
-                    os.system(f"btrfs sub del /.snapshots/boot/boot-chr{child} >/dev/null 2>&1")
-                    os.system(f"btrfs sub del /.snapshots/etc/etc-chr{child} >/dev/null 2>&1")
-                    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{child} >/dev/null 2>&1")
+                    os.system(f"btrfs sub del /.snapshots/boot/boot-chr{child}{DEBUG}")
+                    os.system(f"btrfs sub del /.snapshots/etc/etc-chr{child}{DEBUG}")
+                    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{child}{DEBUG}")
             remove_node(fstree, snapshot) # Remove node from tree or root
             write_tree(fstree)
             print(f"Snapshot {snapshot} removed.")
@@ -278,26 +279,25 @@ def deploy(snapshot):
     else:
         update_boot(snapshot)
         tmp = get_tmp()
-        os.system(f"btrfs sub set-default /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1") # Set default volume
+        os.system(f"btrfs sub set-default /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") # Set default volume
         tmp_delete()
         if "deploy-aux" in tmp:
             tmp = "deploy"
         else:
             tmp = "deploy-aux"
-        etc = snapshot
       # Special mutable directories
         options = per_snap_options(snapshot)
         mutable_dirs = options["mutable_dirs"].split(',').remove('')
         mutable_dirs_shared = options["mutable_dirs_shared"].split(',').remove('')
       # btrfs snapshot operations
-        os.system(f"btrfs sub snap /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-{tmp} >/dev/null 2>&1")
-        os.system(f"btrfs sub snap /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-{tmp} >/dev/null 2>&1")
-        os.system(f"btrfs sub snap /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
-        os.system(f"mkdir /.snapshots/rootfs/snapshot-{tmp}/boot >/dev/null 2>&1")
-        os.system(f"mkdir /.snapshots/rootfs/snapshot-{tmp}/etc >/dev/null 2>&1")
-        os.system(f"rm -rf /.snapshots/rootfs/snapshot-{tmp}/var >/dev/null 2>&1")
-        os.system(f"cp --reflink=auto -r /.snapshots/boot/boot-{etc}/* /.snapshots/rootfs/snapshot-{tmp}/boot >/dev/null 2>&1")
-        os.system(f"cp --reflink=auto -r /.snapshots/etc/etc-{etc}/* /.snapshots/rootfs/snapshot-{tmp}/etc >/dev/null 2>&1")
+        os.system(f"btrfs sub snap /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-{tmp}{DEBUG}")
+        os.system(f"btrfs sub snap /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-{tmp}{DEBUG}")
+        os.system(f"btrfs sub snap /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
+        os.system(f"mkdir /.snapshots/rootfs/snapshot-{tmp}/boot{DEBUG}")
+        os.system(f"mkdir /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
+        os.system(f"rm -rf /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}")
+        os.system(f"cp --reflink=auto -r /.snapshots/boot/boot-{snapshot}/* /.snapshots/rootfs/snapshot-{tmp}/boot{DEBUG}")
+        os.system(f"cp --reflink=auto -r /.snapshots/etc/etc-{snapshot}/* /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
       # If snapshot is mutable, modify '/' entry in fstab to read-write
         if check_mutability(snapshot):
             os.system(f"sed -i '0,/snapshot-{tmp}/ s|,ro||' /.snapshots/rootfs/snapshot-{tmp}/etc/fstab") ### ,rw
@@ -315,7 +315,7 @@ def deploy(snapshot):
                 os.system(f"mkdir -p /.snapshots/mutable_dirs/{mount_path}")
                 os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mount_path}")
                 os.system(f"echo '{source_path} {mount_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
-        os.system(f"btrfs sub snap /var /.snapshots/rootfs/snapshot-{tmp}/var >/dev/null 2>&1") ### Is this needed?
+        os.system(f"btrfs sub snap /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}") ### Is this needed?
         os.system(f"echo '{snapshot}' > /.snapshots/rootfs/snapshot-{tmp}/usr/share/ash/snap")
         switch_tmp()
         init_system_clean(tmp, "deploy")
@@ -332,9 +332,9 @@ def extend_branch(snapshot, desc=""): # blank description if nothing is passed
         else:
             immutability = "-r"
         i = find_new()
-        os.system(f"btrfs sub snap {immutability} /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-{i} >/dev/null 2>&1")
-        os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-{i} >/dev/null 2>&1")
-        os.system(f"btrfs sub snap {immutability} /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-{i} >/dev/null 2>&1")
+        os.system(f"btrfs sub snap {immutability} /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-{i}{DEBUG}")
+        os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-{i}{DEBUG}")
+        os.system(f"btrfs sub snap {immutability} /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-{i}{DEBUG}")
         if immutability == "": # Mark newly created snapshot as mutable too
             os.system(f"touch /.snapshots/rootfs/snapshot-{i}/usr/share/ash/mutable")
         add_node_to_parent(fstree, snapshot, i)
@@ -471,16 +471,16 @@ def install(snapshot, pkg):
 def install_live(snapshot, pkg):
     tmp = get_tmp()
     #options = get_persnap_options(tmp) ### moved this to install_package_live
-    os.system(f"mount --bind /.snapshots/rootfs/snapshot-{tmp} /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
-    os.system(f"mount --bind /home /.snapshots/rootfs/snapshot-{tmp}/home >/dev/null 2>&1")
-    os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var >/dev/null 2>&1")
-    os.system(f"mount --bind /etc /.snapshots/rootfs/snapshot-{tmp}/etc >/dev/null 2>&1")
-    os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp >/dev/null 2>&1")
+    os.system(f"mount --bind /.snapshots/rootfs/snapshot-{tmp} /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
+    os.system(f"mount --bind /home /.snapshots/rootfs/snapshot-{tmp}/home{DEBUG}")
+    os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}")
+    os.system(f"mount --bind /etc /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
+    os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp{DEBUG}")
 ###    ash_chroot_mounts(tmp) #this was the culprit for live install to fail. Investigate.
     print("Please wait as installation is finishing.")
     excode = install_package_live(snapshot, tmp, pkg)
-    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
-    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1") ### REVIEW_LATER not safe
+    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
+    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") ### REVIEW_LATER not safe
     if not excode:
         print(f"Package(s) {pkg} live installed in snapshot {snapshot} successfully.")
     else:
@@ -504,8 +504,8 @@ def install_profile_live(profile):
     else:
         print("F: Install failed and changes discarded.")
         return 1
-    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
-    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
+    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
+    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
 
 #   Install a profile from a text file
 def install_profile(snapshot, profile):
@@ -525,7 +525,7 @@ def install_profile(snapshot, profile):
             pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\[|^%|^&|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
             install_package(snapshot, pkg)
             service_enable(snapshot, profile, tmp_prof)
-        except subprocess.CalledProcessError as e:
+        except subprocess.CalledProcessError:
             chr_delete(snapshot)
             print("F: Install failed and changes discarded.")
             sys.exit(1)
@@ -545,21 +545,21 @@ def list_subvolumes():
 #   Live unlocked shell
 def live_unlock():
     tmp = get_tmp()
-    os.system(f"mount --bind /.snapshots/rootfs/snapshot-{tmp} /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
-    os.system(f"mount --bind /etc /.snapshots/rootfs/snapshot-{tmp}/etc >/dev/null 2>&1")
-    os.system(f"mount --bind /home /.snapshots/rootfs/snapshot-{tmp}/home >/dev/null 2>&1")
-    os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp >/dev/null 2>&1")
-    os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var >/dev/null 2>&1")
+    os.system(f"mount --bind /.snapshots/rootfs/snapshot-{tmp} /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
+    os.system(f"mount --bind /etc /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
+    os.system(f"mount --bind /home /.snapshots/rootfs/snapshot-{tmp}/home{DEBUG}")
+    os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp{DEBUG}")
+    os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}")
     os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp}")
-    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
-    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
+    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
+    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
 
 #   Creates new tree from base file
 def new_snapshot(desc="clone of base"): # immutability toggle not used as base should always be immutable
     i = find_new()
-    os.system(f"btrfs sub snap -r /.snapshots/boot/boot-0 /.snapshots/boot/boot-{i} >/dev/null 2>&1")
-    os.system(f"btrfs sub snap -r /.snapshots/etc/etc-0 /.snapshots/etc/etc-{i} >/dev/null 2>&1")
-    os.system(f"btrfs sub snap -r /.snapshots/rootfs/snapshot-0 /.snapshots/rootfs/snapshot-{i} >/dev/null 2>&1")
+    os.system(f"btrfs sub snap -r /.snapshots/boot/boot-0 /.snapshots/boot/boot-{i}{DEBUG}")
+    os.system(f"btrfs sub snap -r /.snapshots/etc/etc-0 /.snapshots/etc/etc-{i}{DEBUG}")
+    os.system(f"btrfs sub snap -r /.snapshots/rootfs/snapshot-0 /.snapshots/rootfs/snapshot-{i}{DEBUG}")
     append_base_tree(fstree, i)
     write_tree(fstree)
     if desc:
@@ -593,67 +593,66 @@ def per_snap_conf(snapshot):
 
 #   Post transaction function, copy from chroot dirs back to read only snapshot dir
 def post_transactions(snapshot):
-    etc = snapshot
     tmp = get_tmp()
   # Unmount in reverse order
-    os.system(f"umount /.snapshots/rootfs/snapshot-chr{snapshot}/etc/resolv.conf >/dev/null 2>&1")
-    os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/dev >/dev/null 2>&1")
-    os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/home >/dev/null 2>&1")
-    os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/proc >/dev/null 2>&1")
-    os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/root >/dev/null 2>&1")
-    os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/run >/dev/null 2>&1")
-    os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/sys >/dev/null 2>&1")
-    os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot} >/dev/null 2>&1")
+    os.system(f"umount /.snapshots/rootfs/snapshot-chr{snapshot}/etc/resolv.conf{DEBUG}")
+    os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/dev{DEBUG}")
+    os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/home{DEBUG}")
+    os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/proc{DEBUG}")
+    os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/root{DEBUG}")
+    os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/run{DEBUG}")
+    os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/sys{DEBUG}")
+    os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}{DEBUG}")
   # Special mutable directories
     options = per_snap_options(snapshot)
     mutable_dirs = options["mutable_dirs"].split(',').remove('')
     mutable_dirs_shared = options["mutable_dirs_shared"].split(',').remove('')
     if mutable_dirs:
         for mount_path in mutable_dirs:
-            os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path} >/dev/null 2>&1")
+            os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path}{DEBUG}")
     if mutable_dirs_shared:
         for mount_path in mutable_dirs_shared:
-            os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path} >/dev/null 2>&1")
+            os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path}{DEBUG}")
   # File operations in snapshot-chr
-    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot} >/dev/null 2>&1")
-    os.system(f"rm -rf /.snapshots/boot/boot-chr{snapshot}/* >/dev/null 2>&1")
-    os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/boot/* /.snapshots/boot/boot-chr{snapshot} >/dev/null 2>&1")
-    os.system(f"rm -rf /.snapshots/etc/etc-chr{snapshot}/* >/dev/null 2>&1")
-    os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/etc/* /.snapshots/etc/etc-chr{snapshot} >/dev/null 2>&1")
+    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}")
+    os.system(f"rm -rf /.snapshots/boot/boot-chr{snapshot}/*{DEBUG}")
+    os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/boot/* /.snapshots/boot/boot-chr{snapshot}{DEBUG}")
+    os.system(f"rm -rf /.snapshots/etc/etc-chr{snapshot}/*{DEBUG}")
+    os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/etc/* /.snapshots/etc/etc-chr{snapshot}{DEBUG}")
   # Keep package manager's cache after installing packages. This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
     cache_copy(snapshot, "post_transactions")
-    os.system(f"btrfs sub del /.snapshots/boot/boot-{etc} >/dev/null 2>&1")
-    os.system(f"btrfs sub del /.snapshots/etc/etc-{etc} >/dev/null 2>&1")
+    os.system(f"btrfs sub del /.snapshots/boot/boot-{snapshot}{DEBUG}")
+    os.system(f"btrfs sub del /.snapshots/etc/etc-{snapshot}{DEBUG}")
     if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}/usr/share/ash/mutable"):
         immutability = ""
     else:
         immutability = "-r"
-    os.system(f"btrfs sub snap {immutability} /.snapshots/boot/boot-chr{snapshot} /.snapshots/boot/boot-{etc} >/dev/null 2>&1")
-    os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-chr{snapshot} /.snapshots/etc/etc-{etc} >/dev/null 2>&1")
+    os.system(f"btrfs sub snap {immutability} /.snapshots/boot/boot-chr{snapshot} /.snapshots/boot/boot-{snapshot}{DEBUG}")
+    os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-chr{snapshot} /.snapshots/etc/etc-{snapshot}{DEBUG}")
   # Copy init system files to shared
     init_system_copy(tmp, "post_transactions")
-    os.system(f"btrfs sub snap {immutability} /.snapshots/rootfs/snapshot-chr{snapshot} /.snapshots/rootfs/snapshot-{snapshot} >/dev/null 2>&1")
+    os.system(f"btrfs sub snap {immutability} /.snapshots/rootfs/snapshot-chr{snapshot} /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}")
     chr_delete(snapshot)
 
 #   Prepare snapshot to chroot dir to install or chroot into
 def prepare(snapshot):
     chr_delete(snapshot)
-    os.system(f"btrfs sub snap /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-chr{snapshot} >/dev/null 2>&1")
-    os.system(f"btrfs sub snap /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-chr{snapshot} >/dev/null 2>&1")
+    os.system(f"btrfs sub snap /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-chr{snapshot}{DEBUG}")
   # Pacman gets weird when chroot directory is not a mountpoint, so the following mount is necessary ### REVIEW_LATER
-    os.system(f"mount --bind --make-slave /.snapshots/rootfs/snapshot-chr{snapshot} /.snapshots/rootfs/snapshot-chr{snapshot} >/dev/null 2>&1")
-    os.system(f"mount --rbind --make-rslave /dev /.snapshots/rootfs/snapshot-chr{snapshot}/dev >/dev/null 2>&1")
-    os.system(f"mount --bind --make-slave /home /.snapshots/rootfs/snapshot-chr{snapshot}/home >/dev/null 2>&1")
-    os.system(f"mount --rbind --make-rslave /proc /.snapshots/rootfs/snapshot-chr{snapshot}/proc >/dev/null 2>&1")
-    os.system(f"mount --bind --make-slave /root /.snapshots/rootfs/snapshot-chr{snapshot}/root >/dev/null 2>&1")
-    os.system(f"mount --rbind --make-rslave /run /.snapshots/rootfs/snapshot-chr{snapshot}/run >/dev/null 2>&1")
-    os.system(f"mount --rbind --make-rslave /sys /.snapshots/rootfs/snapshot-chr{snapshot}/sys >/dev/null 2>&1")
-    os.system(f"mount --rbind --make-rslave /tmp /.snapshots/rootfs/snapshot-chr{snapshot}/tmp >/dev/null 2>&1")
-    os.system(f"mount --bind --make-slave /var /.snapshots/rootfs/snapshot-chr{snapshot}/var >/dev/null 2>&1")
+    os.system(f"mount --bind --make-slave /.snapshots/rootfs/snapshot-chr{snapshot} /.snapshots/rootfs/snapshot-chr{snapshot}{DEBUG}")
+    os.system(f"mount --rbind --make-rslave /dev /.snapshots/rootfs/snapshot-chr{snapshot}/dev{DEBUG}")
+    os.system(f"mount --bind --make-slave /home /.snapshots/rootfs/snapshot-chr{snapshot}/home{DEBUG}")
+    os.system(f"mount --rbind --make-rslave /proc /.snapshots/rootfs/snapshot-chr{snapshot}/proc{DEBUG}")
+    os.system(f"mount --bind --make-slave /root /.snapshots/rootfs/snapshot-chr{snapshot}/root{DEBUG}")
+    os.system(f"mount --rbind --make-rslave /run /.snapshots/rootfs/snapshot-chr{snapshot}/run{DEBUG}")
+    os.system(f"mount --rbind --make-rslave /sys /.snapshots/rootfs/snapshot-chr{snapshot}/sys{DEBUG}")
+    os.system(f"mount --rbind --make-rslave /tmp /.snapshots/rootfs/snapshot-chr{snapshot}/tmp{DEBUG}")
+    os.system(f"mount --bind --make-slave /var /.snapshots/rootfs/snapshot-chr{snapshot}/var{DEBUG}")
   # File operations for snapshot-chr
-    os.system(f"btrfs sub snap /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-chr{snapshot} >/dev/null 2>&1")
-    os.system(f"cp -r --reflink=auto /.snapshots/boot/boot-chr{snapshot}/* /.snapshots/rootfs/snapshot-chr{snapshot}/boot >/dev/null 2>&1")
-    os.system(f"cp -r --reflink=auto /.snapshots/etc/etc-chr{snapshot}/* /.snapshots/rootfs/snapshot-chr{snapshot}/etc >/dev/null 2>&1") ### btrfs sub snap etc-{snapshot} to etc-chr-{snapshot} not needed before this?
+    os.system(f"btrfs sub snap /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-chr{snapshot}{DEBUG}")
+    os.system(f"btrfs sub snap /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-chr{snapshot}{DEBUG}")
+    os.system(f"cp -r --reflink=auto /.snapshots/boot/boot-chr{snapshot}/* /.snapshots/rootfs/snapshot-chr{snapshot}/boot{DEBUG}")
+    os.system(f"cp -r --reflink=auto /.snapshots/etc/etc-chr{snapshot}/* /.snapshots/rootfs/snapshot-chr{snapshot}/etc{DEBUG}") ### btrfs sub snap etc-{snapshot} to etc-chr-{snapshot} not needed before this?
     init_system_clean(snapshot, "prepare")
     os.system(f"cp /etc/machine-id /.snapshots/rootfs/snapshot-chr{snapshot}/etc/machine-id")
     os.system(f"mkdir -p /.snapshots/rootfs/snapshot-chr{snapshot}/.snapshots/ash && cp -f /.snapshots/ash/fstree /.snapshots/rootfs/snapshot-chr{snapshot}/.snapshots/ash/")
@@ -672,7 +671,7 @@ def prepare(snapshot):
             os.system(f"mkdir -p /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path}")
             os.system(f"mount --bind /.snapshots/mutable_dirs/{mount_path} /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path}")
   # Important: Do not move the following line above (otherwise error)
-    os.system(f"mount --bind --make-slave /etc/resolv.conf /.snapshots/rootfs/snapshot-chr{snapshot}/etc/resolv.conf >/dev/null 2>&1")
+    os.system(f"mount --bind --make-slave /etc/resolv.conf /.snapshots/rootfs/snapshot-chr{snapshot}/etc/resolv.conf{DEBUG}")
 
 #   Print out tree with descriptions
 def print_tree(tree):
@@ -790,8 +789,8 @@ def service_enable(snapshot, profile, tmp_prof):
             services = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -w '^%' | sed 's|% ||'", shell=True).decode('utf-8').strip().split('\n')
             for cmd in list(filter(None, services)): # remove '' from [''] if no services
                 subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} {cmd}", shell=True)
-        except subprocess.CalledProcessError as e:
-            print(f"F: Failed to enable service(s) from {profile}: {e.output}.")
+        except subprocess.CalledProcessError:
+            print(f"F: Failed to enable service(s) from {profile}.")
             return 1
         else:
             print(f"Installed service(s) from {profile}.")
@@ -804,9 +803,9 @@ def show_fstree():
 #   Remove temporary chroot for specified snapshot only
 #   This unlocks the snapshot for use by other functions
 def snapshot_unlock(snap):
-    os.system(f"btrfs sub del /.snapshots/boot/boot-chr{snap} >/dev/null 2>&1")
-    os.system(f"btrfs sub del /.snapshots/etc/etc-chr{snap} >/dev/null 2>&1")
-    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snap} >/dev/null 2>&1")
+    os.system(f"btrfs sub del /.snapshots/boot/boot-chr{snap}{DEBUG}")
+    os.system(f"btrfs sub del /.snapshots/etc/etc-chr{snap}{DEBUG}")
+    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snap}{DEBUG}")
 
 #   Switch between distros
 def switch_distro():
@@ -828,7 +827,7 @@ def switch_distro():
                             boot_order = subprocess.check_output("efibootmgr | grep BootOrder | awk '{print $2}'", shell=True).decode('utf-8').strip()
                             temp = boot_order.replace(f'{row["BootOrder"]},', "")
                             new_boot_order = f"{row['BootOrder']},{temp}"
-                            subprocess.check_output(f'efibootmgr --bootorder {new_boot_order} >/dev/null 2>&1', shell=True)
+                            subprocess.check_output(f'efibootmgr --bootorder {new_boot_order}{DEBUG}', shell=True)
                         except subprocess.CalledProcessError as e:
                             print(f"F: Failed to switch distros: {e.output}.") ###
                         else:
@@ -883,7 +882,7 @@ def switch_tmp():
             grubconf.write(gconf)
             grubconf.write("}\n")
             grubconf.write("### END /etc/grub.d/41_custom ###")
-    os.system(f"umount {tmp_boot} >/dev/null 2>&1")
+    os.system(f"umount {tmp_boot}{DEBUG}")
 
 #   Sync time
 def sync_time():
@@ -901,7 +900,7 @@ def sync_tree_helper(CHR, s_f, s_t):
     # Get packages to be inherited
     pkg_list_from = [j for j in pkg_list_from if j not in pkg_list_to]
     os.system(f"cp -r /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/* /.snapshots/tmp-db/local/") ### REVIEW_LATER
-    os.system(f"cp --reflink=auto -n -r /.snapshots/rootfs/snapshot-{s_f}/* /.snapshots/rootfs/snapshot-{CHR}{s_t}/ >/dev/null 2>&1")
+    os.system(f"cp --reflink=auto -n -r /.snapshots/rootfs/snapshot-{s_f}/* /.snapshots/rootfs/snapshot-{CHR}{s_t}/{DEBUG}")
     os.system(f"rm -rf /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/*") ### REVIEW_LATER
     os.system(f"cp -r /.snapshots/tmp-db/local/* /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/") ### REVIEW_LATER
     for entry in pkg_list_from:
@@ -941,10 +940,10 @@ def sync_tree(tree, treename, force_offline, live):
 
 #   Clear all temporary snapshots
 def tmp_clear():
-    os.system("btrfs sub del /.snapshots/boot/boot-chr* >/dev/null 2>&1")
-    os.system("btrfs sub del /.snapshots/etc/etc-chr* >/dev/null 2>&1")
-    os.system("btrfs sub del /.snapshots/rootfs/snapshot-chr*/* >/dev/null 2>&1")
-    os.system("btrfs sub del /.snapshots/rootfs/snapshot-chr* >/dev/null 2>&1")
+    os.system("btrfs sub del /.snapshots/boot/boot-chr*{DEBUG}")
+    os.system("btrfs sub del /.snapshots/etc/etc-chr*{DEBUG}")
+    os.system("btrfs sub del /.snapshots/rootfs/snapshot-chr*/*{DEBUG}")
+    os.system("btrfs sub del /.snapshots/rootfs/snapshot-chr*{DEBUG}")
 
 #   Clean tmp dirs
 def tmp_delete():
@@ -953,10 +952,10 @@ def tmp_delete():
         tmp = "deploy"
     else:
         tmp = "deploy-aux"
-    os.system(f"btrfs sub del /.snapshots/boot/boot-{tmp} >/dev/null 2>&1")
-    os.system(f"btrfs sub del /.snapshots/etc/etc-{tmp} >/dev/null 2>&1")
-    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
-    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
+    os.system(f"btrfs sub del /.snapshots/boot/boot-{tmp}{DEBUG}")
+    os.system(f"btrfs sub del /.snapshots/etc/etc-{tmp}{DEBUG}")
+    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
+    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
 
 #   Update boot
 def update_boot(snapshot):
@@ -978,12 +977,12 @@ def update_boot(snapshot):
 def update_etc():
     tmp = get_tmp()
     snapshot = get_current_snapshot()
-    os.system(f"btrfs sub del /.snapshots/etc/etc-{snapshot} >/dev/null 2>&1")
+    os.system(f"btrfs sub del /.snapshots/etc/etc-{snapshot}{DEBUG}")
     if check_mutability(snapshot):
         immutability = ""
     else:
         immutability = "-r"
-    os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-{tmp} /.snapshots/etc/etc-{snapshot} >/dev/null 2>&1")
+    os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-{tmp} /.snapshots/etc/etc-{snapshot}{DEBUG}")
 
 #   Recursively run an update in tree
 def update_tree(tree, treename):
