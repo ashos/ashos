@@ -1,1 +1,1 @@
-ascii/logo_w64.txt
+ascii/logo_w40.txt
