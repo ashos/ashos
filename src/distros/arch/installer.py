@@ -18,7 +18,7 @@ def initram_update_luks():
 
 #   1. Define variables
 KERNEL = "" # options: https://wiki.archlinux.org/title/kernel
-packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano arch-install-scripts" # linux-firmware os-prober bash tmux (arch-install-scripts only needed for AUR - will remove it later)
+packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano" # linux-firmware os-prober bash tmux arch-install-scripts
 super_group = "wheel"
 v = "" # GRUB version number in /boot/grubN
 tz = get_timezone()
