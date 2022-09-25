@@ -1,11 +1,27 @@
 # ---------------------------- SPECIFIC FUNCTIONS ---------------------------- #
 
-# Check if AUR is setup right
+#   Check if AUR is setup right
 def aur_check(snap):
     return os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}/usr/bin/paru")
 
-# Set up AUR support for snapshot
-def aur_setup(snap):
+#   Set up AUR in snapshot (if enabled)
+def aur_install(snapshot):
+    options = get_persnap_options(snapshot)
+    aur = False
+    if options["aur"] == 'True':
+        aur = True
+        if aur and not aur_check(snapshot):
+            prepare(snapshot) ### REVIEW_LATER NEEDED? Being called twice!
+            excode = int(aur_install_helper(snapshot))
+            if excode:
+                chr_delete(snapshot)
+                print("F: Setting up AUR failed!")
+                sys.exit(1) #### REVIEW_LATER changed from sys.exit()
+            post_transactions(snapshot)
+    return aur
+
+#   Set up AUR in snapshot
+def aur_install_helper(snap):
     required = ["sudo", "git", "base-devel"]
     excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} pacman -Sy --needed --noconfirm {' '.join(required)}"))
     if excode:
@@ -32,10 +48,9 @@ def aur_setup(snap):
     return 0
 
 #   Set up AUR support for live snapshot
-def aur_setup_live(snap):
-###    tmp = snap
+def aur_install_live_helper(snap):
     print("setting up AUR...")
-    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} pacman -S --noconfirm --needed sudo git base-devel{DEBUG}"))
+    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} pacman -S --noconfirm --needed sudo git base-devel{DEBUG}"))
     if excode:
         return excode
     os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} useradd aur")
@@ -45,11 +60,11 @@ def aur_setup_live(snap):
     os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} mkdir -p /home/aur")
     os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} chown -R aur /home/aur{DEBUG}")
     # TODO: no error checking here
-    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'rm -rf /home/aur/paru-bin && cd /home/aur && git clone https://aur.archlinux.org/paru-bin.git'{DEBUG}"))
+    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'rm -rf /home/aur/paru-bin && cd /home/aur && git clone https://aur.archlinux.org/paru-bin.git'{DEBUG}"))
     if excode:
         print("F: failed to download paru-bin")
         return excode
-    excode = int(os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'cd /home/aur/paru-bin && makepkg --noconfirm -si{DEBUG}'"))
+    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'cd /home/aur/paru-bin && makepkg --noconfirm -si{DEBUG}'"))
     if excode:
         print("F: failed installing paru-bin")
         return excode
@@ -58,7 +73,7 @@ def aur_setup_live(snap):
 #   Noninteractive update
 def auto_upgrade(snapshot):
     sync_time() # Required in virtualbox, otherwise error in package db update
-    aur = setup_aur_if_enabled(snapshot)
+    aur = aur_install(snapshot)
     prepare(snapshot)
     if not aur:
         excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman --noconfirm -Syyu")
@@ -134,7 +149,7 @@ def install_package(snapshot, pkg):
       # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
         subprocess.check_output(f"pacman -Si {pkg}", shell=True) # --sysroot
     except subprocess.CalledProcessError:
-        aur = setup_aur_if_enabled(snapshot) ### ToDo: do a paru -Si {pkg} check to avoid setup_aur if package already installed!
+        aur = aur_install(snapshot) ### ToDo: do a paru -Si {pkg} check to avoid setup_aur if package already installed!
         prepare(snapshot)
         if aur:
             return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c \"paru -S {pkg} --needed --overwrite '/var/*'\"")
@@ -157,11 +172,11 @@ def install_package_live(snapshot, tmp, pkg):
         else:
             aur_in_tmp = False
         if aur_in_tmp and not aur_check(tmp):
-            excode = aur_setup_live(tmp)
+            excode = aur_install_live_helper(tmp)
             if excode:
                 os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
                 os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-                print("F: Live installation failed!")
+                print("F: Live install failed and changes discarded!")
                 return excode
         if get_persnap_options(snapshot)["aur"] == "True":
             aur_in_destination_snapshot = True
@@ -177,17 +192,17 @@ def install_package_live(snapshot, tmp, pkg):
                 reply = input("> ")
             if reply == "y":
                 if not aur_check(tmp):
-                    excode = aur_setup_live(tmp)
+                    excode = aur_install_live_helper(tmp)
                     if excode:
                         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
                         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-                        print("F: Live installation failed!")
+                        print("F: Live install failed and changes discarded!")
                         return excode
             else:
                 print("F: Not enabling AUR for live snapshot!")
                 excode = 1
     else:
-        excode = os.system(f"arch-chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite \\* --noconfirm {pkg}{DEBUG}")
+        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite \\* --noconfirm {pkg}{DEBUG}")
     return excode
 
 #   Get list of packages installed in a snapshot
@@ -241,30 +256,13 @@ def uninstall_package(snapshot, pkg):
 
 #   Upgrade atomic-operation
 def upgrade_helper(snapshot):
-    aur = setup_aur_if_enabled(snapshot)
-    prepare(snapshot) ### REVIEW_LATER tried it outside of this function in ashpk_core before setup_aur_if_enabled and it works fine!
+    aur = aur_install(snapshot)
+    prepare(snapshot) ### REVIEW_LATER tried it outside of this function in ashpk_core before aur_install and it works fine!
     if not aur:
         excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu"))
     else:
         excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c 'paru -Syyu'"))
     return excode
-
-# Returns True if AUR is enabled, False if not
-# if AUR is enabled then sets it up inside snapshot
-def setup_aur_if_enabled(snapshot):
-    options = get_persnap_options(snapshot)
-    aur = False
-    if options["aur"] == 'True':
-        aur = True
-        if aur and not aur_check(snapshot):
-            prepare(snapshot) ### REVIEW_LATER NEEDED? Being called twice!
-            excode = int(aur_setup(snapshot))
-            if excode:
-                chr_delete(snapshot)
-                print("F: Setting up AUR failed!")
-                sys.exit(1) #### REVIEW_LATER changed from sys.exit()
-            post_transactions(snapshot)
-    return aur
 
 # ---------------------------------------------------------------------------- #
 

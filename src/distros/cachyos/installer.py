@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import os
-#import subprocess
+import subprocess
 import sys
 from src.installer_core import * # NOQA
 #from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_timezone, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
@@ -18,7 +18,7 @@ def initram_update_luks():
 
 #   1. Define variables
 KERNEL = "-cachyos" # options: -cachyos, -cachyos-cfs, -cachyos-cacule, -cachyos-bmq, -cachyos-pds, -cachyos-tt
-packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano arch-install-scripts" # linux-firmware os-prober bash tmux (arch-install-scripts only needed for AUR - will remove it later)
+packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano" # linux-firmware os-prober bash tmux arch-install-scripts
 super_group = "wheel"
 v = "" # GRUB version number in /boot/grubN
 tz = get_timezone()
