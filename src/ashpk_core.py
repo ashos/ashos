@@ -286,7 +286,7 @@ def deploy(snapshot):
         else:
             tmp = "deploy-aux"
       # Special mutable directories
-        options = per_snap_options(snapshot)
+        options = snapshot_config_get(snapshot)
         mutable_dirs = options["mutable_dirs"].split(',').remove('')
         mutable_dirs_shared = options["mutable_dirs_shared"].split(',').remove('')
       # btrfs snapshot operations
@@ -357,27 +357,17 @@ def find_new():
         if str(f"snapshot-{i}") not in snapshots and str(f"etc-{i}") not in snapshots and str(f"var-{i}") not in snapshots and str(f"boot-{i}") not in snapshots:
             return(i)
 
+#   Get current snapshot
+def get_current_snapshot():
+    with open("/usr/share/ash/snap", "r") as csnapshot:
+        return csnapshot.read().rstrip()
+
 #   This function returns either empty string or underscore plus name of distro if it was appended to sub-volume names to distinguish
 def get_distro_suffix():
     if "ashos" in distro:
         return f'_{distro.replace("_ashos", "")}'
     else:
         return ""
-
-#   Get parent
-def get_parent(tree, id):
-    par = (find(tree, filter_=lambda node: ("x"+str(node.name)+"x") in ("x"+str(id)+"x")))
-    return(par.parent.name)
-
-#   Get drive partition
-def get_part():
-    with open("/.snapshots/ash/part", "r") as cpart:
-        return subprocess.check_output(f"blkid | grep '{cpart.read().rstrip()}' | awk -F: '{{print $1}}'", shell=True).decode('utf-8').strip()
-
-#   Get current snapshot
-def get_current_snapshot():
-    with open("/usr/share/ash/snap", "r") as csnapshot:
-        return csnapshot.read().rstrip()
 
 #   Get deployed snapshot
 def get_next_snapshot():
@@ -388,16 +378,15 @@ def get_next_snapshot():
     with open(f"/.snapshots/rootfs/snapshot-{d}/usr/share/ash/snap", "r") as csnapshot:
         return csnapshot.read().rstrip()
 
-#   Get per-snapshot configuration options from /etc/ash.conf
-def get_persnap_options(snap):
-    options = {"aur":"False"} # defaults here
-    if not os.path.exists(f"/.snapshots/etc/etc-{snap}/ash.conf"):
-        return options
-    with open(f"/.snapshots/etc/etc-{snap}/ash.conf", "r") as optfile:
-        for line in optfile:
-            left, right = line.split("::") # Split options with '::'
-            options[left] = right[:-1] # Remove newline here
-    return options
+#   Get parent
+def get_parent(tree, id):
+    par = (find(tree, filter_=lambda node: ("x"+str(node.name)+"x") in ("x"+str(id)+"x")))
+    return(par.parent.name)
+
+#   Get drive partition
+def get_part():
+    with open("/.snapshots/ash/part", "r") as cpart:
+        return subprocess.check_output(f"blkid | grep '{cpart.read().rstrip()}' | awk -F: '{{print $1}}'", shell=True).decode('utf-8').strip()
 
 #   Get tmp partition state
 def get_tmp(console=False): # By default just return which deployment is running
@@ -486,27 +475,6 @@ def install_live(snapshot, pkg):
     else:
         print("F: Live installation failed!")
 
-#   Install profile in live snapshot
-def install_profile_live(profile):
-    tmp = get_tmp()
-    ash_chroot_mounts(tmp)
-    print(f"Updating the system before installing profile {profile}.")
-    auto_upgrade(tmp)
-    tmp_prof = subprocess.check_output("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX", shell=True, encoding='utf-8').strip()
-    subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{profile}/packages{get_distro_suffix()}.txt", shell=True)
-  # Ignore empty lines or ones starting with # [ % &
-    pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\[|^%|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
-    excode1 = install_package_live(tmp, pkg) ### REVIEW_LATER snapshot argument needed
-    excode2 = service_enable(tmp, profile, tmp_prof)
-    if excode1 == 0 and excode2 == 0:
-        print(f"Profile {profile} installed in current/live snapshot.") ### REVIEW_LATER
-        return 0
-    else:
-        print("F: Install failed and changes discarded.")
-        return 1
-    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
-    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-
 #   Install a profile from a text file
 def install_profile(snapshot, profile):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
@@ -534,6 +502,27 @@ def install_profile(snapshot, profile):
             print(f"Profile {profile} installed in snapshot {snapshot} successfully.")
             print(f"Deploying snapshot {snapshot}.")
             deploy(snapshot)
+
+#   Install profile in live snapshot
+def install_profile_live(profile):
+    tmp = get_tmp()
+    ash_chroot_mounts(tmp)
+    print(f"Updating the system before installing profile {profile}.")
+    auto_upgrade(tmp)
+    tmp_prof = subprocess.check_output("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX", shell=True, encoding='utf-8').strip()
+    subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{profile}/packages{get_distro_suffix()}.txt", shell=True)
+  # Ignore empty lines or ones starting with # [ % &
+    pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\[|^%|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
+    excode1 = install_package_live(tmp, pkg) ### REVIEW_LATER snapshot argument needed
+    excode2 = service_enable(tmp, profile, tmp_prof)
+    if excode1 == 0 and excode2 == 0:
+        print(f"Profile {profile} installed in current/live snapshot.") ### REVIEW_LATER
+        return 0
+    else:
+        print("F: Install failed and changes discarded.")
+        return 1
+    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
+    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
 
 def is_efi():
     return os.path.exists("/sys/firmware/efi")
@@ -566,31 +555,6 @@ def new_snapshot(desc="clone of base"): # immutability toggle not used as base s
         write_desc(i, desc)
     print(f"New tree {i} created.")
 
-#   Get per-snapshot configuration
-def per_snap_options(snap):
-    options = {"aur":"False","mutable_dirs":"","mutable_dirs_shared":""} # defaults here
-    if not os.path.exists(f"/.snapshots/etc/etc-{snap}/ash.conf"):
-        return options
-    with open(f"/.snapshots/etc/etc-{snap}/ash.conf", "r") as optfile:
-        for line in optfile:
-            if '#' in line:
-                line = line.split('#')[0] # Everything after '#' is a comment
-            if '::' in line: # Skip line if there's no option set
-                left, right = line.split("::") # Split options with '::'
-                options[left] = right[:-1] # Remove newline here
-    return options
-
-#   Edit per-snapshot configuration
-def per_snap_conf(snapshot):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
-        print(f"F: Cannot chroot as snapshot {snapshot} doesn't exist.")
-    elif snapshot == "0":
-        print("F: Changing base snapshot is not allowed.")
-    else:
-        prepare(snapshot)
-        os.system(f"$EDITOR /.snapshots/rootfs/snapshot-chr{snapshot}/etc/ash.conf") ### REVIEW_LATER
-        post_transactions(snapshot)
-
 #   Post transaction function, copy from chroot dirs back to read only snapshot dir
 def post_transactions(snapshot):
     tmp = get_tmp()
@@ -604,7 +568,7 @@ def post_transactions(snapshot):
     os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/sys{DEBUG}")
     os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}{DEBUG}")
   # Special mutable directories
-    options = per_snap_options(snapshot)
+    options = snapshot_config_get(snapshot)
     mutable_dirs = options["mutable_dirs"].split(',').remove('')
     mutable_dirs_shared = options["mutable_dirs_shared"].split(',').remove('')
     if mutable_dirs:
@@ -657,7 +621,7 @@ def prepare(snapshot):
     os.system(f"cp /etc/machine-id /.snapshots/rootfs/snapshot-chr{snapshot}/etc/machine-id")
     os.system(f"mkdir -p /.snapshots/rootfs/snapshot-chr{snapshot}/.snapshots/ash && cp -f /.snapshots/ash/fstree /.snapshots/rootfs/snapshot-chr{snapshot}/.snapshots/ash/")
   # Special mutable directories
-    options = per_snap_options(snapshot)
+    options = snapshot_config_get(snapshot)
     mutable_dirs = options["mutable_dirs"].split(',').remove('')
     mutable_dirs_shared = options["mutable_dirs_shared"].split(',').remove('')
     if mutable_dirs:
@@ -800,6 +764,31 @@ def service_enable(snapshot, profile, tmp_prof):
 def show_fstree():
     print_tree(fstree)
 
+#   Edit per-snapshot configuration
+def snapshot_config_edit(snapshot):
+    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
+        print(f"F: Cannot chroot as snapshot {snapshot} doesn't exist.")
+    elif snapshot == "0":
+        print("F: Changing base snapshot is not allowed.")
+    else:
+        prepare(snapshot)
+        os.system(f"$EDITOR /.snapshots/rootfs/snapshot-chr{snapshot}/etc/ash.conf") ### REVIEW_LATER
+        post_transactions(snapshot)
+
+#   Get per-snapshot configuration options
+def snapshot_config_get(snap):
+    options = {"aur":"False","mutable_dirs":"","mutable_dirs_shared":""} # defaults here ### REVIEW_LATER This is not distro-generic
+    if not os.path.exists(f"/.snapshots/etc/etc-{snap}/ash.conf"):
+        return options
+    with open(f"/.snapshots/etc/etc-{snap}/ash.conf", "r") as optfile:
+        for line in optfile:
+            if '#' in line:
+                line = line.split('#')[0] # Everything after '#' is a comment
+            if '::' in line: # Skip line if there's no option set
+                left, right = line.split("::") # Split options with '::'
+                options[left] = right[:-1] # Remove newline here
+    return options
+
 #   Remove temporary chroot for specified snapshot only
 #   This unlocks the snapshot for use by other functions
 def snapshot_unlock(snap):
@@ -891,22 +880,6 @@ def sync_time():
     elif not os.system('[ -x "$(command -v curl)" ]'): # curl available
         os.system('sudo date -s "$(curl -I google.com 2>&1 | grep Date: | cut -d" " -f3-6)Z"')
 
-#   Sync tree helper function ### REVIEW_LATER might need to put it in distro-specific ashpk.py
-def sync_tree_helper(CHR, s_f, s_t):
-    os.system("mkdir -p /.snapshots/tmp-db/local/") ### REVIEW_LATER Still resembling Arch pacman folder structure!
-    os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW_LATER
-    pkg_list_to = pkg_list(CHR, s_t)
-    pkg_list_from = pkg_list("", s_f)
-    # Get packages to be inherited
-    pkg_list_from = [j for j in pkg_list_from if j not in pkg_list_to]
-    os.system(f"cp -r /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/* /.snapshots/tmp-db/local/") ### REVIEW_LATER
-    os.system(f"cp --reflink=auto -n -r /.snapshots/rootfs/snapshot-{s_f}/* /.snapshots/rootfs/snapshot-{CHR}{s_t}/{DEBUG}")
-    os.system(f"rm -rf /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/*") ### REVIEW_LATER
-    os.system(f"cp -r /.snapshots/tmp-db/local/* /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/") ### REVIEW_LATER
-    for entry in pkg_list_from:
-        os.system(f"bash -c 'cp -r /.snapshots/rootfs/snapshot-{s_f}/usr/share/ash/db/local/{entry}-[0-9]* /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/'") ### REVIEW_LATER
-    os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW_LATER (originally inside the loop, but I took it out)
-
 #   Sync tree and all its snapshots
 def sync_tree(tree, treename, force_offline, live):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{treename}"):
@@ -937,6 +910,22 @@ def sync_tree(tree, treename, force_offline, live):
                     sync_tree_helper("", snap_from, get_tmp()) # Post-sync
                 post_transactions(snap_to) ### Moved here from the line immediately after first sync_tree_helper
         print(f"Tree {treename} synced.")
+
+#   Sync tree helper function ### REVIEW_LATER might need to put it in distro-specific ashpk.py
+def sync_tree_helper(CHR, s_f, s_t):
+    os.system("mkdir -p /.snapshots/tmp-db/local/") ### REVIEW_LATER Still resembling Arch pacman folder structure!
+    os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW_LATER
+    pkg_list_to = pkg_list(CHR, s_t)
+    pkg_list_from = pkg_list("", s_f)
+    # Get packages to be inherited
+    pkg_list_from = [j for j in pkg_list_from if j not in pkg_list_to]
+    os.system(f"cp -r /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/* /.snapshots/tmp-db/local/") ### REVIEW_LATER
+    os.system(f"cp --reflink=auto -n -r /.snapshots/rootfs/snapshot-{s_f}/* /.snapshots/rootfs/snapshot-{CHR}{s_t}/{DEBUG}")
+    os.system(f"rm -rf /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/*") ### REVIEW_LATER
+    os.system(f"cp -r /.snapshots/tmp-db/local/* /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/") ### REVIEW_LATER
+    for entry in pkg_list_from:
+        os.system(f"bash -c 'cp -r /.snapshots/rootfs/snapshot-{s_f}/usr/share/ash/db/local/{entry}-[0-9]* /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/'") ### REVIEW_LATER
+    os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW_LATER (originally inside the loop, but I took it out)
 
 #   Clear all temporary snapshots
 def tmp_clear():
@@ -1113,7 +1102,7 @@ def main():
       # Edit Ash configuration
         editconf_par = subparsers.add_parser("edit", aliases=['edit-conf'], allow_abbrev=True, help='Edit configuration for a snapshot')
         editconf_par.add_argument("snapshot", type=int, help="snapshot number")
-        editconf_par.set_defaults(func=per_snap_conf)
+        editconf_par.set_defaults(func=snapshot_config_edit)
       # etc update
         etc_par = subparsers.add_parser("etc-update", aliases=['etc'], allow_abbrev=True, help='update /etc')
         etc_par.set_defaults(func=update_etc)
@@ -1177,10 +1166,6 @@ def main():
       # Switch distros
         switch_par = subparsers.add_parser("dist", aliases=["distro", "distros"], allow_abbrev=True, help="Switch to another distro")
         switch_par.set_defaults(func=switch_distro)
-      # per-snapshot conf edit
-        edit_par = subparsers.add_parser("edit", aliases=["conf-edit"], allow_abbrev=True, help="Edit snapshot configuration")
-        edit_par.add_argument("snapshot", type=int, help="snapshot number")
-        edit_par.set_defaults(func=lambda snapshot: per_snap_conf(snapshot))
       # tree
         tree_par = subparsers.add_parser("tree", aliases=["t"], allow_abbrev=True, help="Show ash tree")
         tree_par.set_defaults(func=show_fstree)
@@ -1248,7 +1233,7 @@ def triage_install(snapshot, live, profile, pkg, not_live):
   # If installing into current snapshot and no not_live flag, use live install
     if snapshot == int(get_current_snapshot()) and not not_live:
         live = True
-  # Perform the live install only if install above was successful 
+  # Perform the live install only if install above was successful
     if live and not excode:
         if profile:
             install_profile_live(profile)
