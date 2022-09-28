@@ -457,6 +457,8 @@ Read-write access to various parts of filesystem:
 
 For Gnome and KDE profiles, we are assuming user just want things to work as default and as such we install default login manager. For any other profile, we focus on minimalism, and just install tbsm. One can obviously easily modify this if they choose to.
 
+When using an older iso file, make sure to uncomment fixdb line in the prep script for the corresponding distro. Otherwise there are circumstances that, even if installation appear to be successful, you may get sync package manager db errors when booted in your distro. This fixdb can make the initial part of installation process very slow, but might be worth it.
+
 ## Advanced features
 
 These are some advanced feature and we suggest you use them only if you are ready for breakage, doing data backups and occasional fixes. They may not be prime-time ready.

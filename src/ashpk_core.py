@@ -293,8 +293,8 @@ def deploy(snapshot):
         os.system(f"btrfs sub snap /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-{tmp}{DEBUG}")
         os.system(f"btrfs sub snap /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-{tmp}{DEBUG}")
         os.system(f"btrfs sub snap /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-        os.system(f"mkdir /.snapshots/rootfs/snapshot-{tmp}/boot{DEBUG}")
-        os.system(f"mkdir /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
+        os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/boot{DEBUG}")
+        os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
         os.system(f"rm -rf /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}")
         os.system(f"cp --reflink=auto -r /.snapshots/boot/boot-{snapshot}/* /.snapshots/rootfs/snapshot-{tmp}/boot{DEBUG}")
         os.system(f"cp --reflink=auto -r /.snapshots/etc/etc-{snapshot}/* /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
@@ -578,7 +578,7 @@ def post_transactions(snapshot):
         for mount_path in mutable_dirs_shared:
             os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path}{DEBUG}")
   # File operations in snapshot-chr
-    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}")
+#    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}") ### REVIEW_LATER # Moved to a few lines below
     os.system(f"rm -rf /.snapshots/boot/boot-chr{snapshot}/*{DEBUG}")
     os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/boot/* /.snapshots/boot/boot-chr{snapshot}{DEBUG}")
     os.system(f"rm -rf /.snapshots/etc/etc-chr{snapshot}/*{DEBUG}")
@@ -587,6 +587,7 @@ def post_transactions(snapshot):
     cache_copy(snapshot, "post_transactions")
     os.system(f"btrfs sub del /.snapshots/boot/boot-{snapshot}{DEBUG}")
     os.system(f"btrfs sub del /.snapshots/etc/etc-{snapshot}{DEBUG}")
+    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}")
     if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}/usr/share/ash/mutable"):
         immutability = ""
     else:
@@ -943,7 +944,7 @@ def tmp_delete():
         tmp = "deploy-aux"
     os.system(f"btrfs sub del /.snapshots/boot/boot-{tmp}{DEBUG}")
     os.system(f"btrfs sub del /.snapshots/etc/etc-{tmp}{DEBUG}")
-    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
+    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}") ### REVIEW_LATER Delete this line? Creates a lot of errors not a btrfs subvolume
     os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
 
 #   Update boot
