@@ -6,7 +6,7 @@ def aur_check(snap):
 
 #   Set up AUR in snapshot (if enabled)
 def aur_install(snapshot):
-    options = get_persnap_options(snapshot)
+    options = snapshot_config_get(snapshot)
     aur = False
     if options["aur"] == 'True':
         aur = True
@@ -120,7 +120,7 @@ def fix_package_db(snapshot = "0"):
         os.system(f"{P}killall gpg-agent")
         os.system(f"{P}pacman-key --init")
         os.system(f"{P}pacman-key --populate archlinux")
-        #os.system(f"{P}pacman -S --noconfirm archlinux-keyring")
+        os.system(f"{P}pacman -Syvv --noconfirm archlinux-keyring") ### REVIW_LATER NEEDED? (maybe)
         post_transactions(snapshot)
         if flip:
             immutability_enable(snapshot)
@@ -166,7 +166,7 @@ def install_package_live(snapshot, tmp, pkg):
       # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
         subprocess.check_output(f"pacman -Si {pkg}", shell=True) # --sysroot
     except subprocess.CalledProcessError:
-        options = get_persnap_options(tmp)
+        options = snapshot_config_get(tmp)
         if options["aur"] == "True":
             aur_in_tmp = True
         else:
@@ -178,7 +178,7 @@ def install_package_live(snapshot, tmp, pkg):
                 os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
                 print("F: Live install failed and changes discarded!")
                 return excode
-        if get_persnap_options(snapshot)["aur"] == "True":
+        if snapshot_config_get(snapshot)["aur"] == "True":
             aur_in_destination_snapshot = True
         else:
             aur_in_destination_snapshot = False

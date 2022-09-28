@@ -14,7 +14,7 @@ main() {
     #git config --global --add safe.directory ./ashos # prevent fatal error "unsafe repository is owned by someone else"
     #cd ashos
     #/bin/sh ./src/prep/parted_gpt_example.sh $2
-    #python3 init.py $1 $2 $3
+    #python3 setup.py $1 $2 $3
 }
 
 # Configurations
@@ -40,7 +40,7 @@ fixdb() {
     killall gpg-agent
     pacman-key --init
     pacman-key --populate archlinux
-    pacman -S --noconfirm archlinux-keyring
+    pacman -Syvv --noconfirm archlinux-keyring
 }
 
 # Sync time
