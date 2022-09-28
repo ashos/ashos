@@ -21,7 +21,7 @@ main() {
     #git config --global --add safe.directory ./ashos-dev # prevent fatal error "unsafe repository is owned by someone else"
     #cd ashos-dev
     #/bin/sh ./src/prep/parted_gpt_example.sh $2
-    #python3 init.py $1 $2 $3
+    #python3 setup.py $1 $2 $3
 }
 
 # Configurations
