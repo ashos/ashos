@@ -4,16 +4,10 @@ main() {
     if [ -z "$HOME" ]; then HOME=~ ; fi
     prep_packages="tmux"
 
-    # Most probably not needed
-    #su
-
-    #sync_time()
-
-    # Ignore signature checking in pacman.conf (quick but bad idea - use fix below instead but takes long)
-    #sed -e '/^SigLevel/ s|^#*|SigLevel = Never\n#|' -i /etc/pacman.conf
-    #sed -e '/^LocalFileSigLevel/ s|^#*|#|' -i /etc/pacman.conf
-
-    #fixdb()
+    # Prevent error of running out of space in /
+    mount / -o remount,size=4G /run/archiso/cowspace
+    #sync_time
+    fixdb
     pacman -S --noconfirm $prep_packages
     configs
     #git clone http://github.com/ashos/ashos
@@ -25,7 +19,7 @@ main() {
 
 # Configurations
 configs() {
-    setfont lat9-16 # /usr/share/kbd/consolefonts/ter-132n.psf.gz
+    setfont lat9-16 # /usr/share/kbd/consolefonts/lat9-16.psf.gz
     echo "export LC_ALL=C LC_CTYPE=C LANGUAGE=C" | tee -a $HOME/.zshrc
     #echo "alias p='curl -F "'"sprunge=<-"'" sprunge.us'" | tee -a $HOME/.zshrc
     echo "alias p='curl -F "'"f:1=<-"'" ix.io'" | tee -a $HOME/.zshrc
@@ -36,6 +30,9 @@ configs() {
 
 # Fix signature invalid error
 fixdb() {
+    # Ignore signature checking in pacman.conf (insecure) - use fix below (slow)
+    #sed -e '/^SigLevel/ s|^#*|SigLevel = Never\n#|' -i /etc/pacman.conf
+    #sed -e '/^LocalFileSigLevel/ s|^#*|#|' -i /etc/pacman.conf
     rm -rf /etc/pacman.d/gnupg ~/.gnupg
     rm -r /var/lib/pacman/db.lck
     pacman -Syy
@@ -44,9 +41,10 @@ fixdb() {
     pacman-key --init
     pacman-key --populate archlinux
     pacman-key --populate endeavouros
-    pacman -S --noconfirm archlinux-keyring endeavouros-keyring
+    pacman -Syvv --noconfirm archlinux-keyring endeavouros-keyring
 }
 
+# Sync time
 sync_time() {
     if [ -x "$(command -v wget)" ]; then
         date -s "$(wget -qSO- --max-redirect=0 google.com 2>&1 | grep Date: | cut -d' ' -f5-8)Z"
@@ -58,3 +56,4 @@ sync_time() {
 }
 
 main "$@"; exit
+
