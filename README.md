@@ -391,13 +391,23 @@ ash rollback
 
 ## Snapshot configuration
 * AshOS has a per-snapshot configuration system
-* Using this system we can toggle some functionality - for instance support for the Arch User Repository (look under Arch notes below)
+* Using this system we can toggle some functionalities. For instance for AUR (Arch User Repository), look under Arch notes below.
+* You need to have a text editor. For nano or vi, skip step0 altogether:
+
+step0:
+```
+set $EDITOR environment variable (i.e. add 'EDITOR=nvim' line in ~/.bashrc)
+reload it (i.e. source ~/.bashrc)
+Add 'Defaults env_keep = "EDITOR PROMPT"' line to /etc/sudoers
+```
 
 ```
-EDITOR=nano ash edit-conf <snapshot> # set the EDITOR variable
+ash edit <snapshot>
 ```
 
 * Save changes and quit
+
+Note that you can skip the line for /etc/sudoers, but each time you should instead type 'sudo -E ash edit <snapshot>' to pass environment variable with sudo!
 
 ## Extras
 
