@@ -108,7 +108,8 @@ def chr_delete(snapshot):
     except subprocess.CalledProcessError:
         print(f"F: Failed to delete chroot snapshot {snapshot}.")
     else:
-        print(f"Snapshot chroot {snapshot} deleted.")
+        #print(f"Snapshot chroot {snapshot} deleted.") ### REVIEW_LATER REALLY CLUTTERS THE CONSOLE
+        return 0 ### REVIEW_LATER REDUNDANT BUT JUST ADDED INSTEAD OF ANNOYING MESSAGE ABOVE!
 
 #   Run command in snapshot
 def chr_run(snapshot, cmd): ### make cmd to cmds (IMPORTANT for install_profile)
@@ -773,7 +774,14 @@ def snapshot_config_edit(snapshot):
         print("F: Changing base snapshot is not allowed.")
     else:
         prepare(snapshot)
-        os.system(f"$EDITOR /.snapshots/rootfs/snapshot-chr{snapshot}/etc/ash.conf") ### REVIEW_LATER
+        if "EDITOR" in os.environ:
+            os.system(f"$EDITOR /.snapshots/rootfs/snapshot-chr{snapshot}/etc/ash.conf") # usage: sudo -E ash edit X
+        elif not os.system('[ -x "$(command -v nano)" ]'): # nano available:
+            os.system(f"nano /.snapshots/rootfs/snapshot-chr{snapshot}/etc/ash.conf")
+        elif not os.system('[ -x "$(command -v vi)" ]'): # vi available
+            os.system(f"vi /.snapshots/rootfs/snapshot-chr{snapshot}/etc/ash.conf")
+        else:
+            os.system("F: No text editor available!")
         post_transactions(snapshot)
 
 #   Get per-snapshot configuration options
