@@ -31,8 +31,8 @@ def deploy_base_snapshot():
     os.system("sudo btrfs sub snap -r /mnt /mnt/.snapshots/rootfs/snapshot-0")
     os.system("sudo btrfs sub create /mnt/.snapshots/boot/boot-deploy")
     os.system("sudo btrfs sub create /mnt/.snapshots/etc/etc-deploy")
-    os.system("sudo cp --reflink=auto -r /mnt/boot/* /mnt/.snapshots/boot/boot-deploy")
-    os.system("sudo cp --reflink=auto -r /mnt/etc/* /mnt/.snapshots/etc/etc-deploy")
+    os.system("sudo cp -r --reflink=auto /mnt/boot/* /mnt/.snapshots/boot/boot-deploy")
+    os.system("sudo cp -r --reflink=auto /mnt/etc/* /mnt/.snapshots/etc/etc-deploy")
     os.system("sudo btrfs sub snap -r /mnt/.snapshots/boot/boot-deploy /mnt/.snapshots/boot/boot-0")
     os.system("sudo btrfs sub snap -r /mnt/.snapshots/etc/etc-deploy /mnt/.snapshots/etc/etc-0")
     os.system("sudo btrfs sub snap /mnt/.snapshots/rootfs/snapshot-0 /mnt/.snapshots/rootfs/snapshot-deploy")
@@ -48,12 +48,12 @@ def deploy_to_common():
         os.system("sudo umount /mnt/boot/efi")
     os.system("sudo umount /mnt/boot")
     os.system(f"sudo mount {btrfs_root} -o subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
-    os.system("sudo cp --reflink=auto -r /mnt/.snapshots/boot/boot-deploy/. /mnt/boot/")
+    os.system("sudo cp -r --reflink=auto /mnt/.snapshots/boot/boot-deploy/. /mnt/boot/")
     os.system("sudo umount /mnt/etc")
     os.system(f"sudo mount {btrfs_root} -o subvol=@etc{distro_suffix},compress=zstd,noatime /mnt/.snapshots/etc/etc-deploy")
-    os.system("sudo cp --reflink=auto -r /mnt/.snapshots/etc/etc-deploy/. /mnt/etc/")
-    os.system("sudo cp --reflink=auto -r /mnt/.snapshots/boot/boot-0/. /mnt/.snapshots/rootfs/snapshot-deploy/boot/")
-    os.system("sudo cp --reflink=auto -r /mnt/.snapshots/etc/etc-0/. /mnt/.snapshots/rootfs/snapshot-deploy/etc/")
+    os.system("sudo cp -r --reflink=auto /mnt/.snapshots/etc/etc-deploy/. /mnt/etc/")
+    os.system("sudo cp -r --reflink=auto /mnt/.snapshots/boot/boot-0/. /mnt/.snapshots/rootfs/snapshot-deploy/boot/")
+    os.system("sudo cp -r --reflink=auto /mnt/.snapshots/etc/etc-0/. /mnt/.snapshots/rootfs/snapshot-deploy/etc/")
 
 def get_hostname():
     clear()
@@ -198,9 +198,6 @@ def post_bootstrap(super_group):
     os.system(f"sudo sed -i 's|^ID.*$|ID={distro}_ashos|' /mnt/etc/os-release")
     os.system(f"sudo sed -i 's|^NAME=.*$|NAME=\"{distro_name}\"|' /mnt/etc/os-release")
     os.system(f"sudo sed -i 's|^PRETTY_NAME=.*$|PRETTY_NAME=\"{distro_name}\"|' /mnt/etc/os-release")
-#    if override_distro: # Update only if user overrides OS release file
-#        os.system(f"sudo sed -i '/^NAME=/ s|^NAME=.*$|NAME=\"{distro_name}\"|' /mnt/etc/os-release")
-#        os.system(f"sudo sed -i '/^PRETTY_NAME=/ s|^PRETTY_NAME=.*$|PRETTY_NAME=\"{distro_name}\"|' /mnt/etc/os-release")
 
 #   Common steps before bootstrapping
 def pre_bootstrap():

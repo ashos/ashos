@@ -90,9 +90,9 @@ def auto_upgrade(snapshot):
 
 #   Copy cache of downloaded packages to shared
 def cache_copy(snapshot, FROM):
-    os.system(f"cp -r -n --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/pkg/* /var/cache/pacman/pkg/{DEBUG}")
+    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/pkg/* /var/cache/pacman/pkg/{DEBUG}")
     #if aur_enabled:
-    #    os.system(f"cp -r -n --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/aur/* /var/cache/pacman/aur/{DEBUG}")
+    #    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/aur/* /var/cache/pacman/aur/{DEBUG}")
 
 #   Fix signature invalid error
 def fix_package_db(snapshot = "0"):
@@ -134,14 +134,14 @@ def init_system_clean(snapshot, FROM):
     if FROM == "prepare":
         os.system(f"rm -rf /.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/systemd/*{DEBUG}")
     elif FROM == "deploy":
-        os.system("rm -rf /var/lib/systemd/*{DEBUG}")
+        os.system(f"rm -rf /var/lib/systemd/*{DEBUG}")
         os.system(f"rm -rf /.snapshots/rootfs/snapshot-{snapshot}/var/lib/systemd/*{DEBUG}")
 
 #   Copy init system files (Systemd, OpenRC, etc.) to shared
 def init_system_copy(snapshot, FROM):
     if FROM == "post_transactions":
-        os.system("rm -rf /var/lib/systemd/*{DEBUG}")
-        os.system(f"cp --reflink=auto -r /.snapshots/rootfs/snapshot-{snapshot}/var/lib/systemd/* /var/lib/systemd/{DEBUG}")
+        os.system(f"rm -rf /var/lib/systemd/*{DEBUG}")
+        os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{snapshot}/var/lib/systemd/. /var/lib/systemd/{DEBUG}")
 
 #   Install atomic-operation
 def install_package(snapshot, pkg):
@@ -207,7 +207,7 @@ def install_package_live(snapshot, tmp, pkg):
 
 #   Get list of packages installed in a snapshot
 def pkg_list(CHR, snap):
-    return str(subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} pacman -Qq", shell=True))[2:][:-1].split("\\n")[:-1]
+    return subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} pacman -Qq", encoding='utf-8', shell=True).strip().split("\n")
 
 #   Refresh snapshot
 def refresh(snapshot):
