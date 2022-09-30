@@ -376,8 +376,11 @@ def get_next_snapshot():
         d = "deploy"
     else:
         d = "deploy-aux"
-    with open(f"/.snapshots/rootfs/snapshot-{d}/usr/share/ash/snap", "r") as csnapshot:
-        return csnapshot.read().rstrip()
+
+    if os.path.exists("/.snapshots/rootfs/snapshot-{d}/usr/share/ash/snap"): # Make sure next snapshot exists
+        with open(f"/.snapshots/rootfs/snapshot-{d}/usr/share/ash/snap", "r") as csnapshot:
+            return csnapshot.read().rstrip()
+    return "" # Return empty string in case no snapshot is deployed
 
 #   Get parent
 def get_parent(tree, id):
