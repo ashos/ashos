@@ -90,9 +90,9 @@ def auto_upgrade(snapshot):
 
 #   Copy cache of downloaded packages to shared
 def cache_copy(snapshot, FROM):
-    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/pkg/* /var/cache/pacman/pkg/{DEBUG}")
+    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/pkg/. /var/cache/pacman/pkg/{DEBUG}")
     #if aur_enabled:
-    #    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/aur/* /var/cache/pacman/aur/{DEBUG}")
+    #    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/aur/. /var/cache/pacman/aur/{DEBUG}")
 
 #   Fix signature invalid error
 def fix_package_db(snapshot = "0"):
@@ -142,7 +142,7 @@ def init_system_clean(snapshot, FROM):
 def init_system_copy(snapshot, FROM):
     if FROM == "post_transactions":
         os.system(f"rm -rf /var/lib/systemd/*{DEBUG}")
-        os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{snapshot}/var/lib/systemd/* /var/lib/systemd/{DEBUG}")
+        os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{snapshot}/var/lib/systemd/. /var/lib/systemd/{DEBUG}")
 
 #   Install atomic-operation
 def install_package(snapshot, pkg):

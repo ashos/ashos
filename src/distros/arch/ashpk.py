@@ -90,9 +90,9 @@ def auto_upgrade(snapshot):
 
 #   Copy cache of downloaded packages to shared
 def cache_copy(snapshot, FROM):
-    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/pkg/* /var/cache/pacman/pkg/{DEBUG}")
+    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/pkg/. /var/cache/pacman/pkg/{DEBUG}")
     #if aur_enabled:
-    #    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/aur/* /var/cache/pacman/aur/{DEBUG}")
+    #    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/aur/. /var/cache/pacman/aur/{DEBUG}")
 
 #   Fix signature invalid error
 def fix_package_db(snapshot = "0"):

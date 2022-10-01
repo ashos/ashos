@@ -16,7 +16,7 @@ def auto_upgrade(snapshot):
 
 #   Copy cache of downloaded packages to shared
 def cache_copy(snapshot, FROM):
-    os.system(f"cp -r -n --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/apt/* /var/cache/apt/ >/dev/null 2>&1")
+    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/apt/. /var/cache/apt/ >/dev/null 2>&1")
 
 #   Fix signature invalid error
 def fix_package_db(snapshot = "0"):
@@ -65,7 +65,7 @@ def init_system_clean(snapshot, FROM):
 def init_system_copy(snapshot, FROM):
     if FROM == "post_transactions":
         os.system("rm -rf /var/lib/systemd/* >/dev/null 2>&1")
-        os.system(f"cp --reflink=auto -r /.snapshots/rootfs/snapshot-{snapshot}/var/lib/systemd/* /var/lib/systemd/ >/dev/null 2>&1")
+        os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{snapshot}/var/lib/systemd/. /var/lib/systemd/ >/dev/null 2>&1")
 
 #   Install atomic-operation
 def install_package(snapshot, pkg):
