@@ -297,8 +297,8 @@ def deploy(snapshot):
         os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/boot{DEBUG}")
         os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
         os.system(f"rm -rf /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}")
-        os.system(f"cp -r --reflink=auto /.snapshots/boot/boot-{snapshot}/* /.snapshots/rootfs/snapshot-{tmp}/boot{DEBUG}")
-        os.system(f"cp -r --reflink=auto /.snapshots/etc/etc-{snapshot}/* /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
+        os.system(f"cp -r --reflink=auto /.snapshots/boot/boot-{snapshot}/. /.snapshots/rootfs/snapshot-{tmp}/boot{DEBUG}")
+        os.system(f"cp -r --reflink=auto /.snapshots/etc/etc-{snapshot}/. /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
       # If snapshot is mutable, modify '/' entry in fstab to read-write
         if check_mutability(snapshot):
             os.system(f"sed -i '0,/snapshot-{tmp}/ s|,ro||' /.snapshots/rootfs/snapshot-{tmp}/etc/fstab") ### ,rw
@@ -584,9 +584,9 @@ def post_transactions(snapshot):
   # File operations in snapshot-chr
 #    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}") ### REVIEW_LATER # Moved to a few lines below
     os.system(f"rm -rf /.snapshots/boot/boot-chr{snapshot}/*{DEBUG}")
-    os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/boot/* /.snapshots/boot/boot-chr{snapshot}{DEBUG}")
+    os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/boot/. /.snapshots/boot/boot-chr{snapshot}{DEBUG}")
     os.system(f"rm -rf /.snapshots/etc/etc-chr{snapshot}/*{DEBUG}")
-    os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/etc/* /.snapshots/etc/etc-chr{snapshot}{DEBUG}")
+    os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/etc/. /.snapshots/etc/etc-chr{snapshot}{DEBUG}")
   # Keep package manager's cache after installing packages. This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
     cache_copy(snapshot, "post_transactions")
     os.system(f"btrfs sub del /.snapshots/boot/boot-{snapshot}{DEBUG}")
@@ -620,8 +620,8 @@ def prepare(snapshot):
   # File operations for snapshot-chr
     os.system(f"btrfs sub snap /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-chr{snapshot}{DEBUG}")
     os.system(f"btrfs sub snap /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-chr{snapshot}{DEBUG}")
-    os.system(f"cp -r --reflink=auto /.snapshots/boot/boot-chr{snapshot}/* /.snapshots/rootfs/snapshot-chr{snapshot}/boot{DEBUG}")
-    os.system(f"cp -r --reflink=auto /.snapshots/etc/etc-chr{snapshot}/* /.snapshots/rootfs/snapshot-chr{snapshot}/etc{DEBUG}") ### btrfs sub snap etc-{snapshot} to etc-chr-{snapshot} not needed before this?
+    os.system(f"cp -r --reflink=auto /.snapshots/boot/boot-chr{snapshot}/. /.snapshots/rootfs/snapshot-chr{snapshot}/boot{DEBUG}")
+    os.system(f"cp -r --reflink=auto /.snapshots/etc/etc-chr{snapshot}/. /.snapshots/rootfs/snapshot-chr{snapshot}/etc{DEBUG}") ### btrfs sub snap etc-{snapshot} to etc-chr-{snapshot} not needed before this?
     init_system_clean(snapshot, "prepare")
     os.system(f"cp /etc/machine-id /.snapshots/rootfs/snapshot-chr{snapshot}/etc/machine-id")
     os.system(f"mkdir -p /.snapshots/rootfs/snapshot-chr{snapshot}/.snapshots/ash && cp -f /.snapshots/ash/fstree /.snapshots/rootfs/snapshot-chr{snapshot}/.snapshots/ash/")
@@ -852,7 +852,7 @@ def switch_tmp():
     else:
         source_dep = "deploy"
         target_dep = "deploy-aux"
-    os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{target_dep}/boot/* {tmp_boot}")
+    os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{target_dep}/boot/. {tmp_boot}")
     os.system(f"sed -i 's|@.snapshots{distro_suffix}/rootfs/snapshot-{source_dep}|@.snapshots{distro_suffix}/rootfs/snapshot-{target_dep}|g' {tmp_boot}/{GRUB}/grub.cfg") # Overwrite grub config boot subvolume
     os.system(f"sed -i 's|@.snapshots{distro_suffix}/rootfs/snapshot-{source_dep}|@.snapshots{distro_suffix}/rootfs/snapshot-{target_dep}|g' /.snapshots/rootfs/snapshot-{target_dep}/boot/{GRUB}/grub.cfg")
     os.system(f"sed -i 's|@.snapshots{distro_suffix}/boot/boot-{source_dep}|@.snapshots{distro_suffix}/boot/boot-{target_dep}|g' /.snapshots/rootfs/snapshot-{target_dep}/etc/fstab") # Update fstab for new deployment
@@ -931,10 +931,10 @@ def sync_tree_helper(CHR, s_f, s_t):
     pkg_list_from = pkg_list("", s_f)
     # Get packages to be inherited
     pkg_list_from = [j for j in pkg_list_from if j not in pkg_list_to]
-    os.system(f"cp -r /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/* /.snapshots/tmp-db/local/") ### REVIEW_LATER
-    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-{s_f}/* /.snapshots/rootfs/snapshot-{CHR}{s_t}/{DEBUG}")
+    os.system(f"cp -r /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/. /.snapshots/tmp-db/local/") ### REVIEW_LATER
+    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-{s_f}/. /.snapshots/rootfs/snapshot-{CHR}{s_t}/{DEBUG}")
     os.system(f"rm -rf /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/*") ### REVIEW_LATER
-    os.system(f"cp -r /.snapshots/tmp-db/local/* /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/") ### REVIEW_LATER
+    os.system(f"cp -r /.snapshots/tmp-db/local/. /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/") ### REVIEW_LATER
     for entry in pkg_list_from:
         os.system(f"bash -c 'cp -r /.snapshots/rootfs/snapshot-{s_f}/usr/share/ash/db/local/{entry}-[0-9]* /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/'") ### REVIEW_LATER
     os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW_LATER (originally inside the loop, but I took it out)
