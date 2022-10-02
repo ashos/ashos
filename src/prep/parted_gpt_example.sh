@@ -6,6 +6,6 @@ if [ $# -eq 0 ]; then
 fi
 
 sudo parted --align minimal --script $1 mklabel gpt unit MiB mkpart ESP fat32 0% 256 \
-            set 1 boot on mkpart primary ext4 256 20% mkpart primary ext4 20% 40%
+            set 1 boot on mkpart primary ext4 256 80% mkpart primary ext4 80% 90%
 sudo mkfs.vfat -F32 -n EFI ${1}1
 

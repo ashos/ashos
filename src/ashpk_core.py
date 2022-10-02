@@ -59,7 +59,7 @@ def ash_chroot_mounts(i, CHR=""):
     os.system(f"mount --bind --make-slave /var /.snapshots/rootfs/snapshot-{CHR}{i}/var{DEBUG}")
     if is_efi():
         os.system(f"mount --rbind --make-rslave /sys/firmware/efi/efivars /.snapshots/rootfs/snapshot-{CHR}{i}/sys/firmware/efi/efivars{DEBUG}")
-    os.system(f"cp --dereference /etc/resolv.conf /.snapshots/rootfs/snapshot-{CHR}{i}/etc/{DEBUG}") ### REVIEW_LATER Maybe not needed?
+    os.system(f"cp --dereference /etc/resolv.conf /.snapshots/rootfs/snapshot-{CHR}{i}/etc/{DEBUG}") ### REVIEW Maybe not needed?
 
 #   Update ash itself
 def ash_update():
@@ -103,13 +103,12 @@ def chr_delete(snapshot):
         if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
             subprocess.check_output(f"btrfs sub del /.snapshots/boot/boot-chr{snapshot}", shell=True)
             subprocess.check_output(f"btrfs sub del /.snapshots/etc/etc-chr{snapshot}", shell=True)
-            #os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snapshot}/*{DEBUG}") ### REVIEW_LATER
+            #os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snapshot}/*{DEBUG}") # error: Not a Btrfs subvolume
             subprocess.check_output(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snapshot}", shell=True)
     except subprocess.CalledProcessError:
         print(f"F: Failed to delete chroot snapshot {snapshot}.")
-    else:
-        #print(f"Snapshot chroot {snapshot} deleted.") ### REVIEW_LATER REALLY CLUTTERS THE CONSOLE
-        return 0 ### REVIEW_LATER REDUNDANT BUT JUST ADDED INSTEAD OF ANNOYING MESSAGE ABOVE!
+#    else:
+#        print(f"Snapshot chroot {snapshot} deleted.")
 
 #   Run command in snapshot
 def chr_run(snapshot, cmd): ### make cmd to cmds (IMPORTANT for install_profile)
@@ -473,7 +472,7 @@ def install_live(snapshot, pkg):
     print("Please wait as installation is finishing.")
     excode = install_package_live(snapshot, tmp, pkg)
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
-    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") ### REVIEW_LATER not safe
+    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") ### REVIEW not safe
     if not excode:
         print(f"Package(s) {pkg} live installed in snapshot {snapshot} successfully.")
     else:
@@ -517,10 +516,10 @@ def install_profile_live(profile):
     subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{profile}/packages{get_distro_suffix()}.txt", shell=True)
   # Ignore empty lines or ones starting with # [ % &
     pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\[|^%|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
-    excode1 = install_package_live(tmp, pkg) ### REVIEW_LATER snapshot argument needed
+    excode1 = install_package_live(tmp, pkg) ### REVIEW snapshot argument needed
     excode2 = service_enable(tmp, profile, tmp_prof)
     if excode1 == 0 and excode2 == 0:
-        print(f"Profile {profile} installed in current/live snapshot.") ### REVIEW_LATER
+        print(f"Profile {profile} installed in current/live snapshot.") ### REVIEW
         return 0
     else:
         print("F: Install failed and changes discarded.")
@@ -607,7 +606,7 @@ def post_transactions(snapshot):
 def prepare(snapshot):
     chr_delete(snapshot)
     os.system(f"btrfs sub snap /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-chr{snapshot}{DEBUG}")
-  # Pacman gets weird when chroot directory is not a mountpoint, so the following mount is necessary ### REVIEW_LATER
+  # Pacman gets weird when chroot directory is not a mountpoint, so the following mount is necessary ### REVIEW
     os.system(f"mount --bind --make-slave /.snapshots/rootfs/snapshot-chr{snapshot} /.snapshots/rootfs/snapshot-chr{snapshot}{DEBUG}")
     os.system(f"mount --rbind --make-rslave /dev /.snapshots/rootfs/snapshot-chr{snapshot}/dev{DEBUG}")
     os.system(f"mount --bind --make-slave /home /.snapshots/rootfs/snapshot-chr{snapshot}/home{DEBUG}")
@@ -690,7 +689,7 @@ def remove_from_tree(tree, treename, pkg, profile):
                 uninstall_package(sarg, pkg)
             print(f"Tree {treename} updated.")
         elif profile:
-            print("TODO") ### REVIEW_LATER
+            print("TODO") ### REVIEW
 
 #   Remove node from tree
 def remove_node(tree, id):
@@ -712,7 +711,7 @@ def rollback():
     tmp = get_tmp()
     i = find_new()
 ###    clone_as_tree(tmp)
-    clone_as_tree(tmp, "") ### REVIEW_LATER clone_as_tree(tmp, "rollback") will do.
+    clone_as_tree(tmp, "") ### REVIEW clone_as_tree(tmp, "rollback") will do.
     write_desc(i, "rollback")
     deploy(i)
 
@@ -789,7 +788,7 @@ def snapshot_config_edit(snapshot):
 
 #   Get per-snapshot configuration options
 def snapshot_config_get(snap):
-    options = {"aur":"False","mutable_dirs":"","mutable_dirs_shared":""} # defaults here ### REVIEW_LATER This is not distro-generic
+    options = {"aur":"False","mutable_dirs":"","mutable_dirs_shared":""} # defaults here ### REVIEW This is not distro-generic
     if not os.path.exists(f"/.snapshots/etc/etc-{snap}/ash.conf"):
         return options
     with open(f"/.snapshots/etc/etc-{snap}/ash.conf", "r") as optfile:
@@ -833,7 +832,7 @@ def switch_distro():
                             print(f"F: Failed to switch distros: {e.output}.") ###
                         else:
                             print(f'Done! Please reboot whenever you would like switch to {next_distro}')
-                        #break ### REVIEW_LATER
+                        #break ### REVIEW
             break
         else:
             print("Invalid distro!")
@@ -923,27 +922,27 @@ def sync_tree(tree, treename, force_offline, live):
                 post_transactions(snap_to) ### Moved here from the line immediately after first sync_tree_helper
         print(f"Tree {treename} synced.")
 
-#   Sync tree helper function ### REVIEW_LATER might need to put it in distro-specific ashpk.py
+#   Sync tree helper function ### REVIEW might need to put it in distro-specific ashpk.py
 def sync_tree_helper(CHR, s_f, s_t):
-    os.system("mkdir -p /.snapshots/tmp-db/local/") ### REVIEW_LATER Still resembling Arch pacman folder structure!
-    os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW_LATER
+    os.system("mkdir -p /.snapshots/tmp-db/local/") ### REVIEW Still resembling Arch pacman folder structure!
+    os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW
     pkg_list_to = pkg_list(CHR, s_t)
     pkg_list_from = pkg_list("", s_f)
     # Get packages to be inherited
     pkg_list_from = [j for j in pkg_list_from if j not in pkg_list_to]
-    os.system(f"cp -r /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/. /.snapshots/tmp-db/local/") ### REVIEW_LATER
+    os.system(f"cp -r /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/. /.snapshots/tmp-db/local/") ### REVIEW
     os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-{s_f}/. /.snapshots/rootfs/snapshot-{CHR}{s_t}/{DEBUG}")
-    os.system(f"rm -rf /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/*") ### REVIEW_LATER
-    os.system(f"cp -r /.snapshots/tmp-db/local/. /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/") ### REVIEW_LATER
+    os.system(f"rm -rf /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/*") ### REVIEW
+    os.system(f"cp -r /.snapshots/tmp-db/local/. /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/") ### REVIEW
     for entry in pkg_list_from:
-        os.system(f"bash -c 'cp -r /.snapshots/rootfs/snapshot-{s_f}/usr/share/ash/db/local/{entry}-[0-9]* /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/'") ### REVIEW_LATER
-    os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW_LATER (originally inside the loop, but I took it out)
+        os.system(f"bash -c 'cp -r /.snapshots/rootfs/snapshot-{s_f}/usr/share/ash/db/local/{entry}-[0-9]* /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/'") ### REVIEW
+    os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW (originally inside the loop, but I took it out)
 
 #   Clear all temporary snapshots
 def tmp_clear():
     os.system("btrfs sub del /.snapshots/boot/boot-chr*{DEBUG}")
     os.system("btrfs sub del /.snapshots/etc/etc-chr*{DEBUG}")
-    os.system("btrfs sub del /.snapshots/rootfs/snapshot-chr*/*{DEBUG}")
+    os.system("btrfs sub del /.snapshots/rootfs/snapshot-chr*/*{DEBUG}") ### REVIEW
     os.system("btrfs sub del /.snapshots/rootfs/snapshot-chr*{DEBUG}")
 
 #   Clean tmp dirs
@@ -955,7 +954,7 @@ def tmp_delete():
         tmp = "deploy-aux"
     os.system(f"btrfs sub del /.snapshots/boot/boot-{tmp}{DEBUG}")
     os.system(f"btrfs sub del /.snapshots/etc/etc-{tmp}{DEBUG}")
-    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}") ### REVIEW_LATER Delete this line? Creates a lot of errors not a btrfs subvolume
+    #os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}") # error: Not a Btrfs subvolume
     os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
 
 #   Update boot
@@ -1015,7 +1014,7 @@ def upgrade(snapshot, baseup=False):
     elif snapshot == "0" and not baseup:
         print("F: Changing base snapshot is not allowed.")
     else:
-#        prepare(snapshot) ### REVIEW_LATER Moved to a distro-specific function as it needs to go after setup_aur_if_enabled()
+#        prepare(snapshot) ### REVIEW Moved to a distro-specific function as it needs to go after setup_aur_if_enabled()
       # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
         excode = upgrade_helper(snapshot)
         if int(excode) == 0:
@@ -1045,7 +1044,7 @@ def main():
         exit("sudo/doas is required to run ash!")
     else:
         importer = DictImporter() # Dict importer
-#        isChroot = chroot_check() ### NEEDS TO BE IMPLEMENTED
+#        isChroot = chroot_check() ### TODO
         global fstree # Currently these are global variables, fix sometime
         global fstreepath # ---
         fstreepath = str("/.snapshots/ash/fstree") # Path to fstree file
@@ -1060,7 +1059,7 @@ def main():
         ashv_par.set_defaults(func=ash_version)
       # Auto upgrade
         autou_par = subparsers.add_parser("auto-upgrade", aliases=['autoup', 'au'], allow_abbrev=True, help='Update a snapshot quietly')
-        autou_par.add_argument("snapshot", type=int, help="snapshot number") ### REVIEW_LATER any given snapshot or get_current_snapshot() ?
+        autou_par.add_argument("snapshot", type=int, help="snapshot number") ### REVIEW any given snapshot or get_current_snapshot() ?
         autou_par.set_defaults(func=auto_upgrade)
       # boot update command
         boot_par = subparsers.add_parser("boot", aliases=['boot-update'], allow_abbrev=True, help='update boot of a snapshot')
