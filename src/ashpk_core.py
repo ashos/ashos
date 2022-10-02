@@ -403,6 +403,30 @@ def get_tmp(console=False): # By default just return which deployment is running
     else:
         return r
 
+#   Make a snapshot vulnerable to be modified even further (snapshot should be deployed as mutable)
+def hollow(s):
+    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{s}"):
+        print(f"F: Cannot make hollow as snapshot {s} doesn't exist.")
+    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{s}"): # Make sure snapshot is not in use by another ash process
+        print(f"F: Snapshot {s} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {s}'.")
+    elif s == "0":
+        print("F: Changing base snapshot is not allowed.")
+    else:
+        ### AUR step might be needed and if so make a distro_specific function with steps similar to install_package(). Call it hollow_helper and change this accordingly().
+        prepare(s)
+        os.system(f"mount --rbind --make-rslave / /.snapshots/rootfs/snapshot-chr{s}")
+        print(f"Snapshot {s} is now hollow! When done, type YES (in capital):")
+        while True:
+            reply = input("> ")
+            if reply == "YES":
+                #post_transactions_original_WORKS(s, True) ### REVIEW
+                post_transactions(s)
+                #os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{s}") OR os.system(f"umount -R /") ### REVIEW NEED to unmount this a second time?! (I BELIEVE NOT NEEDED)
+                immutability_enable(s)
+                deploy(s)
+                print(f"Snapshot {s} hollow operation succeeded. Please reboot!")
+                break
+
 #   Make a node mutable
 def immutability_disable(snapshot):
     if snapshot != "0":
@@ -561,6 +585,28 @@ def new_snapshot(desc="clone of base"): # immutability toggle not used as base s
 #   Post transaction function, copy from chroot dirs back to read only snapshot dir
 def post_transactions(snapshot):
     tmp = get_tmp()
+  # Some operations were moved below to fix hollow functionality ###
+  # File operations in snapshot-chr
+#    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}") ### REVIEW # Moved to a few lines below
+    os.system(f"rm -rf /.snapshots/boot/boot-chr{snapshot}/*{DEBUG}")
+    os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/boot/. /.snapshots/boot/boot-chr{snapshot}{DEBUG}")
+    os.system(f"rm -rf /.snapshots/etc/etc-chr{snapshot}/*{DEBUG}")
+    os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/etc/. /.snapshots/etc/etc-chr{snapshot}{DEBUG}")
+  # Keep package manager's cache after installing packages. This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
+    cache_copy(snapshot, "post_transactions")
+    os.system(f"btrfs sub del /.snapshots/boot/boot-{snapshot}{DEBUG}")
+    os.system(f"btrfs sub del /.snapshots/etc/etc-{snapshot}{DEBUG}")
+    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}")
+    if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}/usr/share/ash/mutable"):
+        immutability = ""
+    else:
+        immutability = "-r"
+    os.system(f"btrfs sub snap {immutability} /.snapshots/boot/boot-chr{snapshot} /.snapshots/boot/boot-{snapshot}{DEBUG}")
+    os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-chr{snapshot} /.snapshots/etc/etc-{snapshot}{DEBUG}")
+  # Copy init system files to shared
+    init_system_copy(tmp, "post_transactions")
+    os.system(f"btrfs sub snap {immutability} /.snapshots/rootfs/snapshot-chr{snapshot} /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}")
+  # ---------------------- fix for hollow functionality ---------------------- #
   # Unmount in reverse order
     os.system(f"umount /.snapshots/rootfs/snapshot-chr{snapshot}/etc/resolv.conf{DEBUG}")
     os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/dev{DEBUG}")
@@ -580,26 +626,7 @@ def post_transactions(snapshot):
     if mutable_dirs_shared:
         for mount_path in mutable_dirs_shared:
             os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path}{DEBUG}")
-  # File operations in snapshot-chr
-#    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}") ### REVIEW_LATER # Moved to a few lines below
-    os.system(f"rm -rf /.snapshots/boot/boot-chr{snapshot}/*{DEBUG}")
-    os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/boot/. /.snapshots/boot/boot-chr{snapshot}{DEBUG}")
-    os.system(f"rm -rf /.snapshots/etc/etc-chr{snapshot}/*{DEBUG}")
-    os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/etc/. /.snapshots/etc/etc-chr{snapshot}{DEBUG}")
-  # Keep package manager's cache after installing packages. This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
-    cache_copy(snapshot, "post_transactions")
-    os.system(f"btrfs sub del /.snapshots/boot/boot-{snapshot}{DEBUG}")
-    os.system(f"btrfs sub del /.snapshots/etc/etc-{snapshot}{DEBUG}")
-    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}")
-    if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}/usr/share/ash/mutable"):
-        immutability = ""
-    else:
-        immutability = "-r"
-    os.system(f"btrfs sub snap {immutability} /.snapshots/boot/boot-chr{snapshot} /.snapshots/boot/boot-{snapshot}{DEBUG}")
-    os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-chr{snapshot} /.snapshots/etc/etc-{snapshot}{DEBUG}")
-  # Copy init system files to shared
-    init_system_copy(tmp, "post_transactions")
-    os.system(f"btrfs sub snap {immutability} /.snapshots/rootfs/snapshot-chr{snapshot} /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}")
+  # ---------------------- fix for hollow functionality ---------------------- #
     chr_delete(snapshot)
 
 #   Prepare snapshot to chroot dir to install or chroot into
@@ -1121,6 +1148,10 @@ def main():
         fixdb_par = subparsers.add_parser("fixdb", aliases=['fix'], allow_abbrev=True, help='fix package database of a snapshot')
         fixdb_par.add_argument("snapshot", type=int, help="snapshot number")
         fixdb_par.set_defaults(func=fix_package_db)
+      # hollow a node
+        hol_par = subparsers.add_parser("hollow", help='Make a snapshot hollow (vulnerable)')
+        hol_par.add_argument("s", type=int, help="snapshot number")
+        hol_par.set_defaults(func=hollow)
       # immutability disable
         immdis_par = subparsers.add_parser("immdis", aliases=["disimm", "immdisable", "disableimm"], allow_abbrev=True, help='Disable immutability of a snapshot')
         immdis_par.add_argument("snapshot", type=int, help="snapshot number")
