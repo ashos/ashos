@@ -340,7 +340,7 @@ ash sync <tree>
 ash sync <tree> -f
 ```
 
-* ash also supports installing packages without rebooting. This is no longer needed. ### REVIEW_LATER
+* ash also supports installing packages without rebooting. This is no longer needed. ### REVIEW
 ```
 ash install <snapshot> -p <package> --live
 ```
@@ -432,7 +432,7 @@ exit
 ash deploy <snapshot>
 ```
 
-If Windows is detected, ash should return output along the lines of `Found Windows Boot Manager on...`. You may need to install `ntfs-3g` first and re-deploy if you don't see a Windows entry.  ###REVIEW_LATER
+If Windows is detected, ash should return output along the lines of `Found Windows Boot Manager on...`. You may need to install `ntfs-3g` first and re-deploy if you don't see a Windows entry.  ### REVIEW
 
 #### Updating ash itself
 * ash doesn't get updated alongside the system when `ash upgrade` is used

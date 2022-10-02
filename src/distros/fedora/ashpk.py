@@ -4,7 +4,7 @@
 def auto_upgrade(snapshot):
     sync_time() # Required in virtualbox, otherwise error in package db update
     prepare(snapshot)
-    excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apt-get update -y")
+    excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sudo dnf -y upgrade")
     if excode == 0:
         post_transactions(snapshot)
         os.system("echo 0 > /.snapshots/ash/upstate")
@@ -16,7 +16,7 @@ def auto_upgrade(snapshot):
 
 #   Copy cache of downloaded packages to shared
 def cache_copy(snapshot, FROM):
-    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/apt/. /var/cache/apt/{DEBUG}")
+    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/dnf/. /var/cache/dnf/{DEBUG}") ### REVIEW IS THIS NEEDED?
 
 #   Fix signature invalid error
 def fix_package_db(snapshot = "0"):
@@ -38,17 +38,17 @@ def init_system_copy(snapshot, FROM):
 
 #   Install atomic-operation
 def install_package(snapshot, pkg):
-    #excode = str(os.system(f'chroot /.snapshots/rootfs/snapshot-chr{snapshot} apt-get -o Dpkg::Options::="--force-overwrite" install -y {pkg}'))
-    return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apt-get install -f -y {pkg}") ### TODO: --overwrite '/var/*'
+    prepare(snapshot)
+    return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sudo dnf install {pkg}") ### REVIEW how to do 'overwrite /var/*'
 
 #   Install atomic-operation in live snapshot
 def install_package_live(snapshot, tmp, pkg):
     #options = snapshot_config_get(tmp)
-    return os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} apt-get install -y {pkg}{DEBUG}") ### TODO: --overwrite \\*
+    return os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} sudo dnf -y install {pkg}{DEBUG}") ### --overwrite \\*
 
 #   Get list of packages installed in a snapshot
 def pkg_list(CHR, snap):
-    return subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} dpkg -l | grep '^.i' | awk '{{print $2}}'", encoding='utf-8', shell=True).strip().split("\n")
+    return subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} sudo dnf list installed", encoding='utf-8', shell=True).strip().split("\n")
 
 #   Refresh snapshot
 def refresh(snapshot):
@@ -60,7 +60,7 @@ def refresh(snapshot):
         print("F: Changing base snapshot is not allowed.")
     else:
         prepare(snapshot)
-        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apt-get update")
+        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sudo dnf upgrade --refresh") ### REVIEW
         if excode == 0:
             post_transactions(snapshot)
             print(f"Snapshot {snapshot} refreshed successfully.")
@@ -75,8 +75,9 @@ def snapshot_diff(snap1, snap2):
     elif not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap2}"):
         print(f"Snapshot {snap2} not found.")
     else:
-        os.system(f"diff -qrly --no-dereference /.snapshots/rootfs/snapshot-{snap1}/usr/share/ash/db/dpkg/info \
-                    /.snapshots/rootfs/snapshot-{snap2}/usr/share/ash/db/dpkg/info")
+        os.system(f"sqldiff /.snapshots/rootfs/snapshot-{snap1}/usr/share/ash/db/dnf/history.sqlite \
+                            /.snapshots/rootfs/snapshot-{snap2}/usr/share/ash/db/dnf/history.sqlite \
+                            --table rpm | awk '{{print $4}}' | awk -F',' '{{print $3}}' | tr -d \'")
 
 #   Uninstall package(s)
 def uninstall_package(snapshot, pkg):
@@ -88,7 +89,8 @@ def uninstall_package(snapshot, pkg):
         print("F: Changing base snapshot is not allowed.")
     else:
         prepare(snapshot)
-        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apt-get remove {pkg}")
+        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} dnf -y remove {pkg}") ### REVIEW how to do -Rns? is sudo needed?
+        os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} dnf -y autoremove") ### is sudo needed?
         if excode:
             chr_delete(snapshot)
             print("F: Remove failed and changes discarded.")
@@ -99,7 +101,7 @@ def uninstall_package(snapshot, pkg):
 #   Upgrade atomic-operation
 def upgrade_helper(snapshot):
     prepare(snapshot) ### REVIEW tried it outside of this function in ashpk_core before aur_install and it works fine!
-    return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apt-get update")
+    return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sudo dnf upgrade")
 
 # ---------------------------------------------------------------------------- #
 

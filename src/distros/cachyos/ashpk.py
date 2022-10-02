@@ -11,12 +11,12 @@ def aur_install(snapshot):
     if options["aur"] == 'True':
         aur = True
         if aur and not aur_check(snapshot):
-            prepare(snapshot) ### REVIEW_LATER NEEDED? Being called twice!
+            prepare(snapshot) ### REVIEW NEEDED? Being called twice!
             excode = int(aur_install_helper(snapshot))
             if excode:
                 chr_delete(snapshot)
                 print("F: Setting up AUR failed!")
-                sys.exit(1) #### REVIEW_LATER changed from sys.exit()
+                sys.exit(1) ### REVIEW changed from sys.exit()
             post_transactions(snapshot)
     return aur
 
@@ -121,7 +121,7 @@ def fix_package_db(snapshot = "0"):
         os.system(f"{P}pacman-key --init")
         os.system(f"{P}pacman-key --populate archlinux")
         os.system(f"{P}pacman-key --populate cachyos")
-        os.system(f"{P}pacman -Syvv --noconfirm archlinux-keyring cachyos-keyring") ### REVIW_LATER NEEDED? (maybe)
+        os.system(f"{P}pacman -Syvv --noconfirm archlinux-keyring cachyos-keyring") ### REVIEW NEEDED? (maybe)
         post_transactions(snapshot)
         if flip:
             immutability_enable(snapshot)
@@ -183,8 +183,8 @@ def install_package_live(snapshot, tmp, pkg):
             aur_in_destination_snapshot = True
         else:
             aur_in_destination_snapshot = False
-            print("F: AUR not enabled in target snapshot!") ### REVIEW_LATER
-        ### REVIEW_LATER - error checking, handle the situation better altogether
+            print("F: AUR not enabled in target snapshot!") ### REVIEW
+        ### REVIEW - error checking, handle the situation better altogether
         if aur_in_destination_snapshot and not aur_in_tmp:
             print("F: AUR is not enabled in current live snapshot, but is enabled in target.\nEnable AUR for live snapshot? (y/n)")
             reply = input("> ")
@@ -258,7 +258,7 @@ def uninstall_package(snapshot, pkg):
 #   Upgrade atomic-operation
 def upgrade_helper(snapshot):
     aur = aur_install(snapshot)
-    prepare(snapshot) ### REVIEW_LATER tried it outside of this function in ashpk_core before aur_install and it works fine!
+    prepare(snapshot) ### REVIEW tried it outside of this function in ashpk_core before aur_install and it works fine!
     if not aur:
         excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu"))
     else:
