@@ -149,7 +149,7 @@ def install_package(snapshot, pkg):
       # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
         subprocess.check_output(f"pacman -Si {pkg}", shell=True) # --sysroot
     except subprocess.CalledProcessError:
-        aur = aur_install(snapshot) ### ToDo: do a paru -Si {pkg} check to avoid setup_aur if package already installed!
+        aur = aur_install(snapshot) ### TODO: do a paru -Si {pkg} check to avoid setup_aur if package already installed!
         prepare(snapshot)
         if aur:
             return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c \"paru -S {pkg} --needed --overwrite '/var/*'\"")
