@@ -44,6 +44,34 @@ void v_int_free(v_int* vec) {
   free(vec);
 }
 
+void v_int_reverse(v_int* vec) {
+  int* arr = vec->data;
+  int n = vec->len;
+  for (int low = 0, high = n - 1; low < high; low++, high--)
+    {
+      int temp = arr[low];
+      arr[low] = arr[high];
+      arr[high] = temp;
+    }
+}
+
+void v_int_cat(v_int* vec, v_int* cat) {
+  size_t index = vec->len;
+  vec->len = vec->len + cat->len;
+  vec->data = realloc(vec->data, vec->len * sizeof(int));
+  for (size_t i = 0; i < cat->len; i++) {
+    vec->data[i + index] = cat->data[i];
+  }
+}
+
+v_int_erase(v_int* vec, size_t pos, int n) {
+  for (size_t i = pos; i < vec->len - n; i++) {
+    vec[pos] = vec[pos+i];
+  }
+  vec->len -= n;
+  vec->data = realloc(vec->data, sizeof(int) * vec->len);
+}
+
 v_str* v_str_new(size_t size) {
   v_str* v = malloc(sizeof(v_str));
   v->len = size;
