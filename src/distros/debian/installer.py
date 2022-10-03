@@ -14,11 +14,12 @@ def initram_update_luks():
         os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
         os.system("sudo sed -i -e '/^HOOKS/ s/filesystems/encrypt filesystems/' \
                         -e 's|^FILES=(|FILES=(/etc/crypto_keyfile.bin|' /mnt/etc/mkinitcpio.conf")
-        os.system("sudo chroot /mnt sudo mkinitcpio -p linux")
+        os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}")
 
 #   1. Define variables
 ARCH = "amd64"
 RELEASE = "sid"
+KERNEL = ""
 packages = f"linux-image-{ARCH} btrfs-progs sudo curl python3 python3-anytree dhcpcd5 network-manager locales nano" # firmware-linux-nonfree
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
@@ -30,7 +31,6 @@ hostname = get_hostname()
 pre_bootstrap()
 
 #   2. Bootstrap and install packages in chroot
-#os.system("sudo apt-get -y install debootstrap")
 excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
 excode = os.system(f"sudo debootstrap --arch {ARCH} --exclude={excl} {RELEASE} /mnt http://ftp.debian.org/debian") ### --include={packages} ?
 if excode != 0:
@@ -47,7 +47,7 @@ os.system("sudo chroot /mnt apt-get -y install deb-multimedia-keyring --allow-un
 excode = os.system(f"sudo chroot /mnt apt-get -y install --fix-broken {packages}")
 if excode != 0:
     sys.exit("Failed to download packages!")
-if is_efi():
+if is_efi:
     excode = os.system("sudo chroot /mnt apt-get -y install grub-efi") ### efibootmgr does get installed. Does this do it?
     if excode != 0:
         sys.exit("Failed to install grub!")
@@ -71,14 +71,14 @@ os.system(f"sudo ln -srf /mnt{tz} /mnt/etc/localtime")
 os.system("sudo chroot /mnt sudo hwclock --systohc")
 
 #   Post bootstrap
-post_bootstrap(distro, super_group)
+post_bootstrap(super_group)
 
 #   5. Services (init, network, etc.)
 os.system("sudo chroot /mnt systemctl enable NetworkManager")
 
 #   6. Boot and EFI
 initram_update_luks()
-grub_ash(distro, v)
+grub_ash(v)
 
 #   BTRFS snapshots
 deploy_base_snapshot()
