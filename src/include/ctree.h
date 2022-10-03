@@ -96,6 +96,7 @@ void v_tree_remove_node(v_tree* tree, int node) {
         found->data[i]--;
     }
   }
+  v_int_free(found);
 }
 
 #endif
