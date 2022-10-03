@@ -72,6 +72,25 @@ void v_int_erase(v_int* vec, size_t pos, int n) {
   vec->data = realloc(vec->data, sizeof(int) * vec->len);
 }
 
+void str_set(string* str, const char* txt) {
+  size_t txtlen = strlen(txt);
+  str->str = malloc(sizeof(char) * (txtlen + 1));
+  str->len = txtlen;
+  strcpy(str->str, txt);
+}
+
+void str_copy(string* str, string* from) {
+  str->len = from->len;
+  str->str = malloc(sizeof(char) * (from->len + 1));
+  strcpy(str->str, from->str);
+}
+
+void str_free(string* str) {
+  free(str->str);
+  str->len = 0;
+}
+
+
 v_str* v_str_new(size_t size) {
   v_str* v = malloc(sizeof(v_str));
   v->len = size;
@@ -83,6 +102,12 @@ void v_str_push(v_str* vec, string push) {
   vec->len++;
   vec->data = realloc(vec->data, sizeof(string) * vec->len);
   vec->data[vec->len - 1] = push;
+}
+
+void v_str_push_string(v_str* vec, char* push) {
+  string p;
+  str_set(&p, push);
+  v_str_push(vec, p);
 }
 
 void v_str_pop(v_str* vec) {
@@ -108,23 +133,5 @@ void v_str_free(v_str* vec) {
   free(vec);
 }
 
-
-void str_set(string* str, const char* txt) {
-  size_t txtlen = strlen(txt);
-  str->str = malloc(sizeof(char) * (txtlen + 1));
-  str->len = txtlen;
-  strcpy(str->str, txt);
-}
-
-void str_copy(string* str, string* from) {
-  str->len = from->len;
-  str->str = malloc(sizeof(char) * (from->len + 1));
-  strcpy(str->str, from->str);
-}
-
-void str_free(string* str) {
-  free(str->str);
-  str->len = 0;
-}
 
 #endif
