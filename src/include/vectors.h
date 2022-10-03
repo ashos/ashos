@@ -64,9 +64,9 @@ void v_int_cat(v_int* vec, v_int* cat) {
   }
 }
 
-v_int_erase(v_int* vec, size_t pos, int n) {
+void v_int_erase(v_int* vec, size_t pos, int n) {
   for (size_t i = pos; i < vec->len - n; i++) {
-    vec[pos] = vec[pos+i];
+    vec->data[pos] = vec->data[pos+i];
   }
   vec->len -= n;
   vec->data = realloc(vec->data, sizeof(int) * vec->len);
@@ -90,7 +90,19 @@ void v_str_pop(v_str* vec) {
   vec->data = realloc(vec->data, sizeof(string) * vec->len);
 }
 
+void v_str_erase(v_str* vec, size_t pos, int n) {
+  for (size_t i = pos; i < vec->len - n; i++) {
+    vec->data[pos] = vec->data[pos+i];
+  }
+  vec->len -= n;
+  vec->data = realloc(vec->data, sizeof(string) * vec->len);
+}
+
+
 void v_str_free(v_str* vec) {
+  for (int i = 0; i < vec->len; i++) {
+    free(vec->data[i].str);
+  }
   free(vec->data);
   vec->len = 0;
   free(vec);
