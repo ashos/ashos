@@ -129,6 +129,24 @@ void v_str_push_string(v_str* vec, char* push) {
   v_str_push(vec, p);
 }
 
+char* v_str_join(v_str* vec, char space) {
+  size_t len = 0;
+  for (int i = 0; i < vec->len - 1; i++) {
+    len += vec->data[i].len + 1;
+  }
+  len += vec->data[vec->len - 1].len;
+  char* str = malloc(sizeof(char) * (len + 1));
+  str[0] = '\0';
+  for (int i = 0; i < vec->len - 1; i++) {
+    strncat(str, vec->data[i].str, vec->data[i].len);
+    strncat(str, &space, 1);
+  }
+  strncat(str, vec->data[vec->len - 1].str, vec->data[vec->len - 1].len);
+  str[len] = '\0';
+  len = len;
+  return str;
+}
+
 void v_str_pop(v_str* vec) {
   vec->len--;
   vec->data = realloc(vec->data, sizeof(string) * vec->len);
