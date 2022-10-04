@@ -21,8 +21,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define __CMD_H_
 //#define _GNU_SOURCE // for asprintf
 #include <stdlib.h>
+#include <limits.h>       //For PATH_MAX
 #include <string.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <stdbool.h>
+#include <sys/types.h>
+#include <dirent.h>
 #include "vectors.h"
 
 
@@ -58,6 +63,39 @@ string cmd_with_output(size_t line_len, size_t len, char* cmd, int* excode) {
   s.len = len;
   s.str = out;
   return s;
+}
+
+v_str* listdir(const char *name, int indent, bool only_dirs) {
+  v_str* files = v_str_new(0);
+  DIR *dir;
+  struct dirent *entry;
+
+  if (!(dir = opendir(name)))
+    return files;
+
+  while ((entry = readdir(dir)) != NULL) {
+    if (entry->d_type == DT_DIR) {
+      char path[1024];
+      if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+        continue;
+      snprintf(path, sizeof(path), "%s/%s", name, entry->d_name);
+      if (only_dirs) {
+        char buf[PATH_MAX + 1];
+        realpath(entry->d_name, buf);
+        v_str_push_string(files, buf);
+      }
+      listdir(path, indent + 2, only_dirs);
+    } else {
+      if (!only_dirs) {
+        char buf[PATH_MAX + 1];
+        realpath(entry->d_name, buf);
+        v_str_push_string(files, buf);
+      }
+      //printf("%*s- %s\n", indent, "", entry->d_name);
+    }
+  }
+  closedir(dir);
+  return files;
 }
 
 #endif
