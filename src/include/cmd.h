@@ -65,7 +65,7 @@ string cmd_with_output(size_t line_len, size_t len, char* cmd, int* excode) {
   return s;
 }
 
-v_str* listdir(const char *name, int indent, bool only_dirs) {
+v_str* listdir(const char *name, bool only_dirs) {
   v_str* files = v_str_new(0);
   DIR *dir;
   struct dirent *entry;
@@ -84,14 +84,15 @@ v_str* listdir(const char *name, int indent, bool only_dirs) {
         realpath(entry->d_name, buf);
         v_str_push_string(files, buf);
       }
-      listdir(path, indent + 2, only_dirs);
+      v_str* append = listdir(path, only_dirs);
+      v_str_cat(files,append);
+      v_str_free(append);
     } else {
       if (!only_dirs) {
         char buf[PATH_MAX + 1];
         realpath(entry->d_name, buf);
         v_str_push_string(files, buf);
       }
-      //printf("%*s- %s\n", indent, "", entry->d_name);
     }
   }
   closedir(dir);

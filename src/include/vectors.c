@@ -113,6 +113,10 @@ void v_str_push_string(v_str* vec, char* push) {
 
 char* v_str_join(v_str* vec, char space) {
   size_t len = 0;
+  if (!vec->len) { // return NULL if string vector is empty
+    char* str = NULL;
+    return str;
+  }
   for (int i = 0; i < vec->len - 1; i++) {
     len += vec->data[i].len + 1;
   }
@@ -132,6 +136,15 @@ char* v_str_join(v_str* vec, char space) {
 void v_str_pop(v_str* vec) {
   vec->len--;
   vec->data = realloc(vec->data, sizeof(string) * vec->len);
+}
+
+void v_str_cat(v_str* vec, v_str* cat) {
+  size_t index = vec->len;
+  vec->len = vec->len + cat->len;
+  vec->data = realloc(vec->data, vec->len * sizeof(string));
+  for (size_t i = 0; i < cat->len; i++) {
+    vec->data[i + index] = cat->data[i];
+  }
 }
 
 void v_str_erase(v_str* vec, size_t pos, int n) {

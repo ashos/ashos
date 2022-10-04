@@ -3,8 +3,8 @@
 #include "cmd.h"
 
 int main(void) {
-  v_str* files = listdir(".",0,false);
-  v_str* dirs = listdir(".",0,true);
+  v_str* files = listdir(".",false);
+  v_str* dirs = listdir(".",true);
 
   char* join_files = v_str_join(files, ';');
   char* join_dirs = v_str_join(dirs, ';');
@@ -14,6 +14,6 @@ int main(void) {
 
   free(join_files);
   free(join_dirs);
-  free(dirs);
-  free(files);
+  v_str_free(dirs);
+  v_str_free(files);
 }

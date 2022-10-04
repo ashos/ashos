@@ -58,6 +58,7 @@ void v_str_push(v_str*, string);
 void v_str_push_string(v_str*, char*); // push regular char* string
 char* v_str_join(v_str*, char space); // join all strings in vector together, separated by 'char space'
 void v_str_pop(v_str*);
+void v_str_cat(v_str*, v_str*);
 void v_str_erase(v_str* vec, size_t pos, int n);
 void v_str_free(v_str*);
 
