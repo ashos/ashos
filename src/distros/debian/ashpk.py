@@ -38,6 +38,7 @@ def init_system_copy(snapshot, FROM):
 
 #   Install atomic-operation
 def install_package(snapshot, pkg):
+    prepare(snapshot)
     #excode = str(os.system(f'chroot /.snapshots/rootfs/snapshot-chr{snapshot} apt-get -o Dpkg::Options::="--force-overwrite" install -y {pkg}'))
     return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apt-get install -f -y {pkg}") ### TODO: --overwrite '/var/*'
 
