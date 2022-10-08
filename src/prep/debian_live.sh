@@ -8,7 +8,7 @@
 main() {
     if [ -z "$HOME" ]; then HOME=~ ; fi
     RELEASE="sid"
-    prep_packages="git tmux parted btrfs-progs dosfstools cryptsetup debootstrap ntp efibootmgr"
+    prep_packages="btrfs-progs cryptsetup debootstrap dosfstools efibootmgr git ntp parted tmux"
 
     sync_time
     echo "Please wait for 30 seconds!"
@@ -25,6 +25,7 @@ main() {
 
 # Configurations
 configs() {
+    setfont Lat38-TerminusBold24x12 # /usr/share/consolefonts/
     echo "export LC_ALL=C LC_CTYPE=C LANGUAGE=C" | tee -a $HOME/.bashrc
     #echo "alias p='curl -F "'"sprunge=<-"'" sprunge.us'" | tee -a $HOME/.bashrc
     echo "alias p='curl -F "'"f:1=<-"'" ix.io'" | tee -a $HOME/.bashrc
@@ -39,7 +40,7 @@ fixdb() {
     apt-get -y autoremove
     apt-get -y autoclean
     apt-get -y clean # Needed?
-    apt-get -y remove --purge man-db
+    apt-get -y remove --purge man-db # Fix slow man-db trigger
     apt-get -y update
     apt-get -y check # Needed?
 }

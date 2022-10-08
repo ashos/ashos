@@ -37,11 +37,13 @@
 * [Community](https://github.com/ashos/ashos#community)
 * [ToDos](https://github.com/ashos/ashos#todos)
 * [Distro-Specific Notes](https://github.com/ashos/ashos#distro-notes)
-  * [Debian](https://github.com/ashos/ashos#debian)
   * [Arch](https://github.com/ashos/ashos#arch-linux)
     * [AUR](https://github.com/ashos/ashos#aur)
     * [Fixing pacman corrupt packages or key issues](https://github.com/ashos/ashos#fixing-pacman-corrupt-packages-or-key-issues)
+  * [CachyOS](https://github.com/ashos/ashos#cachyos)
+  * [Debian](https://github.com/ashos/ashos#debian)
   * [EndeavourOS](https://github.com/ashos/ashos#endeavouros)
+  * [Ubuntu](https://github.com/ashos/ashos#ubuntu)
 
 ---
 
@@ -161,7 +163,7 @@ example 2 (UEFI): python3 setup.py /dev/nvm0p2 /dev/nvm0 /dev/nvm0p1 fedora "Fed
 When installing a distro using another distro's iso, the last two arguments are necessary
 
 example 3 (UEFI): python3 setup.py /dev/sda2 /dev/sda /dev/sda1 cachyos "CachyOS Linux"
-If for any reason, there is a mismatch between what distro actually is and its /etc/os-release file, it is [usually] mandatory to pass two additional arguments. Here even though we are using Cachyos iso file (which is based on Arch Linux), by investigating in /etc/os-release file, you would see ID and NAME are same as Arch Linux. In a single boot install, it is okay to not pass the last two arguments, but if you want a multiboot system (say dual boot with Arch Linux), they are required.
+If for any reason, there is a mismatch between what distro actually is and its /etc/os-release file, it is [usually] mandatory to pass two additional arguments. Here even though we are using CachyOS iso file (which is based on Arch Linux), by investigating in /etc/os-release file, you would see ID and NAME are same as Arch Linux. In a single boot install, it is okay to not pass the last two arguments, but if you want a multiboot system (say dual boot with Arch Linux), they are required.
 
 ```
 The arguments inside square brackets are optional. Regarding the fourth argument: say if you want to install Alpine Linux using Arch Linux iso, run `python3 setup.py /dev/vda2 /dev/vda /dev/vda1 alpine`.
@@ -531,12 +533,8 @@ sudo chmod 666 /var/run/docker.sock
 * Implement AUR package maintenance between snapshots
 * Make AshOS more accessible to non-advanced users
 
-# Distro-Notes
+# Distro-Specific Notes
 * For packages-distro.conf, the leanest display manager (either Xorg or Wayland) that is included in the official repo for the given distro would be included. For instance for Arch Linux, this would be 'slim', even though there are slimmer display managers like 'ly', 'tbsm', 'cdm' etc. but unfortunately there are in AUR at the time of writing this document.
-
-## Debian
-* When issuing `sudo python3 setup.py /dev/sdXY /dev/sdX /dev/sdXZ`, it might seem installer has frozen but it is actually doing its thing! Please be patient and you will get a prompt to initiate install in about 30 seconds! For some reason, it was not showing what is going on in a nice way, so I put a `set echo off` command.
-* Make sure not to miss sudo in the command above, otherwise there would be permission error when writing to /mnt/.snapshots/...
 
 ## Arch Linux
 ### AUR
@@ -578,12 +576,25 @@ and as a last resort, run: (CAUTION: This might have undesired effects)
 ash fixdb <snapshots>
 ```
 
+## CachyOS
+* You can use either Arch iso or CachyOS iso for installation. Pass extra arguments if using former (look at examples above)
+* [CLI installer](https://sourceforge.net/projects/cachyos-arch/files/cli-installer/cli/) suffices, no need to download GUI installer. 
+
+## Debian
+* When issuing `sudo python3 setup.py /dev/sdXY /dev/sdX /dev/sdXZ`, it might seem installer has frozen but it is actually doing its thing! Please be patient and you will get a prompt to initiate install in about 30 seconds! For some reason, it was not showing what is going on in a nice way, so I put a `set echo off` command.
+* Make sure not to miss sudo in the command above, otherwise there would be permission error when writing to /mnt/.snapshots/...
+
 ## EndeavourOS
 * Start the boot process from iso file
 * When GRUB is prompted, press keys 'e' and then END to add 'single' to the end of kernel parameters. When prompted about rescue mode, press Enter.
 * This will drop you to single user mode instead of default Desktop Environment
 * if internet access is not be available, run `sudo dhclient`
 * Otherwise if installing from within desktop environment, comment out "su" in endevouros_live.sh as it will ask for a password. Instead run the script as sudo.
+
+## Ubuntu
+* Download links: [Link 1](https://releases.ubuntu.com), [Link 2](https://launchpad.net/ubuntu/+cdmirrors)
+* In GRUB, you can pass `single` as an argument to linux kernel to boot in single mode and press Enter for maintenance (As no GUI is required for this installer, it is much faster to boot)
+* As of July 2022, Debian iso can't be used to bootstrap 'jammy' (zstd bug: https://bugs.debian.org/892664)
 ---
 
 **This project is licensed under the AGPLv3.**

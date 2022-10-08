@@ -14,7 +14,7 @@ def ash_chroot():
     os.system("sudo mount -o x-mount.mkdir --rbind --make-rslave /sys /mnt/sys")
     if is_efi:
         os.system("sudo mount -o x-mount.mkdir --rbind --make-rslave /sys/firmware/efi/efivars /mnt/sys/firmware/efi/efivars")
-    os.system("sudo cp --dereference /etc/resolv.conf /mnt/etc/")
+    os.system("sudo cp --dereference /etc/resolv.conf /mnt/etc/") # --remove-destination ### not writing through dangling symlink! (TODO: try except)
 
 #   Clear screen
 def clear():
@@ -138,7 +138,7 @@ def grub_ash(v):
             #os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --modules="{luks_grub_args}"')
             os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --bootloader-id={distro} --modules="{luks_grub_args}" --target=x86_64-efi') # --efi-directory=/boot/efi 
         else:
-            os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --modules="{luks_grub_args}"')
+            os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --bootloader-id={distro} --modules="{luks_grub_args}"') ### REVIEW: specifying --target for non-uefi needed?
     if is_luks: # Make LUKS2 compatible grub image
         if is_efi:
             os.system(f'sudo chroot /mnt sudo grub{v}-mkimage -p "(crypto0)/@boot_{distro}/grub{v}" -O x86_64-efi -c /etc/grub_luks2.conf -o /boot/efi/EFI/{distro}/grubx64.efi {luks_grub_args}') # without '/grub' gives error normal.mod not found (maybe only one of these here and grub_luks2.conf is enough?!)
@@ -279,6 +279,7 @@ with open('res/logos/logo.txt', 'r') as f:
     print(f.read())
 
 #   Define variables
+DEBUG = "" # options: "", " >/dev/null 2>&1"
 choice, distro_suffix = get_multiboot(distro)
 btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@boot{distro_suffix}", f"@etc{distro_suffix}", f"@home{distro_suffix}", f"@var{distro_suffix}"]
 mntdirs = ["", ".snapshots", "boot", "etc", "home", "var"]

@@ -419,7 +419,6 @@ def hollow(s):
         while True:
             reply = input("> ")
             if reply == "YES":
-                #post_transactions_original_WORKS(s, True) ### REVIEW
                 post_transactions(s)
                 #os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{s}") OR os.system(f"umount -R /") ### REVIEW NEED to unmount this a second time?! (I BELIEVE NOT NEEDED)
                 immutability_enable(s)
@@ -694,6 +693,24 @@ def recurse_tree(tree, cid):
             order.append(child)
     return (order)
 
+#   Refresh snapshot
+def refresh(snapshot):
+    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
+        print(f"F: Cannot refresh as snapshot {snapshot} doesn't exist.")
+    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
+        print(f"F: Snapshot {snapshot} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snapshot}'.")
+    elif snapshot == "0":
+        print("F: Changing base snapshot is not allowed.")
+    else:
+        prepare(snapshot)
+        excode = refresh_helper(snapshot)
+        if excode == 0:
+            post_transactions(snapshot)
+            print(f"Snapshot {snapshot} refreshed successfully.")
+        else:
+            chr_delete(snapshot)
+            print("F: Refresh failed and changes discarded.")
+
 #   Recursively remove package in tree
 def remove_from_tree(tree, treename, pkg, profile):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{treename}"):
@@ -955,7 +972,7 @@ def sync_tree_helper(CHR, s_f, s_t):
     os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW
     pkg_list_to = pkg_list(CHR, s_t)
     pkg_list_from = pkg_list("", s_f)
-    # Get packages to be inherited
+  # Get packages to be inherited
     pkg_list_from = [j for j in pkg_list_from if j not in pkg_list_to]
     os.system(f"cp -r /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/. /.snapshots/tmp-db/local/") ### REVIEW
     os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-{s_f}/. /.snapshots/rootfs/snapshot-{CHR}{s_t}/{DEBUG}")
@@ -983,6 +1000,24 @@ def tmp_delete():
     os.system(f"btrfs sub del /.snapshots/etc/etc-{tmp}{DEBUG}")
     #os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}") # error: Not a Btrfs subvolume
     os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
+
+#   Uninstall package(s)
+def uninstall_package(snapshot, pkg):
+    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
+        print(f"F: Cannot remove as snapshot {snapshot} doesn't exist.")
+    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
+        print(f"F: Snapshot {snapshot} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snapshot}'.")
+    elif snapshot == "0":
+        print("F: Changing base snapshot is not allowed.")
+    else:
+        prepare(snapshot)
+        excode = uninstall_package_helper(snapshot, pkg)
+        if excode == 0:
+            post_transactions(snapshot)
+            print(f"Package {pkg} removed from snapshot {snapshot} successfully.")
+        else:
+            chr_delete(snapshot)
+            print("F: Remove failed and changes discarded.")
 
 #   Update boot
 def update_boot(snapshot):
