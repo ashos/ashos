@@ -39,34 +39,20 @@ def init_system_copy(snapshot, FROM):
 #   Install atomic-operation
 def install_package(snapshot, pkg):
     prepare(snapshot)
-    return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sudo dnf install {pkg}") ### REVIEW how to do 'overwrite /var/*'
+    return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sudo dnf install {pkg}") ### TODO: --overwrite '/var/*'
 
 #   Install atomic-operation in live snapshot
 def install_package_live(snapshot, tmp, pkg):
     #options = snapshot_config_get(tmp)
-    return os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} sudo dnf -y install {pkg}{DEBUG}") ### --overwrite \\*
+    return os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} sudo dnf -y install {pkg}{DEBUG}") ### TODO: --overwrite \\*
 
 #   Get list of packages installed in a snapshot
 def pkg_list(CHR, snap):
     return subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} sudo dnf list installed", encoding='utf-8', shell=True).strip().split("\n")
 
-#   Refresh snapshot
-def refresh(snapshot):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
-        print(f"F: Cannot refresh as snapshot {snapshot} doesn't exist.")
-    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
-        print(f"F: Snapshot {snapshot} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snapshot}'.")
-    elif snapshot == "0":
-        print("F: Changing base snapshot is not allowed.")
-    else:
-        prepare(snapshot)
-        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sudo dnf upgrade --refresh") ### REVIEW
-        if excode == 0:
-            post_transactions(snapshot)
-            print(f"Snapshot {snapshot} refreshed successfully.")
-        else:
-            chr_delete(snapshot)
-            print("F: Refresh failed and changes discarded.")
+#   Refresh snapshot atomic-operation
+def refresh_helper(snapshot):
+    return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sudo dnf upgrade --refresh") ### REVIEW
 
 #   Show diff of packages between 2 snapshots TODO: make this function not depend on bash
 def snapshot_diff(snap1, snap2):
@@ -79,26 +65,13 @@ def snapshot_diff(snap1, snap2):
                             /.snapshots/rootfs/snapshot-{snap2}/usr/share/ash/db/dnf/history.sqlite \
                             --table rpm | awk '{{print $4}}' | awk -F',' '{{print $3}}' | tr -d \'")
 
-#   Uninstall package(s)
-def uninstall_package(snapshot, pkg):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
-        print(f"F: Cannot remove as snapshot {snapshot} doesn't exist.")
-    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
-        print(f"F: Snapshot {snapshot} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snapshot}'.")
-    elif snapshot == "0":
-        print("F: Changing base snapshot is not allowed.")
-    else:
-        prepare(snapshot)
-        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} dnf -y remove {pkg}") ### REVIEW how to do -Rns? is sudo needed?
-        os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} dnf -y autoremove") ### is sudo needed?
-        if excode:
-            chr_delete(snapshot)
-            print("F: Remove failed and changes discarded.")
-        else:
-            post_transactions(snapshot)
-            print(f"Package {pkg} removed from snapshot {snapshot} successfully.")
+#   Uninstall package(s) atomic-operation
+def uninstall_package_helper(snapshot, pkg):
+    excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} dnf -y remove {pkg}") ### REVIEW how to do -Rns? is sudo needed?
+    os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} dnf -y autoremove") ### is sudo needed?
+    return excode
 
-#   Upgrade atomic-operation
+#   Upgrade snapshot atomic-operation
 def upgrade_helper(snapshot):
     prepare(snapshot) ### REVIEW tried it outside of this function in ashpk_core before aur_install and it works fine!
     return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sudo dnf upgrade")

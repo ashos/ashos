@@ -209,23 +209,9 @@ def install_package_live(snapshot, tmp, pkg):
 def pkg_list(CHR, snap):
     return subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} pacman -Qq", encoding='utf-8', shell=True).strip().split("\n")
 
-#   Refresh snapshot
-def refresh(snapshot):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
-        print(f"F: Cannot refresh as snapshot {snapshot} doesn't exist.")
-    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
-        print(f"F: Snapshot {snapshot} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snapshot}'.")
-    elif snapshot == "0":
-        print("F: Changing base snapshot is not allowed.")
-    else:
-        prepare(snapshot)
-        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syy")
-        if excode == 0:
-            post_transactions(snapshot)
-            print(f"Snapshot {snapshot} refreshed successfully.")
-        else:
-            chr_delete(snapshot)
-            print("F: Refresh failed and changes discarded.")
+#   Refresh snapshot atomic-operation
+def refresh_helper(snapshot):
+    return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syy")
 
 #   Show diff of packages between 2 snapshots TODO: make this function not depend on bash
 def snapshot_diff(snap1, snap2):
@@ -236,25 +222,11 @@ def snapshot_diff(snap1, snap2):
     else:
         os.system(f"bash -c \"diff <(ls /.snapshots/rootfs/snapshot-{snap1}/usr/share/ash/db/local) <(ls /.snapshots/rootfs/snapshot-{snap2}/usr/share/ash/db/local) | grep '^>\|^<' | sort\"")
 
-#   Uninstall package(s)
-def uninstall_package(snapshot, pkg):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
-        print(f"F: Cannot remove as snapshot {snapshot} doesn't exist.")
-    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
-        print(f"F: Snapshot {snapshot} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snapshot}'.")
-    elif snapshot == "0":
-        print("F: Changing base snapshot is not allowed.")
-    else:
-        prepare(snapshot)
-        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman --noconfirm -Rns {pkg}")
-        if excode == 0:
-            post_transactions(snapshot)
-            print(f"Package {pkg} removed from snapshot {snapshot} successfully.")
-        else:
-            chr_delete(snapshot)
-            print("F: Remove failed and changes discarded.")
+#   Uninstall package(s) atomic-operation
+def uninstall_package_helper(snapshot, pkg):
+    return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman --noconfirm -Rns {pkg}")
 
-#   Upgrade atomic-operation
+#   Upgrade snapshot atomic-operation
 def upgrade_helper(snapshot):
     aur = aur_install(snapshot)
     prepare(snapshot) ### REVIEW tried it outside of this function in ashpk_core before aur_install and it works fine!

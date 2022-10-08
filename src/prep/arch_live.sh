@@ -19,7 +19,7 @@ main() {
 
 # Configurations
 configs() {
-    setfont ter-132n # /usr/share/kbd/consolefonts/ter-132n.psf.gz
+    setfont ter-132n # /usr/share/kbd/consolefonts/
     echo "export LC_ALL=C LC_CTYPE=C LANGUAGE=C" | tee -a $HOME/.zshrc
     #echo "alias p='curl -F "'"sprunge=<-"'" sprunge.us'" | tee -a $HOME/.zshrc
     echo "alias p='curl -F "'"f:1=<-"'" ix.io'" | tee -a $HOME/.zshrc

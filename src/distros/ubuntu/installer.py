@@ -18,9 +18,9 @@ def initram_update_luks():
 
 #   1. Define variables
 ARCH = "amd64"
-RELEASE = "sid"
+RELEASE = "kinetic"
 KERNEL = ""
-packages = f"linux-image-{ARCH} btrfs-progs sudo curl python3 python3-anytree dhcpcd5 network-manager locales nano" # firmware-linux-nonfree os-prober
+packages = f"linux-image-generic btrfs-progs sudo curl python3 python3-anytree dhcpcd5 network-manager locales nano" # firmware-linux-nonfree os-prober
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
 tz = get_timezone()
@@ -31,38 +31,46 @@ hostname = get_hostname()
 pre_bootstrap()
 
 #   2. Bootstrap and install packages in chroot
-excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
-excode = os.system(f"sudo debootstrap --arch {ARCH} --exclude={excl} {RELEASE} /mnt http://ftp.debian.org/debian") ### --include={packages} ? --variant=minbase ?
+#excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
+excode = os.system(f"sudo debootstrap --arch {ARCH} --variant=minbase {RELEASE} /mnt http://archive.ubuntu.com/ubuntu") ### --print-debs --include={packages} ? TODO: --exclude={excl} causes errors
 if excode != 0:
     sys.exit("Failed to bootstrap!")
 
 #   Mount-points for chrooting
 ash_chroot()
 
+input("bp1 @@@@@@@@@@@@@@@@@@ is sources.list updated with all from live environment?") ### NOPE in /mnt/et/apt/src there is only one entry!
+###moved up    os.system("sudo cp -f /etc/apt/sources.list /mnt/etc/apt/sources.list") ### IS THIS NEEDED?
+
 # Install anytree and necessary packages in chroot
 os.system("sudo systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
-os.system(f"echo 'deb [trusted=yes] http://www.deb-multimedia.org {RELEASE} main' | sudo tee -a /mnt/etc/apt/sources.list.d/multimedia.list{DEBUG}")
-os.system("sudo chroot /mnt apt-get -y update -oAcquire::AllowInsecureRepositories=true")
+os.system(f"echo 'deb [trusted=yes] http://www.deb-multimedia.org stable main' | sudo tee -a /mnt/etc/apt/sources.list.d/multimedia.list{DEBUG}")
+os.system("sudo chroot /mnt add-apt-repository -y universe")
 os.system("sudo chroot /mnt apt-get -y install deb-multimedia-keyring --allow-unauthenticated")
+os.system("sudo chroot /mnt apt-get -y update -oAcquire::AllowInsecureRepositories=true") ### REVIEW swapped place with line above
 excode = os.system(f"sudo chroot /mnt apt-get -y install --fix-broken {packages}")
 if excode != 0:
     sys.exit("Failed to download packages!")
 if is_efi:
-    excode = os.system("sudo chroot /mnt apt-get -y install grub-efi") ### efibootmgr does get installed. Does this do it?
+    excode = os.system("sudo chroot /mnt apt-get -y install grub-efi") # includes efibootmgr
     if excode != 0:
         sys.exit("Failed to install grub!")
 else:
     excode = os.system("sudo chroot /mnt apt-get -y install grub-pc")
     if excode != 0:
         sys.exit("Failed to install grub!")
+# auto-remove packages at the end or include ash auto-remove function in ashpk.py
 
 #   3. Package manager database and config files
-os.system("sudo mv /mnt/var/lib/dpkg /mnt/usr/share/ash/db/")
+#os.system(f"sed 's/RELEASE/{RELEASE}/g' ./src/distros/{distro}/sources.list | sudo tee /mnt/etc/apt/sources.list") ### REVIEW here or right before/after bootstrapping? ### REVIEW Needed?
+#os.system("sudo sed -i '/cdrom/d' /mnt/etc/apt/sources.list")
+os.system("sudo mv /mnt/var/lib/dpkg /mnt/usr/share/ash/db/") ### how about /var/lib/apt ?
 os.system("sudo ln -srf /mnt/usr/share/ash/db/dpkg /mnt/var/lib/dpkg")
+#os.system(f"echo 'RootDir=/usr/share/ash/db/' | sudo tee -a /mnt/etc/apt/apt.conf") ### REVIEW I don't think this works?!
 
 #   4. Update hostname, hosts, locales and timezone, hosts
 os.system(f"echo {hostname} | sudo tee /mnt/etc/hostname")
-os.system(f"echo 127.0.0.1 {hostname} {distro} | sudo tee -a /mnt/etc/hosts")
+os.system(f"echo 127.0.0.1 {hostname} {distro} | sudo tee -a /mnt/etc/hosts") ### {distro} might not be needed
 #os.system("sudo chroot /mnt sudo localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
 os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
 os.system("sudo chroot /mnt sudo locale-gen")
