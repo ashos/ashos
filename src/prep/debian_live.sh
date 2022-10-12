@@ -10,11 +10,10 @@ main() {
     RELEASE="sid"
     prep_packages="btrfs-progs cryptsetup debootstrap dosfstools efibootmgr git ntp parted tmux"
 
-    sync_time
-    echo "Please wait for 30 seconds!"
-    sleep 30 # Wait before updating repo and downloading packages
-    fixdb
+  # attempt to install and if errors sync time and database
     apt-get -y --fix-broken install $prep_packages
+    [ $? ] && sync_time && echo "Please wait for 30 seconds!" && sleep 30 && fixdb && apt-get -y --fix-broken install $prep_packages
+
     configs
     #git clone http://github.com/ashos/ashos
     git config --global --add safe.directory $HOME/ashos # prevent fatal error "unsafe repository is owned by someone else"

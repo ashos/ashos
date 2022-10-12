@@ -1,14 +1,17 @@
 #!/bin/sh
 
 main() {
+    if [ $(id -u) -ne 0 ]; then echo "Please run as root!"; exit 1; fi
     if [ -z "$HOME" ]; then HOME=~ ; fi
-    prep_packages="git make fakeroot"
+    prep_packages="fakeroot git make tmux"
 
-    # Prevent error of running out of space in /
+  # Prevent error of running out of space in /
     mount / -o remount,size=4G /run/archiso/cowspace
-    #sync_time
-    fixdb
-    pacman -S --noconfirm $prep_packages
+
+  # attempt to install and if errors sync time and database
+    pacman -Syy --noconfirm $prep_packages
+    [ $? ] && sync_time && fixdb && pacman -S --noconfirm $prep_packages
+
     configs
     #git clone http://github.com/ashos/ashos
     #git config --global --add safe.directory ./ashos # prevent fatal error "unsafe repository is owned by someone else"
@@ -30,16 +33,20 @@ configs() {
 
 # Fix signature invalid error
 fixdb() {
-    # Ignore signature checking in pacman.conf (insecure) - use fix below (slow)
+  # Ignore signature checking in pacman.conf (insecure) - use fix below (slow)
     #sed -e '/^SigLevel/ s|^#*|SigLevel = Never\n#|' -i /etc/pacman.conf
     #sed -e '/^LocalFileSigLevel/ s|^#*|#|' -i /etc/pacman.conf
+    pacman -U /var/cache/pacman/pkg/archlinux-keyring*.pkg.tar.xz
     rm -rf /etc/pacman.d/gnupg ~/.gnupg
     rm -r /var/lib/pacman/db.lck
-    pacman -Syy
+    systemctl start haveged # otherwise --init step takes long
+    pacman-mirrors -f # --geoip
+    pacman -Syy --noconfirm gnupg
     gpg --refresh-keys
     killall gpg-agent
     pacman-key --init
     pacman-key --populate archlinux
+    pacman-key --refresh-keys
     pacman -Syvv --noconfirm archlinux-keyring
 }
 

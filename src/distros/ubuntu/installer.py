@@ -5,7 +5,7 @@ import subprocess
 import sys
 from src.installer_core import * # NOQA
 #from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_timezone, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
-from setup import args, distro
+from setup import args, distro, use_other_iso
 
 def initram_update_luks():
     if is_luks:
@@ -39,12 +39,10 @@ if excode != 0:
 #   Mount-points for chrooting
 ash_chroot()
 
-input("bp1 @@@@@@@@@@@@@@@@@@ is sources.list updated with all from live environment?") ### NOPE in /mnt/et/apt/src there is only one entry!
-###moved up    os.system("sudo cp -f /etc/apt/sources.list /mnt/etc/apt/sources.list") ### IS THIS NEEDED?
-
 # Install anytree and necessary packages in chroot
 os.system("sudo systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
 os.system(f"echo 'deb [trusted=yes] http://www.deb-multimedia.org stable main' | sudo tee -a /mnt/etc/apt/sources.list.d/multimedia.list{DEBUG}")
+os.system("sudo cp -afr /etc/apt/sources* /mnt/etc/apt/")
 os.system("sudo chroot /mnt add-apt-repository -y universe")
 os.system("sudo chroot /mnt apt-get -y install deb-multimedia-keyring --allow-unauthenticated")
 os.system("sudo chroot /mnt apt-get -y update -oAcquire::AllowInsecureRepositories=true") ### REVIEW swapped place with line above
