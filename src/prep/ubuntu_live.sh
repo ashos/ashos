@@ -4,15 +4,15 @@
 # 1024MB as otherwise it errors out (running out of cache/RAM space)
 
 main() {
+    if [ $(id -u) -ne 0 ]; then echo "Please run as root!"; exit 1; fi
     if [ -z "$HOME" ]; then HOME="/root" ; fi
     RELEASE="kinetic"
     prep_packages="debootstrap ntp tmux" # btrfs-progs
 
-    sync_time
-    echo "Please wait for 30 seconds!"
-    sleep 30 # Wait before updating repo and downloading packages
-    fixdb
+  # attempt to install and if errors sync time and database
     apt-get -y --fix-broken install $prep_packages
+    [ $? ] && sync_time && echo "Please wait for 30 seconds!" && sleep 30 && fixdb && apt-get -y --fix-broken install $prep_packages
+
     configs
     #git clone http://github.com/ashos/ashos
     #git config --global --add safe.directory ./ashos # prevent fatal error "unsafe repository is owned by someone else"
