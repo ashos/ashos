@@ -19,7 +19,7 @@ def initram_update_luks():
 #   1. Define variables
 ARCH = "x86_64"
 RELEASE = "rawhide"
-packages = "kernel dnf passwd sudo btrfs-progs python-anytree sqlite-tools \
+packages = "kernel dnf passwd sudo btrfs-progs python-anytree sqlite-tools linux-firmware \
             glibc-langpack-en glibc-locale-source dhcpcd NetworkManager"
 super_group = "wheel"
 v = "2" # GRUB version number in /boot/grubN
