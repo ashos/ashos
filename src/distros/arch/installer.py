@@ -16,6 +16,22 @@ def initram_update_luks():
                         -e 's|^FILES=(|FILES=(/etc/crypto_keyfile.bin|' /mnt/etc/mkinitcpio.conf")
         os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}")
 
+def pacstrap(pkg):
+    while True:
+        excode = int(os.system(f"sudo pacstrap /mnt --needed {pkg}"))
+        if excode:
+            inp = ""
+            print("Failed to strap package(s).\nRetry? (y/n)\n")
+            inp = input("> ")
+            while inp.casefold not in ["yes","y","no","n"]:
+                print("Failed to strap package(s).\nRetry? (y/n)\n")
+                inp = input("> ")
+            if inp in ["n","no"]:
+                return 1
+        else:
+            return 0
+            
+        
 #   1. Define variables
 KERNEL = "" # options: https://wiki.archlinux.org/title/kernel
 packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano linux-firmware" # os-prober bash tmux arch-install-scripts
@@ -30,7 +46,7 @@ pre_bootstrap()
 
 #   2. Bootstrap and install packages in chroot
 if KERNEL == "":
-    excode = os.system(f"sudo pacstrap /mnt --needed {packages}")
+    excode = pacstrap(packages)
 else:
     if KERNEL not in ("-hardened", "-lts", "-zen"): # AUR needs to be enabled
         subprocess.call(f'./src/distros/{distro}/aur/aurutils.sh', shell=True)
@@ -39,7 +55,7 @@ else:
 if excode != 0:
     sys.exit("Failed to bootstrap!")
 if is_efi:
-    excode = os.system("sudo pacstrap /mnt --needed efibootmgr")
+    excode = pacstrap(packages)
     if excode != 0:
         sys.exit("Failed to download packages!")
 
