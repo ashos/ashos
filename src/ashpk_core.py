@@ -367,7 +367,7 @@ def get_distro_suffix():
     if "ashos" in distro:
         return f'_{distro.replace("_ashos", "")}'
     else:
-        return ""
+        exit 1 ### REVIEW
 
 #   Get deployed snapshot
 def get_next_snapshot():
