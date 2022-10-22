@@ -55,7 +55,7 @@ else:
 if excode != 0:
     sys.exit("Failed to bootstrap!")
 if is_efi:
-    excode = pacstrap(packages)
+    excode = pacstrap("efibootmgr")
     if excode != 0:
         sys.exit("Failed to download packages!")
 
