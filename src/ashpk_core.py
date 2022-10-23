@@ -252,6 +252,7 @@ def delete_node(snapshots, quiet):
             print("F: Cannot delete deployed snapshot.")
         elif run == True:
             children = return_children(fstree, snapshot)
+            write_desc(snapshot, "") # Clear description
             os.system(f"btrfs sub del /.snapshots/boot/boot-{snapshot}{DEBUG}")
             os.system(f"btrfs sub del /.snapshots/etc/etc-{snapshot}{DEBUG}")
             os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}")
@@ -261,6 +262,7 @@ def delete_node(snapshots, quiet):
                 os.system(f"btrfs sub del /.snapshots/etc/etc-chr{snapshot}{DEBUG}")
                 os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snapshot}{DEBUG}")
             for child in children: # This deletes the node itself along with its children
+                write_desc(snapshot, "")
                 os.system(f"btrfs sub del /.snapshots/boot/boot-{child}{DEBUG}")
                 os.system(f"btrfs sub del /.snapshots/etc/etc-{child}{DEBUG}")
                 os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{child}{DEBUG}")
