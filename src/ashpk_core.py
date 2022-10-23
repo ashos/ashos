@@ -367,7 +367,7 @@ def get_distro_suffix():
     if "ashos" in distro:
         return f'_{distro.replace("_ashos", "")}'
     else:
-        sys.exit(1) ### REVIEW
+        sys.exit(1) ### REVIEW before: return ""
 
 #   Get deployed snapshot
 def get_next_snapshot():
@@ -1157,7 +1157,7 @@ def main():
         cloneunder_par.set_defaults(func=clone_under)
       # current snapshot
         cs_par = subparsers.add_parser("current", aliases=['c'], allow_abbrev=True, help='Show current snapshot number')
-        cs_par.set_defaults(func=get_current_snapshot)
+        cs_par.set_defaults(func=lambda: print(get_current_snapshot()))
       # branch
         branch_par = subparsers.add_parser("branch", aliases=['add-branch'], allow_abbrev=True, help='Create a new branch from snapshot')
         branch_par.add_argument("snapshot", type=int, help="snapshot number")

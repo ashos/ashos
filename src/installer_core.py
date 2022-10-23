@@ -74,8 +74,7 @@ def get_hostname():
 def get_multiboot(dist):
     clear()
     while True:
-        print("Please choose one of the following:\n1. Initiate a new AshOS install\n3. Adding to an already installed AshOS.")
-        print("Please be aware choosing option 1 will wipe root partition.")
+        print("Please choose one of the following options:\n1. Initiate a new AshOS install (wipes root partition)\n2. Add to an already installed AshOS.")
         i = input("> ")
         if i in ("1", "2"):
             return i, f"_{dist}"
