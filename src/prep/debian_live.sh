@@ -12,7 +12,7 @@ main() {
 
   # attempt to install and if errors sync time and database
     apt-get -y --fix-broken install $prep_packages
-    [ $? ] && sync_time && echo "Please wait for 30 seconds!" && sleep 30 && fixdb && apt-get -y --fix-broken install $prep_packages
+    [ $? != 0 ] && sync_time && echo "Please wait for 30 seconds!" && sleep 30 && fixdb && apt-get -y --fix-broken install $prep_packages
 
     configs
     #git clone http://github.com/ashos/ashos
