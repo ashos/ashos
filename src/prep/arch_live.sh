@@ -10,7 +10,7 @@ main() {
 
   # attempt to install and if errors sync time and database
     pacman -Syy --noconfirm $prep_packages
-    [ $? ] && sync_time && fixdb && pacman -S --noconfirm $prep_packages
+    [ $? != 0 ] && sync_time && fixdb && pacman -S --noconfirm $prep_packages
 
     configs
     #git clone http://github.com/ashos/ashos
