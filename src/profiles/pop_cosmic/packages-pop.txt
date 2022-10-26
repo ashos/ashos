@@ -1,0 +1,9 @@
+[packages]
+pop-cosmic
+gnome-shell-extension-cosmic-dock
+gnome-shell-extension-cosmic-workspaces
+#gnome-shell-extension-pop-shell ??? Not existing in debian/ubuntu/popos repos (only for arch based and Fedora-based distros?)
+
+###https://support.system76.com/articles/pop-shell/
+
+https://sourceforge.net/projects/refind/files/latest/download

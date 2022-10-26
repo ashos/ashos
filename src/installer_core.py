@@ -47,10 +47,10 @@ def deploy_to_common():
     if is_efi:
         os.system("sudo umount /mnt/boot/efi")
     os.system("sudo umount /mnt/boot")
-    os.system(f"sudo mount {btrfs_root} -o subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
+    os.system(f"sudo mount {os_root} -o subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/boot/boot-deploy/. /mnt/boot/")
     os.system("sudo umount /mnt/etc")
-    os.system(f"sudo mount {btrfs_root} -o subvol=@etc{distro_suffix},compress=zstd,noatime /mnt/.snapshots/etc/etc-deploy")
+    os.system(f"sudo mount {os_root} -o subvol=@etc{distro_suffix},compress=zstd,noatime /mnt/.snapshots/etc/etc-deploy")
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/etc/etc-deploy/. /mnt/etc/")
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/boot/boot-0/. /mnt/.snapshots/rootfs/snapshot-deploy/boot/")
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/etc/etc-0/. /mnt/.snapshots/rootfs/snapshot-deploy/etc/")
@@ -121,7 +121,7 @@ def get_username():
 def grub_ash(v):
     os.system(f"sudo sed -i 's/^GRUB_DISTRIBUTOR.*$/GRUB_DISTRIBUTOR=\"{distro_name}\"/' /mnt/etc/default/grub")
     if is_luks:
-        os.system("sudo sed -i 's/^#GRUB_ENABLE_CRYPTODISK.*$/GRUB_ENABLE_CRYPTODISK=y/' -i /mnt/etc/default/grub") ### -i
+        os.system("sudo sed -i 's/^#GRUB_ENABLE_CRYPTODISK.*$/GRUB_ENABLE_CRYPTODISK=y/' /mnt/etc/default/grub")
         os.system(f"sudo sed -i -E 's|^#?GRUB_CMDLINE_LINUX=\"|GRUB_CMDLINE_LINUX=\"cryptdevice=UUID={to_uuid(args[1])}:luks_root cryptkey=rootfs:/etc/crypto_keyfile.bin|' /mnt/etc/default/grub")
         os.system(f"sed -e 's|DISTRO|{distro}|' -e 's|LUKS_UUID_NODASH|{to_uuid(args[1]).replace('-', '')}|' \
                         -e '/^#/d' ./src/prep/grub_luks2.conf | sudo tee /mnt/etc/grub_luks2.conf")
@@ -164,7 +164,7 @@ def post_bootstrap(super_group):
         os.system("echo 'aur::False' | sudo tee -a /mnt/etc/ash.conf")
   # Update fstab
     for mntdir in mntdirs:
-        os.system(f"echo 'UUID=\"{to_uuid(btrfs_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{'' if mntdir else ',ro'} 0 0' | sudo tee -a /mnt/etc/fstab") # ro only for / entry ### complex but one-liner
+        os.system(f"echo 'UUID=\"{to_uuid(os_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{'' if mntdir else ',ro'} 0 0' | sudo tee -a /mnt/etc/fstab") # ro only for / entry ### complex but one-liner
     if is_efi:
         os.system(f"echo 'UUID=\"{to_uuid(args[3])}\" /boot/efi vfat umask=0077 0 2' | sudo tee -a /mnt/etc/fstab")
     os.system("echo '/.snapshots/ash/root /root none bind 0 0' | sudo tee -a /mnt/etc/fstab")
@@ -174,7 +174,7 @@ def post_bootstrap(super_group):
     os.system(f"sudo sed -i '0,/@etc{distro_suffix}/ s|@etc{distro_suffix}|@.snapshots{distro_suffix}/etc/etc-deploy|' /mnt/etc/fstab")
   # Copy common ash files and create symlinks
     os.system("sudo mkdir -p /mnt/.snapshots/ash/snapshots")
-    os.system(f"echo '{to_uuid(btrfs_root)}' | sudo tee /mnt/.snapshots/ash/part")
+    os.system(f"echo '{to_uuid(os_root)}' | sudo tee /mnt/.snapshots/ash/part")
     os.system(f"sudo cat ./src/ashpk_core.py ./src/distros/{distro}/ashpk.py > /mnt/.snapshots/ash/ash")
     os.system("sudo chmod +x /mnt/.snapshots/ash/ash")
     os.system("sudo cp -a ./src/detect_os.sh /mnt/.snapshots/ash/detect_os.sh")
@@ -202,18 +202,18 @@ def pre_bootstrap():
         print("--- Open LUKS partition --- ")
         os.system(f"sudo cryptsetup --allow-discards --persistent --type luks2 open {args[1]} luks_root")
     if choice != "3":
-        os.system(f"sudo mkfs.btrfs -L LINUX -f {btrfs_root}")
+        os.system(f"sudo mkfs.btrfs -L LINUX -f {os_root}")
   # Mount and create necessary sub-volumes and directories
     if choice != "3":
-        os.system(f"sudo mount -t btrfs {btrfs_root} /mnt")
+        os.system(f"sudo mount -t btrfs {os_root} /mnt")
     else:
-        os.system(f"sudo mount -o subvolid=5 {btrfs_root} /mnt")
+        os.system(f"sudo mount -o subvolid=5 {os_root} /mnt")
     for btrdir in btrdirs:
         os.system(f"sudo btrfs sub create /mnt/{btrdir}")
     os.system("sudo umount /mnt")
     for mntdir in mntdirs:
         os.system(f"sudo mkdir -p /mnt/{mntdir}") # -p to ignore /mnt exists complaint
-        os.system(f"sudo mount {btrfs_root} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
+        os.system(f"sudo mount {os_root} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
     for i in ("tmp", "root"):
         os.system(f"mkdir -p /mnt/{i}")
     for i in ("ash", "boot", "etc", "root", "rootfs", "tmp"):
@@ -244,7 +244,7 @@ def to_uuid(part):
 #   Unmount everything and finish
 def unmounts():
     os.system("sudo umount --recursive /mnt")
-    os.system(f"sudo mount {btrfs_root} -o subvolid=0 /mnt")
+    os.system(f"sudo mount {os_root} -o subvolid=0 /mnt")
     os.system(f"sudo btrfs sub del /mnt/@{distro_suffix}")
     os.system("sudo umount --recursive /mnt")
     if is_luks:
@@ -279,12 +279,12 @@ mntdirs = ["", ".snapshots", "boot", "etc", "home", "var"]
 is_luks = use_luks()
 is_efi = check_efi()
 if is_luks:
-    btrfs_root = "/dev/mapper/luks_root"
+    os_root = "/dev/mapper/luks_root"
     if is_efi:
         luks_grub_args = "luks2 btrfs part_gpt cryptodisk pbkdf2 gcry_rijndael gcry_sha512"
     else:
         luks_grub_args = "luks2 btrfs biosdisk part_msdos cryptodisk pbkdf2 gcry_rijndael gcry_sha512"
 else:
-    btrfs_root = args[1]
+    os_root = args[1]
     luks_grub_args = ""
 

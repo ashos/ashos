@@ -20,7 +20,7 @@ def initram_update_luks():
 ARCH = "amd64"
 RELEASE = "sid"
 KERNEL = ""
-packages = f"linux-image-{ARCH} btrfs-progs sudo curl python3 python3-anytree dhcpcd5 network-manager locales nano firmware-linux" # os-prober
+packages = f"linux-image-{ARCH} btrfs-progs sudo curl python3 python3-anytree dhcpcd5 network-manager locales nano firmware-linux" # firmware-linux-nonfree os-prober
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
 tz = get_timezone()
