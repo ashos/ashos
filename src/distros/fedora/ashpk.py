@@ -44,7 +44,8 @@ def install_package(snapshot, pkg):
 #   Install atomic-operation in live snapshot
 def install_package_live(snapshot, tmp, pkg):
     #options = snapshot_config_get(tmp)
-    return os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} sudo dnf -y install {pkg}{DEBUG}") ### TODO: --overwrite \\*
+    #ash_chroot_mounts(tmp) ### REVIEW If issues to have this in ashpk_core.py, uncomment this
+    return os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} sudo dnf -y reinstall {pkg}{DEBUG}") ### TODO: --overwrite '*'
 
 #   Get list of packages installed in a snapshot
 def pkg_list(CHR, snap):

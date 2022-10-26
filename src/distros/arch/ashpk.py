@@ -202,7 +202,8 @@ def install_package_live(snapshot, tmp, pkg):
                 print("F: Not enabling AUR for live snapshot!")
                 excode = 1
     else:
-        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite \\* --noconfirm {pkg}{DEBUG}")
+        #ash_chroot_mounts(tmp) ### REVIEW If issues to have this in ashpk_core.py, uncomment this
+        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite '*' --noconfirm {pkg}{DEBUG}") ### REVIEW Maybe just do this in try section and remove else section!
     return excode
 
 #   Get list of packages installed in a snapshot
