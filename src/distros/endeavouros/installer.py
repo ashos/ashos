@@ -7,16 +7,20 @@ from src.installer_core import * # NOQA
 #from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_timezone, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 from setup import args, distro
 
-def initram_update_luks():
+def initram_update():
     if is_luks:
         os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
         os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
         os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
         os.system("sudo sed -i -e '/^HOOKS/ s/filesystems/encrypt filesystems/' \
                         -e 's|^FILES=(|FILES=(/etc/crypto_keyfile.bin|' /mnt/etc/mkinitcpio.conf")
+    if is_format_btrfs: ### REVIEW TEMPORARY
+        os.system(f"sudo sed -i 's|^MODULES=(|MODULES=(btrfs|' /mnt/etc/mkinitcpio.conf") ### TODO if array not empty, needs to be "btrfs "
+    if is_luks or is_btrfs:
         os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}")
 
 #   1. Define variables
+is_format_btrfs = True
 KERNEL = "" # options: https://wiki.archlinux.org/title/kernel
 packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano linux-firmware" # os-prober bash tmux arch-install-scripts
 super_group = "wheel"
@@ -75,7 +79,7 @@ post_bootstrap(super_group)
 os.system("sudo chroot /mnt systemctl enable NetworkManager")
 
 #   6. Boot and EFI
-initram_update_luks()
+initram_update()
 grub_ash(v)
 
 #   BTRFS snapshots
