@@ -32,6 +32,7 @@
   * [LUKS](https://github.com/ashos/ashos#luks)
   * [Mutability toggle](https://github.com/ashos/ashos#mutability-toggle)
   * [Debugging ash](https://github.com/ashos/ashos#debugging-ash)
+  * [Debuggin installer](https://github.com/ashos/ashos#debugging-installer)
 * [Known bugs](https://github.com/ashos/ashos#known-bugs)
 * [Contributing](https://github.com/ashos/ashos#contributing)
 * [Community](https://github.com/ashos/ashos#community)
@@ -66,7 +67,7 @@ Ashes are one of the oldest trees in the world and they inspired naming AshOS.
 In AshOS, there are several keywords:
 * Vanilla: we try to be as close to the "vanilla" version of target distribution that is being installed.
 * Minimalism: we adhere to a lego build system. Start small and build as complex a system as you would like. The main focus of development is on having a solid minimal installed snapshot, based on which user can have infinite immutable permutations!
-* Generality: As we want the most common denominator between distros, when there is a choice between convenience and comprehensiveness/generality, we go with the latter. To clarify with an example, it might be easier to use grub-btrfs instead of implementing our own GRUB update mechanism, but because that particular package might not be available in all distros, we develop an AshOS specific solution. This way, we can potentially cater to any distro in future!
+* Generality: We strive to cater for the most common denominator between distros and architectures (x64, aarch64, sparc, etc). As such, when there is a choice between convenience and comprehensiveness/generality, we go with the latter. To clarify with an example, it might be easier to use grub-btrfs instead of implementing our own GRUB update mechanism, but because that particular package might not be readily available in all distros, we develop an AshOS specific solution. This way, we can potentially cater to any distro in future!
 
 **This has several advantages:**
 
@@ -499,6 +500,13 @@ Within the forest/tree of AshOS, one can make any snapshot (other than base `0`)
 ```
 sed -e 's| >/dev/null 2>&1||g' /usr/bin/ash > ashpk.py
 ```
+
+#### Debugging installer
+
+* While working on any OS development project, a lot of issues might come up. It's just the nature of debugging in this project and needs patience!
+* When facing issues in installer or after initial setup is done, go to GRUB and delete `quiet` from arguments
+* Boot using Ctrl+X and report what you observe
+* If possible, go to TTY2 by Ctrl+Alt+F2 and run `journalctl -b` and report back
 
 ## Known bugs
 
