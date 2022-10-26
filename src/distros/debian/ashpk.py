@@ -45,7 +45,7 @@ def install_package(snapshot, pkg):
 def install_package_live(snapshot, tmp, pkg):
     #options = snapshot_config_get(tmp)
     #ash_chroot_mounts(tmp) ### REVIEW If issues to have this in ashpk_core.py, uncomment this
-    return os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} apt-get install -y {pkg}{DEBUG}") ### TODO: --overwrite '*'
+    return os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} apt-get install -y {pkg}{DEBUG}") ### apt-get --reinstall install TODO: --overwrite '*'
 
 #   Get list of packages installed in a snapshot
 def pkg_list(CHR, snap):
