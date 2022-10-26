@@ -704,6 +704,7 @@ def refresh(snapshot):
     elif snapshot == "0":
         print("F: Changing base snapshot is not allowed.")
     else:
+        #sync_time() ### REVIEW At least required in virtualbox, otherwise error in package db update
         prepare(snapshot)
         excode = refresh_helper(snapshot)
         if excode == 0:
@@ -1273,7 +1274,7 @@ def main():
       # clear tmp
         tmpclear_par = subparsers.add_parser("tmp", aliases=["tmpclear"], allow_abbrev=True, help="Show ash tree")
         tmpclear_par.set_defaults(func=tmp_clear)
-      # Uninstall/remove package(s) from a snapshot
+      # Uninstall package(s) from a snapshot
         uninst_par = subparsers.add_parser("uninstall", aliases=["unin", "uninst", "unins", "un"], allow_abbrev=True, help='Uninstall package(s) from a snapshot')
         uninst_par.add_argument("snapshot", type=int, help="snapshot number")
         g1u = uninst_par.add_mutually_exclusive_group(required=True)

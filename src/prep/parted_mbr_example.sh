@@ -7,6 +7,7 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-parted --align minimal --script $1 mklabel msdos unit MiB mkpart primary \
-            ext4 1MiB 80% set 1 boot on mkpart primary ext4 80% 100%
+parted --align minimal --script $1 mklabel msdos unit MiB \
+        mkpart primary ext4 1MiB 80% set 1 boot on \
+        mkpart primary ext4 80% 100%
 

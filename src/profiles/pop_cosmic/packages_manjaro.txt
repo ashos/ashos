@@ -1,0 +1,8 @@
+sudo pacman-mirrors --api --set-branch unstable
+sudo pacman-mirrors --fasttrack 5 && sudo pacman -Syyu
+sudo pamac install gnome-shell-extension-pop-shell
+sudo pamac install cosmic
+sudo pacman -S paparius-folders
+papirus-folders -t Papirus-Dark -C darkcyan
+
+enable pop shell in settings>extensions
