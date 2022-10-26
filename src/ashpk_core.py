@@ -493,7 +493,7 @@ def install_live(snapshot, pkg):
     os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}")
     os.system(f"mount --bind /etc /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
     os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp{DEBUG}")
-###    ash_chroot_mounts(tmp) #this was the culprit for live install to fail. Investigate.
+    ash_chroot_mounts(tmp) ### REVIEW Not having this was the culprit for live install to fail for Arch and derivative. Now, does having this here Ok or does it cause errors in NON-Arch distros? If so move it to ashpk.py
     print("Please wait as installation is finishing.")
     excode = install_package_live(snapshot, tmp, pkg)
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
