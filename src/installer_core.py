@@ -47,7 +47,7 @@ def deploy_to_common():
     if is_efi:
         os.system("sudo umount /mnt/boot/efi")
     os.system("sudo umount /mnt/boot")
-    os.system(f"sudo mount {os_root} -o subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
+    os.system(f"sudo mount {external_boot if is_external_boot else os_root} -o subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/boot/boot-deploy/. /mnt/boot/")
     os.system("sudo umount /mnt/etc")
     os.system(f"sudo mount {os_root} -o subvol=@etc{distro_suffix},compress=zstd,noatime /mnt/.snapshots/etc/etc-deploy")
@@ -55,6 +55,22 @@ def deploy_to_common():
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/boot/boot-0/. /mnt/.snapshots/rootfs/snapshot-deploy/boot/")
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/etc/etc-0/. /mnt/.snapshots/rootfs/snapshot-deploy/etc/")
 
+#   Get external boot partition
+def get_external_boot():
+    clear()
+    while True:
+        print("Enter your external /boot partition (e.g.: /dev/sda3):")
+        e = input("> ")
+        if e:
+            print("Happy with your external boot partition? (y/n)")
+            reply = input("> ")
+            if reply.casefold() == "y":
+                break
+            else:
+                continue
+    return e
+
+# Get hostname from user
 def get_hostname():
     clear()
     while True:
@@ -213,7 +229,7 @@ def pre_bootstrap():
     os.system("sudo umount /mnt")
     for mntdir in mntdirs:
         os.system(f"sudo mkdir -p /mnt/{mntdir}") # -p to ignore /mnt exists complaint
-        os.system(f"sudo mount {os_root} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
+        os.system(f'sudo mount {external_boot if is_external_boot and mntdir == "boot" else os_root} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}')
     for i in ("tmp", "root"):
         os.system(f"mkdir -p /mnt/{i}")
     for i in ("ash", "boot", "etc", "root", "rootfs", "tmp"):
@@ -250,6 +266,21 @@ def unmounts():
     if is_luks:
         os.system("sudo cryptsetup close luks_root")
 
+def use_external_boot():
+    clear()
+    while True:
+        print("Would you like to use external boot partition? (y/n)")
+        reply = input("> ")
+        if reply.casefold() == "y":
+            e = True
+            break
+        elif reply.casefold() == "n":
+            e = False
+            break
+        else:
+            continue
+    return e
+
 def use_luks():
     clear()
     while True:
@@ -278,6 +309,9 @@ btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@boot{distro_su
 mntdirs = ["", ".snapshots", "boot", "etc", "home", "var"]
 is_luks = use_luks()
 is_efi = check_efi()
+is_external_boot = use_external_boot()
+if is_external_boot:
+    external_boot = get_external_boot()
 if is_luks:
     os_root = "/dev/mapper/luks_root"
     if is_efi:
