@@ -229,7 +229,15 @@ def pre_bootstrap():
     os.system("sudo umount /mnt")
     for mntdir in mntdirs:
         os.system(f"sudo mkdir -p /mnt/{mntdir}") # -p to ignore /mnt exists complaint
-        os.system(f'sudo mount {external_boot if is_external_boot and mntdir == "boot" else os_root} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}')
+###        os.system(f'sudo mount {external_boot if is_external_boot and mntdir == "boot" else os_root} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}')
+
+        input("bpZZZZZZZZZ0")
+
+        os.system(f'sudo mount {external_boot if is_external_boot and mntdir == "boot" else os_root} \
+                    -o {"subvol="+btrdirs[mntdirs.index(mntdir)]+"," if not (is_external_boot and mntdir == "boot") else ""}compress=zstd,noatime /mnt/{mntdir}')
+
+        input("bpZZZZZZZZZ1")
+
     for i in ("tmp", "root"):
         os.system(f"mkdir -p /mnt/{i}")
     for i in ("ash", "boot", "etc", "root", "rootfs", "tmp"):
