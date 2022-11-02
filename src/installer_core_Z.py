@@ -47,7 +47,25 @@ def deploy_to_common():
     if is_efi:
         os.system("sudo umount /mnt/boot/efi")
     os.system("sudo umount /mnt/boot")
-    os.system(f'sudo mount {external_boot if is_external_boot else os_root} -o {"subvol="+f"@boot{distro_suffix}"+"," if not is_external_boot else ""}compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy')
+
+###    os.system(f'sudo mount {external_boot if is_external_boot else os_root} -o subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy')
+
+    input("bpXXXXXXXXXXXX0")
+
+    os.system(f'sudo mount {external_boot if is_external_boot else os_root} -o {"subvol="+f"@boot{distro_suffix}"+"," if not is_exernal_boot else ""}compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy')
+
+    input("bpXXXXXXXXXXXX1")
+
+###    print("subvol="+"@myvar"+"," if not is_ex else "")  # <---- text
+###    print("subvol="+myvar+"," if not is_ex else "")   # <--- var
+    
+###    print("subvol="+f"@myvar{ssssssssss}"+"," if not is_ex else "")  # <---- THIS WORKZZZZZZZZZ
+
+
+###    os.system(f'sudo mount {external_boot if is_external_boot and mntdir == "boot" else os_root} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}')
+
+###    os.system(f'sudo mount {external_boot if is_external_boot and mntdir == "boot" else os_root} -o {"subvol="+btrdirs[mntdirs.index(mntdir)]+"," if not (is_external_boot and mntdir == "boot") else ""}compress=zstd,noatime /mnt/{mntdir}')
+
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/boot/boot-deploy/. /mnt/boot/")
     os.system("sudo umount /mnt/etc")
     os.system(f"sudo mount {os_root} -o subvol=@etc{distro_suffix},compress=zstd,noatime /mnt/.snapshots/etc/etc-deploy")
@@ -229,8 +247,16 @@ def pre_bootstrap():
     os.system("sudo umount /mnt")
     for mntdir in mntdirs:
         os.system(f"sudo mkdir -p /mnt/{mntdir}") # -p to ignore /mnt exists complaint
+
+###        os.system(f'sudo mount {external_boot if is_external_boot and mntdir == "boot" else os_root} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}')
+
+        input("bpZZZZZZZZZ0")
+
         os.system(f'sudo mount {external_boot if is_external_boot and mntdir == "boot" else os_root} \
                     -o {"subvol="+btrdirs[mntdirs.index(mntdir)]+"," if not (is_external_boot and mntdir == "boot") else ""}compress=zstd,noatime /mnt/{mntdir}')
+
+        input("bpZZZZZZZZZ1")
+
     for i in ("tmp", "root"):
         os.system(f"mkdir -p /mnt/{i}")
     for i in ("ash", "boot", "etc", "root", "rootfs", "tmp"):
