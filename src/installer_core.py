@@ -144,9 +144,7 @@ def grub_ash(v):
   # grub-install rewrites default core.img, so run grub-mkimage AFTER!
     if distro != "fedora": # https://bugzilla.redhat.com/show_bug.cgi?id=1917213
         if is_efi:
-            #os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --modules="{luks_grub_args}"')
             os.system(f'sudo chroot /mnt sudo grub{v}-install {external_boot if is_external_boot else args[2]} --bootloader-id={distro} --modules="{luks_grub_args}" --target=x86_64-efi') # --efi-directory=/boot/efi
-            
         else:
             os.system(f'sudo chroot /mnt sudo grub{v}-install {external_boot if is_external_boot else args[2]} --bootloader-id={distro} --modules="{luks_grub_args}"') ### REVIEW: specifying --target for non-uefi needed?
     if is_luks: # Make LUKS2 compatible grub image
@@ -154,7 +152,7 @@ def grub_ash(v):
             os.system(f'sudo chroot /mnt sudo grub{v}-mkimage -p "(crypto0)/@boot_{distro}/grub{v}" -O x86_64-efi -c /etc/grub_luks2.conf -o /boot/efi/EFI/{distro}/grubx64.efi {luks_grub_args}') # without '/grub' gives error normal.mod not found (maybe only one of these here and grub_luks2.conf is enough?!)
         else:
             os.system(f'sudo chroot /mnt sudo grub{v}-mkimage -p "(crypto0)/@boot_{distro}/grub{v}" -O i386-pc -c /etc/grub_luks2.conf -o /boot/grub{v}/i386-pc/core_luks2.img {luks_grub_args}') # without '/grub' gives error normal.mod not found (maybe only one of these here and grub_luks2.conf is enough?!) ### 'biosdisk' module not needed eh?
-            os.system(f'dd oflag=seek_bytes seek=512 if=/mnt/boot/grub{v}/i386-pc/core_luks2.img of={args[2]}') ### TODO: {external_boot} if is_external_boot else {args[2]}
+            os.system(f'dd oflag=seek_bytes seek=512 if=/mnt/boot/grub{v}/i386-pc/core_luks2.img of={external_boot if is_external_boot else args[2]}')
     os.system(f"sudo chroot /mnt sudo grub{v}-mkconfig {external_boot if is_external_boot else args[2]} -o /boot/grub{v}/grub.cfg")
     os.system(f"sudo mkdir -p /mnt/boot/grub{v}/BAK") # Folder for backing up grub configs created by ashpk
     os.system(f"sudo sed -i 's|subvol=@{distro_suffix}|subvol=@.snapshots{distro_suffix}/rootfs/snapshot-deploy|g' /mnt/boot/grub{v}/grub.cfg")
