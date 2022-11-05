@@ -15,6 +15,6 @@ mkfs.vfat -F32 -n EFI ${1}1
 
 # External boot partition
 #parted --align minimal --script $2 mklabel gpt unit MiB \
-        mkpart primary ext4 0% 100%
+#        mkpart primary ext4 0% 100%
 #mkfs.btrfs -L BOOT ${2}1
 
