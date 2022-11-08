@@ -885,6 +885,9 @@ def switch_distro():
             print("Invalid distro!")
             continue
 
+def switch_to_windows():
+    os.system(f"efibootmgr -c -L 'Windows' -l '\\EFI\\BOOT\\BOOTX64.efi'")
+
 #   Switch between /tmp deployments
 def switch_tmp():
     distro_suffix = get_distro_suffix()
@@ -1228,6 +1231,9 @@ def main():
         desc_par.add_argument("snapshot", type=int, help="snapshot number")
         desc_par.add_argument("desc", nargs='+', help="description to be added")
         desc_par.set_defaults(func=lambda snapshot, desc: write_desc(snapshot, " ".join(desc)))
+      # semi plausible deniability
+        hide_par = subparsers.add_parser("hide", allow_abbrev=False, help="Hide AshOS and switch to Windows")
+        hide_par.set_defaults(func=switch_to_windows)
       # "refresh", "ref"
         ref_par = subparsers.add_parser("refresh", aliases=["ref"], allow_abbrev=True, help='Refresh package manager db of a snapshot')
         ref_par.add_argument("snapshot", type=int, help="snapshot number")
