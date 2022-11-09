@@ -309,14 +309,14 @@ def deploy(snapshot):
                 source_path = f"/.snapshots/mutable_dirs/snapshot-{snapshot}/{mount_path}"
                 os.system(f"mkdir -p /.snapshots/mutable_dirs/snapshot-{snapshot}/{mount_path}")
                 os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mount_path}")
-                os.system(f"echo '{source_path} {mount_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
+                os.system(f"echo '{source_path} /{mount_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
       # Same thing but for shared directories
         if mutable_dirs_shared:
             for mount_path in mutable_dirs_shared:
                 source_path = f"/.snapshots/mutable_dirs/{mount_path}"
                 os.system(f"mkdir -p /.snapshots/mutable_dirs/{mount_path}")
                 os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mount_path}")
-                os.system(f"echo '{source_path} {mount_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
+                os.system(f"echo '{source_path} /{mount_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
         os.system(f"btrfs sub snap /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}") ### Is this needed?
         os.system(f"echo '{snapshot}' > /.snapshots/rootfs/snapshot-{tmp}/usr/share/ash/snap")
         switch_tmp()
