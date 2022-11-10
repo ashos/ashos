@@ -1034,7 +1034,10 @@ def update_boot(snapshot, secondary = False):
     else:
         tmp = get_tmp()
         if secondary:
-            tmp += "secondary"
+            if "secondary" in tmp:
+                tmp = tmp.replace("secondary", "")
+            else:
+                tmp += "secondary"
         part = get_part()
         prepare(snapshot)
         if os.path.exists(f"/boot/{GRUB}/BAK/"):
