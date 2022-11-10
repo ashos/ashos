@@ -13,16 +13,17 @@ from re import sub
 # Directories
 # All snapshots share one /var
 # global boot is always at @boot
-# *-deploy and *-deploy-aux         : temporary directories used to boot deployed snapshot
-# *-chr                             : temporary directories used to chroot into snapshot or copy snapshots around
-# /.snapshots/ash/ash               : symlinked to /usr/bin/ash
-# /.snapshots/etc/etc-*             : individual /etc for each snapshot
-# /.snapshots/boot/boot-*           : individual /boot for each snapshot
-# /.snapshots/rootfs/snapshot-*     : snapshots
-# /.snapshots/ash/snapshots/*-desc  : descriptions
-# /usr/share/ash                    : files that store current snapshot info
-# /usr/share/ash/db                 : package database
-# /var/lib/ash(/fstree)             : ash files, stores fstree, symlink to /.snapshots/ash
+# *-deploy and *-deploy-aux                     : temporary directories used to boot deployed snapshot
+# *-deploy-secondary and *-deploy-aux-secondary : temporary directories used to boot secondary deployed snapshot
+# *-chr                                         : temporary directories used to chroot into snapshot or copy snapshots around
+# /.snapshots/ash/ash                           : symlinked to /usr/bin/ash
+# /.snapshots/etc/etc-*                         : individual /etc for each snapshot
+# /.snapshots/boot/boot-*                       : individual /boot for each snapshot
+# /.snapshots/rootfs/snapshot-*                 : snapshots
+# /.snapshots/ash/snapshots/*-desc              : descriptions
+# /usr/share/ash                                : files that store current snapshot info
+# /usr/share/ash/db                             : package database
+# /var/lib/ash(/fstree)                         : ash files, stores fstree, symlink to /.snapshots/ash
 # Failed prompts start with "F: "
 
 distro = subprocess.check_output(['/usr/bin/detect_os.sh', 'id']).decode('utf-8').replace('"', "").strip()
@@ -275,18 +276,15 @@ def delete_node(snapshots, quiet):
             print(f"Snapshot {snapshot} removed.")
 
 #   Deploy snapshot
-def deploy(snapshot):
+def deploy(snapshot, secondary=False):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
         print(f"F: Cannot deploy as snapshot {snapshot} doesn't exist.")
     else:
-        update_boot(snapshot)
+        update_boot(snapshot, secondary)
         tmp = get_tmp()
         os.system(f"btrfs sub set-default /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") # Set default volume
-        tmp_delete()
-        if "deploy-aux" in tmp:
-            tmp = "deploy"
-        else:
-            tmp = "deploy-aux"
+        tmp_delete(secondary)
+        tmp = get_aux_tmp(tmp, secondary)
       # Special mutable directories
         options = snapshot_config_get(snapshot)
         mutable_dirs = options["mutable_dirs"].split(',').remove('')
@@ -319,7 +317,7 @@ def deploy(snapshot):
                 os.system(f"echo '{source_path} /{mount_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
         os.system(f"btrfs sub snap /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}") ### Is this needed?
         os.system(f"echo '{snapshot}' > /.snapshots/rootfs/snapshot-{tmp}/usr/share/ash/snap")
-        switch_tmp()
+        switch_tmp(secondary)
         init_system_clean(tmp, "deploy")
         os.system(f"btrfs sub set-default /.snapshots/rootfs/snapshot-{tmp}") # Set default volume
         print(f"Snapshot {snapshot} deployed to /.")
@@ -372,11 +370,8 @@ def get_distro_suffix():
         sys.exit(1) ### REVIEW before: return ""
 
 #   Get deployed snapshot
-def get_next_snapshot():
-    if "deploy-aux" in get_tmp():
-        d = "deploy"
-    else:
-        d = "deploy-aux"
+def get_next_snapshot(secondary=False):
+    d = get_aux_tmp(get_tmp(), secondary)
 
     if os.path.exists("/.snapshots/rootfs/snapshot-{d}/usr/share/ash/snap"): # Make sure next snapshot exists
         with open(f"/.snapshots/rootfs/snapshot-{d}/usr/share/ash/snap", "r") as csnapshot:
@@ -394,10 +389,14 @@ def get_part():
         return subprocess.check_output(f"blkid | grep '{cpart.read().rstrip()}' | awk -F: '{{print $1}}'", shell=True).decode('utf-8').strip()
 
 #   Get tmp partition state
-def get_tmp(console=False): # By default just return which deployment is running
+def get_tmp(console=False, secondary=False): # By default just return which deployment is running
     mount = str(subprocess.check_output("cat /proc/mounts | grep ' / btrfs'", shell=True))
-    if "deploy-aux" in mount:
+    if "deploy-aux-secondary" in mount:
+        r = "deploy-aux-secondary"
+    else if "deploy-aux" in mount:
         r = "deploy-aux"
+    else if "deploy-secondary" in mount:
+        r = "deploy-secondary"
     else:
         r = "deploy"
     if console:
@@ -405,6 +404,19 @@ def get_tmp(console=False): # By default just return which deployment is running
     else:
         return r
 
+#   Get aux tmp
+def get_aux_tmp(tmp, secondary=False):
+    if "deploy-aux" in tmp:
+        tmp = tmp.replace("deploy-aux", "deploy")
+    else:
+        tmp = tmp.replace("deploy", "deploy-aux")
+    if secondary:
+        if "secondary" in tmp:
+            tmp = tmp.replace("secondary", "")
+        else:
+            tmp += secondary
+    return tmp
+    
 #   Make a snapshot vulnerable to be modified even further (snapshot should be deployed as mutable)
 def hollow(s):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{s}"):
@@ -504,7 +516,7 @@ def install_live(snapshot, pkg):
         print("F: Live installation failed!")
 
 #   Install a profile from a text file
-def install_profile(snapshot, profile):
+def install_profile(snapshot, profile, secondary=False):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
         print(f"F: Cannot install as snapshot {snapshot} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"): # Make sure snapshot is not in use by another ash process
@@ -529,7 +541,7 @@ def install_profile(snapshot, profile):
             post_transactions(snapshot)
             print(f"Profile {profile} installed in snapshot {snapshot} successfully.")
             print(f"Deploying snapshot {snapshot}.")
-            deploy(snapshot)
+            deploy(snapshot, secondary)
 
 #   Install profile in live snapshot
 def install_profile_live(profile):
@@ -886,18 +898,14 @@ def switch_distro():
             continue
 
 #   Switch between /tmp deployments
-def switch_tmp():
+def switch_tmp(secondary=False):
     distro_suffix = get_distro_suffix()
     part = get_part()
     tmp_boot = subprocess.check_output("mktemp -d -p /.snapshots/tmp boot.XXXXXXXXXXXXXXXX", shell=True).decode('utf-8').strip()
     os.system(f"mount {part} -o subvol=@boot{distro_suffix} {tmp_boot}") # Mount boot partition for writing
   # Swap deployment subvolumes: deploy <-> deploy-aux
-    if "deploy-aux" in get_tmp():
-        source_dep = "deploy-aux"
-        target_dep = "deploy"
-    else:
-        source_dep = "deploy"
-        target_dep = "deploy-aux"
+    source_dep = get_tmp()
+    target_dep = get_aux_tmp(get_tmp(), secondary)
     os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{target_dep}/boot/. {tmp_boot}")
     os.system(f"sed -i 's|@.snapshots{distro_suffix}/rootfs/snapshot-{source_dep}|@.snapshots{distro_suffix}/rootfs/snapshot-{target_dep}|g' {tmp_boot}/{GRUB}/grub.cfg") # Overwrite grub config boot subvolume
     os.system(f"sed -i 's|@.snapshots{distro_suffix}/rootfs/snapshot-{source_dep}|@.snapshots{distro_suffix}/rootfs/snapshot-{target_dep}|g' /.snapshots/rootfs/snapshot-{target_dep}/boot/{GRUB}/grub.cfg")
@@ -993,12 +1001,9 @@ def tmp_clear():
     os.system("btrfs sub del /.snapshots/rootfs/snapshot-chr*{DEBUG}")
 
 #   Clean tmp dirs
-def tmp_delete():
+def tmp_delete(secondary=False):
     tmp = get_tmp()
-    if "deploy-aux" in tmp:
-        tmp = "deploy"
-    else:
-        tmp = "deploy-aux"
+    tmp = get_aux_tmp(tmp, secondary)
     os.system(f"btrfs sub del /.snapshots/boot/boot-{tmp}{DEBUG}")
     os.system(f"btrfs sub del /.snapshots/etc/etc-{tmp}{DEBUG}")
     #os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}") # error: Not a Btrfs subvolume
@@ -1023,11 +1028,13 @@ def uninstall_package(snapshot, pkg):
             print("F: Remove failed and changes discarded.")
 
 #   Update boot
-def update_boot(snapshot):
+def update_boot(snapshot, secondary = False):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
         print(f"F: Cannot update boot as snapshot {snapshot} doesn't exist.")
     else:
         tmp = get_tmp()
+        if secondary:
+            tmp += "secondary"
         part = get_part()
         prepare(snapshot)
         if os.path.exists(f"/boot/{GRUB}/BAK/"):
@@ -1169,6 +1176,7 @@ def main():
       # deploy
         dep_par = subparsers.add_parser("deploy", aliases=['dep', 'd'], allow_abbrev=True, help='Deploy a snapshot for next boot')
         dep_par.add_argument("snapshot", type=int, help="snapshot number")
+        dep_par.add_argument('--secondary', '-s', action='store_false', required=False, help='Deploy into secondary snapshot slot')
         dep_par.set_defaults(func=deploy)
       # diff two snapshots
         diff_par = subparsers.add_parser("diff", aliases=['dif'], allow_abbrev=True, help='Show package diff between snapshots')
