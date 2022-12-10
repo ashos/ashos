@@ -1,7 +1,7 @@
 <p align="center">
   <img src="res/logos/logo.png" alt="AshOS">
   <br>
-  [<a href="res/docs/README_CZ.md">Čeština</a>] | [<a href="res/docs/README_zh-CN.md">中文</a>] | [<a href="res/docs/README_FA.md">فارسی</a>]
+  [<a href="res/docs/README_CZ.md">Čeština</a>] | [<a href="res/docs/README_zh-CN.md">中文</a>] | [<a href="res/docs/README_FA.md">پارسی</a>]
   <br>
   <b>We need your help to translate this README. <a href="https://github.com/i2/ashos-dev/tree/main/res/docs">Look here!</a></b>
 </p>
@@ -12,10 +12,14 @@
 
 ---
 
+**Please note that, for the purpose of this project, conforming to 'pythonic' way was not a goal as in future, implementation might change to Rust, C, C++, etc. We would like to be as close to POSIX-compliant sans-bashism shell as possible.**
+
+---
+
 ## Table of contents
 * [What is AshOS?](https://github.com/ashos/ashos#what-is-ashos)
 * [AshOS compared to other similar distributions](https://github.com/ashos/ashos#ashos-compared-to-other-similar-distributions)
-* [ash and AshOS documentation](https://github.com/ashos/ashos#additional-documentation)
+* [ash and AshOS documentation](https://github.com/ashos/ashos#ashos-documentation)
   * [Installation](https://github.com/ashos/ashos#installation)
   * [Post installation](https://github.com/ashos/ashos#post-installation-setup)
   * [Snapshot management and deployments](https://github.com/ashos/ashos#snapshot-management)
@@ -157,8 +161,8 @@ python3 setup.py /dev/<root_partition> /dev/<drive> [/dev/<efi part>] [distro_id
 
 Here are 3 example scenarios:
 
-example 1 (BIOS): python3 setup.py /dev/vda1 /dev/sda
-This is a simpe case when using same distro's iso file
+example 1 (BIOS): python3 setup.py /dev/vda1 /dev/vda
+This is a simple case when iso from the `same distro` is used
 
 example 2 (UEFI): python3 setup.py /dev/nvm0p2 /dev/nvm0 /dev/nvm0p1 fedora "Fedora Linux"
 When installing a distro using another distro's iso, the last two arguments are necessary
@@ -189,6 +193,7 @@ The arguments inside square brackets are optional. Regarding the fourth argument
 * **Ideally, we would like to keep Ash as a single file executable**
 * ash script is divided into 2 files: common code (ashpk_core.py) and distro specific code (i.e gentoo.py). Note that neither of these files can be run standalone (import one script into the other is not intended). The division is just to ease using files as templates in developing Ash for other distributions. At the time of installing a distro, the two files are simply concatenated.
 * To not need additional fonts, we use ASCII style when printing ash tree. For a nicer output, feel free to replace AsciiStyle() with ContStyle(), ContRoundStyle(), or DoubleStyle()
+* The other nice thing about AshOS is your related-distros are very similarly built. For instance, installer for Arch and Manjaro are very similar, difference just being the package repos!
 
 #### Base snapshot
 * The snapshot ```0``` is reserved for the base system snapshot, it cannot be changed and can only be updated using ```ash base-update```
@@ -533,7 +538,7 @@ sudo chmod 666 /var/run/docker.sock
 * When adding contributing code to the project, always follow fork-and-clone approach: Fork the main organizational repo (ashos/ashos) under your personal git, make the changes, push your changes to your git, and finally create a pull request back to main repo.
 
 # Community
-* Please feel free to join us on [Discord](https://discord.gg/YVHEC6XNZw) for further discussion and support!
+* Please feel free to join us on [Matrix](https://matrix.to/#/#ashos:matrix.org) or [Discord](https://discord.gg/YVHEC6XNZw) for further discussion and support!
 * Happy worry-free snapshotting!
 
 # ToDos
@@ -607,4 +612,3 @@ ash fixdb <snapshots>
 
 **This project is licensed under the AGPLv3.**
 
-**Please note that, for the purpose of this project, comforming to 'pythonic' way was not a goal as in future, implementation might change to Rust, C, C++, etc. We would like to be as close to POSIX-compliant sans-bashism shell as possible.**
