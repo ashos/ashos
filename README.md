@@ -612,3 +612,7 @@ ash fixdb <snapshots>
 
 **This project is licensed under the AGPLv3.**
 
+## Stargazers over time
+
+[![Stargazers over time](https://starchart.cc/ashos/ashos.svg)](https://starchart.cc/ashos/ashos)
+
