@@ -13,6 +13,7 @@ main() {
   # attempt to install and if errors sync time and database
 
     systemctl start tor
+    apt-get -y update
     apt-get -y --fix-broken install --no-install-recommends $prep_packages
     [ $? != 0 ] && sync_time && echo "Please wait for 30 seconds!" && sleep 30 && fixdb && apt-get -y --fix-broken install --no-install-recommends $prep_packages
 
@@ -75,7 +76,7 @@ multimedia_keyring() {
     if [ ! -f "/etc/apt/trusted.gpg.d/deb-multimedia-keyring.gpg" ]; then
 	if [ -x "$(command -v curl)" ]; then
 	    curl --tlsv1.3 --proto =https --max-time 180 --output "$PWD"/deb-multimedia-keyring.deb https://archive.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2016.8.1_all.deb
-	    apt-get install --no-install-recommends "$PWD"/deb-multimedia-keyring.deb
+	    apt-get -y install --no-install-recommends "$PWD"/deb-multimedia-keyring.deb
         else
 	    echo "F: deb-multimedia signing key unavailable."
 	fi
