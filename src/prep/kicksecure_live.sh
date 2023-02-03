@@ -12,14 +12,14 @@ main() {
 
   # attempt to install and if errors sync time and database
 
-    systemctl start tor
     apt-get -y update
     apt-get -y --fix-broken install --no-install-recommends $prep_packages
     [ $? != 0 ] && sync_time && echo "Please wait for 30 seconds!" && sleep 30 && fixdb && apt-get -y --fix-broken install --no-install-recommends $prep_packages
 
     configs
-    multimedia_keyring
+    systemctl start tor
     kicksecure_signing
+    multimedia_keyring
     #git clone http://github.com/ashos/ashos
     git config --global --add safe.directory $HOME/ashos # prevent fatal error "unsafe repository is owned by someone else"
     #cd ashos
