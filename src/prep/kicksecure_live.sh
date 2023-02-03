@@ -17,7 +17,8 @@ main() {
     [ $? != 0 ] && sync_time && echo "Please wait for 30 seconds!" && sleep 30 && fixdb && apt-get -y --fix-broken install --no-install-recommends $prep_packages
 
     configs
-    sign_kicksecure
+    multimedia_keyring
+    kicksecure_signing
     #git clone http://github.com/ashos/ashos
     git config --global --add safe.directory $HOME/ashos # prevent fatal error "unsafe repository is owned by someone else"
     #cd ashos
@@ -58,14 +59,25 @@ sync_time() {
     fi
 }
 
-# kicksecure signing key
-sign_kicksecure() {
+# Kicksecure signing key
+kicksecure_signing() {
     if [ ! -f "/usr/share/keyrings/derivative.asc" ]; then
         if [ -x "$(command -v curl)" ]; then
             curl --tlsv1.3 --proto =https --max-time 180 --output "$PWD"/derivative.asc https://www.kicksecure.com/keys/derivative.asc
 	    cp "$PWD"/derivative.asc /usr/share/keyrings/derivative.asc
         else
 	    echo "F: kicksecure signing key unavailable."
+	fi
+    fi
+}
+# Debian multimedia keyring
+multimedia_keyring() {
+    if [ ! -f "/etc/apt/trusted.gpg.d/deb-multimedia-keyring.gpg" ]; then
+	if [ -x "$(command -v curl)" ]; then
+	    curl --tlsv1.3 --proto =https --max-time 180 --output "$PWD"/deb-multimedia-keyring.deb https://archive.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2016.8.1_all.deb
+	    apt-get install --no-install-recommends "$PWD"/deb-multimedia-keyring.deb
+        else
+	    echo "F: deb-multimedia signing key unavailable."
 	fi
     fi
 }
