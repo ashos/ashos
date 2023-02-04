@@ -9,11 +9,12 @@ from setup import args, distro
 
 def initram_update_luks():
     if is_luks:
-        #os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
-        #os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
-        #os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
-        #os.system("sudo sed -i -e 's|^#KEYFILE_PATTERN=|KEYFILE_PATTERN="/etc/crypto_keyfile.bin"|' /mnt/etc/cryptsetup-initramfs/conf-hook")
-        #os.system("sudo chroot /mnt echo UMASK=0077 >> /etc/initramfs-tools/initramfs.conf")
+        os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
+        os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
+        os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
+        os.system("sudo sed -i -e 's|^#KEYFILE_PATTERN=|KEYFILE_PATTERN='/etc/crypto_keyfile.bin'|' /mnt/etc/cryptsetup-initramfs/conf-hook")
+        os.system("sudo echo UMASK=0077 >> /mnt/etc/initramfs-tools/initramfs.conf")
+        os.system("sudo echo 'cryptroot ${args[1]}  /etc/crypto_keyfile.bin luks.discard.key-slot=1' >> /mnt/etc/crypttab")
         os.system(f"sudo chroot /mnt update-initramfs -u")
 
 #   1. Define variables
