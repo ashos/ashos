@@ -12,9 +12,9 @@ def initram_update_luks():
         os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
         os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
         os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
-        os.system("sudo sed -i -e '/^HOOKS/ s/filesystems/encrypt filesystems/' \
-                        -e 's|^FILES=(|FILES=(/etc/crypto_keyfile.bin|' /mnt/etc/mkinitcpio.conf")
-        os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}")
+        os.system("sudo sed -i -e 's|^#KEYFILE_PATTERN=|KEYFILE_PATTERN="/etc/crypto_keyfile.bin"|' /mnt/etc/cryptsetup-initramfs/conf-hook")
+        os.system("sudo chroot /mnt echo UMASK=0077 >> /etc/initramfs-tools/initramfs.conf")
+        os.system(f"sudo chroot /mnt update-initramfs -u")
 
 #   1. Define variables
 ARCH = "amd64"
@@ -73,11 +73,11 @@ os.system("sudo chroot /mnt sudo hwclock --systohc")
 #   Post bootstrap
 post_bootstrap(super_group)
 
-#   5. Services (init, network, etc.)
-os.system("sudo chroot /mnt systemctl enable NetworkManager")
+#   5. Change password for default user
+os.system("sudo chroot /mnt passwd user")
 
-#   6. Remove kicksecure default user
-os.system("sudo chroot /mnt userdel user")
+#   6. Services (init, network, etc.)
+os.system("sudo chroot /mnt systemctl enable NetworkManager")
 
 #   7. Boot and EFI
 initram_update_luks()
