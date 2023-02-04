@@ -189,7 +189,7 @@ def post_bootstrap(super_group):
         create_user(username, super_group)
         set_password(username)
     else:
-        print("usename is "user" please change the default password "changeme"")
+        print("user name is 'user' please change the default password")
   # Modify OS release information (optional)
     os.system(f"sudo sed -i 's|^ID.*$|ID={distro}_ashos|' /mnt/etc/os-release")
     os.system(f"sudo sed -i 's|^NAME=.*$|NAME=\"{distro_name}\"|' /mnt/etc/os-release")
