@@ -76,7 +76,10 @@ post_bootstrap(super_group)
 #   5. Services (init, network, etc.)
 os.system("sudo chroot /mnt systemctl enable NetworkManager")
 
-#   6. Boot and EFI
+#   6. Remove kicksecure default user
+os.system("sudo chroot /mnt userdel user")
+
+#   7. Boot and EFI
 initram_update_luks()
 grub_ash(v)
 
