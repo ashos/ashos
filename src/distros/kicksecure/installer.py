@@ -9,7 +9,6 @@ from setup import args, distro
 
 def initram_update_luks():
     if is_luks:
-        os.system("sudo apt-get -y install --no-install-recommends cryptsetup cryptsetup-initramfs")
         os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
         os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
         os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
@@ -22,7 +21,7 @@ def initram_update_luks():
 ARCH = "amd64"
 RELEASE = "bullseye"
 KERNEL = ""
-packages = f"linux-image-{ARCH} btrfs-progs sudo curl python3 python3-anytree dhcpcd5 network-manager locales nano kicksecure-cli deb-multimedia-keyring" # firmware-linux-nonfree os-prober
+packages = f"linux-image-{ARCH} btrfs-progs sudo curl python3 python3-anytree dhcpcd5 network-manager locales nano kicksecure-cli deb-multimedia-keyring cryptsetup cryptsetup-initramfs cryptsetup-run" # firmware-linux-nonfree os-prober
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
 tz = get_timezone()
