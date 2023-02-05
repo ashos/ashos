@@ -9,6 +9,7 @@ from setup import args, distro
 
 def initram_update_luks():
     if is_luks:
+        os.system("sudo apt-get -y install --no-install-recommends cryptsetup cryptsetup-initramfs")
         os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
         os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
         os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
