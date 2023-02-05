@@ -21,7 +21,7 @@ def initram_update_luks():
 ARCH = "amd64"
 RELEASE = "bullseye"
 KERNEL = ""
-packages = f"linux-image-{ARCH} btrfs-progs sudo curl python3 python3-anytree dhcpcd5 network-manager locales nano kicksecure-cli deb-multimedia-keyring cryptsetup cryptsetup-initramfs cryptsetup-run" # firmware-linux-nonfree os-prober
+packages = f"linux-image-{ARCH} btrfs-progs sudo curl python3 python3-anytree dhcpcd5 network-manager locales nano kicksecure-cli deb-multimedia-keyring cryptsetup cryptsetup-initramfs cryptsetup-run console-setup" # firmware-linux-nonfree os-prober
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
 tz = get_timezone()
