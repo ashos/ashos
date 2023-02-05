@@ -14,7 +14,7 @@ def initram_update_luks():
         os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
         os.system("sudo sed -i -e 's|^#KEYFILE_PATTERN=|KEYFILE_PATTERN='/etc/crypto_keyfile.bin'|' /mnt/etc/cryptsetup-initramfs/conf-hook")
         os.system("sudo echo UMASK=0077 >> /mnt/etc/initramfs-tools/initramfs.conf")
-        os.system("sudo echo 'cryptroot '${args[1]}'  /etc/crypto_keyfile.bin luks.discard.key-slot=1' >> /mnt/etc/crypttab")
+        os.system("sudo echo 'cryptroot '${args[1]}'  /etc/crypto_keyfile.bin luks.discard.key-slot=1' | sudo tee -a /mnt/etc/crypttab")
         os.system(f"sudo chroot /mnt update-initramfs -u")
 
 #   1. Define variables
