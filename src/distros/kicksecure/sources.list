@@ -1,0 +1,6 @@
+deb https://deb.debian.org/debian/ RELEASE main
+deb https://security.debian.org/debian-security RELEASE-security main contrib non-free
+deb https://deb.debian.org/debian/ RELEASE-updates main contrib non-free
+deb [trusted=yes] https://www.deb-multimedia.org RELEASE main
+deb [signed-by=/usr/share/keyrings/derivative.asc] https://deb.kicksecure.com RELEASE main contrib non-free
+

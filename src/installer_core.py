@@ -184,9 +184,12 @@ def post_bootstrap(super_group):
     os.system("echo {\\'name\\': \\'root\\', \\'children\\': [{\\'name\\': \\'0\\'}]} | sudo tee /mnt/.snapshots/ash/fstree") # Initialize fstree
   # Create user and set password
     set_password("root")
-    username = get_username()
-    create_user(username, super_group)
-    set_password(username)
+    if distro !="kicksecure":
+        username = get_username()
+        create_user(username, super_group)
+        set_password(username)
+    else:
+        print("Username is 'user' please change the default password")
   # Modify OS release information (optional)
     os.system(f"sudo sed -i 's|^ID.*$|ID={distro}_ashos|' /mnt/etc/os-release")
     os.system(f"sudo sed -i 's|^NAME=.*$|NAME=\"{distro_name}\"|' /mnt/etc/os-release")
