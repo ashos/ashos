@@ -12,9 +12,10 @@ def initram_update_luks():
         os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
         os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
         os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
-        os.system("sudo sed -i -e '/^HOOKS/ s/filesystems/encrypt filesystems/' \
-                        -e 's|^FILES=(|FILES=(/etc/crypto_keyfile.bin|' /mnt/etc/mkinitcpio.conf")
-        os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}")
+        os.system("sudo sed -i -e 's|^#KEYFILE_PATTERN=|KEYFILE_PATTERN='/etc/crypto_keyfile.bin'|' /mnt/etc/cryptsetup-initramfs/conf-hook")
+        os.system("sudo echo UMASK=0077 >> /mnt/etc/initramfs-tools/initramfs.conf")
+        os.system(f"sudo echo 'luks_root '{args[1]}'  /etc/crypto_keyfile.bin luks' | sudo tee -a /mnt/etc/crypttab")
+        os.system(f"sudo chroot /mnt update-initramfs -u")
 
 #   1. Define variables
 ARCH = "amd64"
@@ -39,9 +40,11 @@ if excode != 0:
 #   Mount-points for chrooting
 ash_chroot()
 
+
 # Install anytree and necessary packages in chroot
 os.system("sudo systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
 os.system(f"echo 'deb [trusted=yes] http://www.deb-multimedia.org {RELEASE} main' | sudo tee -a /mnt/etc/apt/sources.list.d/multimedia.list{DEBUG}")
+os.system(f"echo 'deb https://deb.debian.org/debian {RELEASE} non-free' | sudo tee -a /mnt/etc/apt/sources.list")
 os.system("sudo chroot /mnt apt-get -y update -oAcquire::AllowInsecureRepositories=true")
 os.system("sudo chroot /mnt apt-get -y install deb-multimedia-keyring --allow-unauthenticated")
 excode = os.system(f"sudo chroot /mnt apt-get -y install --fix-broken {packages}")
