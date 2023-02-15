@@ -21,7 +21,7 @@ def initram_update_luks():
 ARCH = "amd64"
 RELEASE = "sid"
 KERNEL = ""
-packages = f"linux-image-{ARCH} btrfs-progs sudo curl python3 python3-anytree dhcpcd5 network-manager locales nano firmware-linux-free firmware-linux-nonfree" # os-prober
+packages = f"linux-image-{ARCH} btrfs-progs sudo curl python3 python3-anytree dhcpcd5 network-manager locales nano" # os-prober
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
 tz = get_timezone()
@@ -44,7 +44,6 @@ ash_chroot()
 # Install anytree and necessary packages in chroot
 os.system("sudo systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
 os.system(f"echo 'deb [trusted=yes] http://www.deb-multimedia.org {RELEASE} main' | sudo tee -a /mnt/etc/apt/sources.list.d/multimedia.list{DEBUG}")
-os.system(f"echo 'deb https://deb.debian.org/debian {RELEASE} non-free' | sudo tee -a /mnt/etc/apt/sources.list")
 os.system("sudo chroot /mnt apt-get -y update -oAcquire::AllowInsecureRepositories=true")
 os.system("sudo chroot /mnt apt-get -y install deb-multimedia-keyring --allow-unauthenticated")
 excode = os.system(f"sudo chroot /mnt apt-get -y install --fix-broken {packages}")
