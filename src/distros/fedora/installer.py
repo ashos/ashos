@@ -14,22 +14,22 @@ def initram_update_luks():
         os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
         os.system("sudo sed -i -e '/^HOOKS/ s/filesystems/encrypt filesystems/' \
                         -e 's|^FILES=(|FILES=(/etc/crypto_keyfile.bin|' /mnt/etc/mkinitcpio.conf")
-        os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}")
+#        os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}") ### TODO
 
 #   1. Define variables
 ARCH = "x86_64"
 RELEASE = "rawhide"
 packages = "kernel dnf passwd sudo btrfs-progs python-anytree sqlite-tools linux-firmware \
             glibc-langpack-en glibc-locale-source dhcpcd NetworkManager"
+if is_efi:
+    packages += " efibootmgr"
+    if "64" in ARCH: ### Not good for AARCH64/ARM64
+        packages += " shim-x64 grub2-efi-x64-modules"
 super_group = "wheel"
 v = "2" # GRUB version number in /boot/grubN
 tz = get_timezone()
 hostname = get_hostname()
 #hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
-if is_efi:
-    packages += " efibootmgr"
-    if "64" in ARCH: ### Not good for AARCH64/ARM64
-        packages += " shim-x64 grub2-efi-x64-modules"
 
 #   Pre bootstrap
 pre_bootstrap()

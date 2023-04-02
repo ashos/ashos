@@ -38,6 +38,10 @@ def pacstrap(pkg):
 is_format_btrfs = True ### REVIEW TEMPORARY
 KERNEL = "-cachyos" # options: -cachyos, -cachyos-cfs, -cachyos-cacule, -cachyos-bmq, -cachyos-pds, -cachyos-tt
 packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano linux-firmware" # os-prober bash tmux arch-install-scripts
+if is_efi:
+    packages += " efibootmgr"
+if is_luks:
+    packages += " cryptsetup" ### REVIEW_LATER
 super_group = "wheel"
 v = "" # GRUB version number in /boot/grubN
 tz = get_timezone()
@@ -48,10 +52,6 @@ hostname = get_hostname()
 pre_bootstrap()
 
 #   2. Bootstrap and install packages in chroot
-if is_efi:
-    packages += " efibootmgr"
-if is_luks:
-    packages += " cryptsetup" ### REVIEW_LATER
 excode = pacstrap(packages)
 if excode != 0:
     sys.exit("Failed to bootstrap!")

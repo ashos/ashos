@@ -55,7 +55,7 @@
 
 ## What is AshOS?
 
-You always wanted to try Fedora Rawhide but after a few days, its fragility got on your nerves. Then, maybe you tried Fedora Silverblue Rawhide but then its complicated and slow git-like ostree operations killed your mood! Well, no more! Now you can try this bleeding edge distro (and many more distros like Debian sid) with more peace of mind.
+You always wanted to try Fedora Rawhide but after a few days, its fragility got on your nerves. Then, maybe you tried Fedora Silverblue Rawhide but then its complicated and slow git-like ostree operations killed your mood! Well, no more! Now you can try this bleeding edge distro (and many more distros like Debian sid) with more peace of mind. AshOS provides ultimate flexibility for installing operating systems, for instance you can easily setup an immutable Proxmox VE!
 
 AshOS is a unique meta-distribution that:
 * aims to bring immutability even to distros that do not have this very useful feature i.e. Arch Linux, Gentoo, etc.
