@@ -1,0 +1,39 @@
+<html>
+<head><title>Index of /live/current/</title></head>
+<body>
+<h1>Index of /live/current/</h1><hr><pre><a href="../">../</a>
+<a href="sha256sum.sig">sha256sum.sig</a>                                      18-Oct-2021 22:50                 301
+<a href="sha256sum.txt">sha256sum.txt</a>                                      18-Oct-2021 22:49                3432
+<a href="void-aarch64-ROOTFS-20210930.tar.xz">void-aarch64-ROOTFS-20210930.tar.xz</a>                18-Oct-2021 01:44            37862396
+<a href="void-aarch64-musl-ROOTFS-20210930.tar.xz">void-aarch64-musl-ROOTFS-20210930.tar.xz</a>           18-Oct-2021 01:44            28159068
+<a href="void-armv6l-ROOTFS-20210930.tar.xz">void-armv6l-ROOTFS-20210930.tar.xz</a>                 18-Oct-2021 01:44            36395404
+<a href="void-armv6l-musl-ROOTFS-20210930.tar.xz">void-armv6l-musl-ROOTFS-20210930.tar.xz</a>            18-Oct-2021 01:44            26650636
+<a href="void-armv7l-ROOTFS-20210930.tar.xz">void-armv7l-ROOTFS-20210930.tar.xz</a>                 18-Oct-2021 01:44            36314568
+<a href="void-armv7l-musl-ROOTFS-20210930.tar.xz">void-armv7l-musl-ROOTFS-20210930.tar.xz</a>            18-Oct-2021 01:44            26577432
+<a href="void-i686-ROOTFS-20210930.tar.xz">void-i686-ROOTFS-20210930.tar.xz</a>                   18-Oct-2021 01:44            40354340
+<a href="void-live-i686-20210930-xfce.iso">void-live-i686-20210930-xfce.iso</a>                   18-Oct-2021 01:44           901775360
+<a href="void-live-i686-20210930.iso">void-live-i686-20210930.iso</a>                        18-Oct-2021 01:44           546308096
+<a href="void-live-x86_64-20210930-xfce.iso">void-live-x86_64-20210930-xfce.iso</a>                 18-Oct-2021 01:44           913309696
+<a href="void-live-x86_64-20210930.iso">void-live-x86_64-20210930.iso</a>                      18-Oct-2021 01:44           568328192
+<a href="void-live-x86_64-musl-20210930-xfce.iso">void-live-x86_64-musl-20210930-xfce.iso</a>            18-Oct-2021 01:45           899678208
+<a href="void-live-x86_64-musl-20210930.iso">void-live-x86_64-musl-20210930.iso</a>                 18-Oct-2021 01:45           553648128
+<a href="void-rpi-20210930.img.xz">void-rpi-20210930.img.xz</a>                           18-Oct-2021 01:45            71526604
+<a href="void-rpi-PLATFORMFS-20210930.tar.xz">void-rpi-PLATFORMFS-20210930.tar.xz</a>                18-Oct-2021 01:45            71539072
+<a href="void-rpi-musl-20210930.img.xz">void-rpi-musl-20210930.img.xz</a>                      18-Oct-2021 01:45            62240268
+<a href="void-rpi-musl-PLATFORMFS-20210930.tar.xz">void-rpi-musl-PLATFORMFS-20210930.tar.xz</a>           18-Oct-2021 01:45            61712872
+<a href="void-rpi2-20210930.img.xz">void-rpi2-20210930.img.xz</a>                          18-Oct-2021 01:45            72578032
+<a href="void-rpi2-PLATFORMFS-20210930.tar.xz">void-rpi2-PLATFORMFS-20210930.tar.xz</a>               18-Oct-2021 01:45            72418540
+<a href="void-rpi2-musl-20210930.img.xz">void-rpi2-musl-20210930.img.xz</a>                     18-Oct-2021 01:45            63333844
+<a href="void-rpi2-musl-PLATFORMFS-20210930.tar.xz">void-rpi2-musl-PLATFORMFS-20210930.tar.xz</a>          18-Oct-2021 01:45            62630228
+<a href="void-rpi3-20210930.img.xz">void-rpi3-20210930.img.xz</a>                          18-Oct-2021 01:45            72697300
+<a href="void-rpi3-PLATFORMFS-20210930.tar.xz">void-rpi3-PLATFORMFS-20210930.tar.xz</a>               18-Oct-2021 01:45            72642880
+<a href="void-rpi3-musl-20210930.img.xz">void-rpi3-musl-20210930.img.xz</a>                     18-Oct-2021 01:45            63235608
+<a href="void-rpi3-musl-PLATFORMFS-20210930.tar.xz">void-rpi3-musl-PLATFORMFS-20210930.tar.xz</a>          18-Oct-2021 01:45            62656560
+<a href="void-rpi4-20210930.img.xz">void-rpi4-20210930.img.xz</a>                          18-Oct-2021 01:45            74763148
+<a href="void-rpi4-PLATFORMFS-20210930.tar.xz">void-rpi4-PLATFORMFS-20210930.tar.xz</a>               18-Oct-2021 01:45            74706132
+<a href="void-rpi4-musl-20210930.img.xz">void-rpi4-musl-20210930.img.xz</a>                     18-Oct-2021 01:45            65367748
+<a href="void-rpi4-musl-PLATFORMFS-20210930.tar.xz">void-rpi4-musl-PLATFORMFS-20210930.tar.xz</a>          18-Oct-2021 01:45            64756876
+<a href="void-x86_64-ROOTFS-20210930.tar.xz">void-x86_64-ROOTFS-20210930.tar.xz</a>                 18-Oct-2021 01:45            40185204
+<a href="void-x86_64-musl-ROOTFS-20210930.tar.xz">void-x86_64-musl-ROOTFS-20210930.tar.xz</a>            18-Oct-2021 01:45            29384720
+</pre><hr></body>
+</html>

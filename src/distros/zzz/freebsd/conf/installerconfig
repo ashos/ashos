@@ -1,0 +1,83 @@
+# /etc/installerconfig
+
+export DISTRIBUTIONS="kernel.txz base.txz localinstall.txz"
+export INTERFACES="vmx0 vmx1"
+export ZFSBOOT_VDEV_TYPE=stripe
+export ZFSBOOT_DISKS=ada0
+export ZFSBOOT_SWAP_SIZE=2g
+export ZFSBOOT_CONFIRM_LAYOUT=0
+export ZFSBOOT_SWAP_ENCRYPTION=YES
+export ZFSBOOT_BOOT_TYPE="UEFI"
+export nonInteractive="YES"
+
+PARTITIONS="ada0 gpt"
+#PARTITIONS="ada0 gpt { 20G freebsd-ufs /, 4G freebsd-swap }"
+DISTRIBUTIONS="kernel.txz base.txz"
+
+#!/bin/sh
+echo 'Running installerconfig...'
+gpart bootcode -b /boot/pmbr    -p /boot/gptboot -i 1 ada0
+sysrc ifconfig_em0=DHCP
+sysrc sshd_enable=YES
+#sysrc apache24_enable=YES
+#sysrc mysql_enable=YES
+
+cat /etc/rc.conf
+dhclient em0
+
+sed -i ".org" 's/#PermitRootLogin no/PermitRootLogin yes/' /etc/ssh/sshd_config.
+
+# Installing packages. The following two lines is borrowed
+# code from sysutils/firstboot-pkgs [1]
+
+env ASSUME_ALWAYS_YES=YES pkg bootstrap -f | cat
+
+#pkg install -y mc apache24 mod_php74 mysql56-server wordpress
+
+#configure php
+
+#cat <<EOF >/usr/local/etc/apache24/Includes/php.conf
+#<IfModule dir_module>
+#    DirectoryIndex index.php index.html
+#
+#    <FilesMatch "\.php$">
+#        SetHandler application/x-httpd-php
+#    </FilesMatch>
+#    <FilesMatch "\.phps$">
+#        SetHandler application/x-httpd-php-source
+#    </FilesMatch>
+#</IfModule>
+#EOF
+
+#echo '<?php phpinfo(); ?>' > /usr/local/www/apache24/data/info.php
+#cat /usr/local/www/apache24/data/info.php
+
+#service mysql-server start
+
+#install wordpress database in mysql
+
+#mysql -u root <<EOF
+#CREATE DATABASE wordpress;
+#CREATE USER wp_user@localhost IDENTIFIED BY 'wp_pass';
+#GRANT ALL PRIVILEGES ON wordpress.* TO wp_user@localhost;
+#FLUSH PRIVILEGES;
+#exit
+#EOF
+
+
+#configure wordpress
+
+#mv  /usr/local/www/wordpress/ /usr/local/www/apache24/data
+
+#cd /usr/local/www/apache24/data/wordpress
+#sed -e 's/database_name_here/wordpress/' -e 's/username_here/wp_user/' -e 's/password_here/wp_pass/' wp-config-sample.php >wp-config.php
+#chown -R www:www /usr/local/www/apache24/data/
+#chmod -R 775 /usr/local/www/apache24/data/
+
+#service apache24 start
+
+# sleep 20   <------ used for debugging
+
+echo 'Installerconfig exiting...'
+
+reboot

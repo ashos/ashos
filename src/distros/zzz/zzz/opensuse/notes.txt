@@ -1,0 +1,3 @@
+zypper --root $root refresh
+zypper --root $root install -t pattern minimal_base
+zypper --root $root install ...

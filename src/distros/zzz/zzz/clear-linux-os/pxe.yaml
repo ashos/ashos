@@ -1,0 +1,68 @@
+#clear-linux-config
+
+# c-basic-offset: 2; tab-width: 2; indent-tabs-mode: nil
+# vi: set shiftwidth=2 tabstop=2 expandtab:
+# :indentSize=2:tabSize=2:noTabs=true:
+
+# File:         pxe.yaml
+# Use Case:     Reference image for PXE network installer.
+
+# switch between aliases if you want to install to an actual block device
+# i.e /dev/sda
+block-devices: [
+   {name: "bdevice", file: "pxe.img"}
+]
+
+targetMedia:
+- name: ${bdevice}
+  size: "2.4G"
+  type: disk
+  children:
+  - name: ${bdevice}1
+    fstype: vfat
+    mountpoint: /boot
+    size: "64M"
+    type: part
+  - name: ${bdevice}2
+    fstype: ext4
+    mountpoint: /
+    type: part
+
+bundles: [
+    bootloader,
+    clr-installer,
+    openssh-server,
+    os-core,
+    os-core-update,
+    systemd-networkd-autostart
+  ]
+
+autoUpdate: false
+postArchive: false
+postReboot: false
+swupdSkipOptional: true
+telemetry: false
+copySwupd: false
+
+keyboard: us
+language: en_US.UTF-8
+kernel: kernel-native
+
+post-install: [
+   {cmd: "${yamlDir}/add-pxe-issue.sh ${chrootDir}"},
+   {cmd: "systemctl enable clr-installer-provision", chroot: true},
+]
+
+
+#
+# Editor modelines  -  https://www.wireshark.org/tools/modelines.html
+#
+# Local variables:
+# c-basic-offset: 2
+# tab-width: 2
+# indent-tabs-mode: nil
+# End:
+#
+# vi: set shiftwidth=2 tabstop=2 expandtab:
+# :indentSize=2:tabSize=2:noTabs=true:
+#

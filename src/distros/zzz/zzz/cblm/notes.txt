@@ -1,0 +1,8 @@
+https://aka.ms/mariner-2.0-x86_64-iso
+https://osrelease.download.prss.microsoft.com/pr/download/Mariner-2.0-x86_64.iso
+
+
+https://packages.microsoft.com/cbl-mariner/2.0/
+
+Unlike Debian and thus .deb-based CBL-Delridge, CBL-Mariner is .rpm-based, with .spec files borrowed from VMware's Photon OS, openmamba, and the Fedora Project. The project also acknowledges Linux from Scratch, so despite being .rpm-based, CBL-Mariner is not a derivative of Red Hat Enterprise Linux, Fedora, or SUSE Linux. It is something new.
+
