@@ -28,13 +28,15 @@ def create_user(u, g):
 
 #   BTRFS snapshots
 def deploy_base_snapshot():
-    os.system("sudo btrfs sub snap -r /mnt /mnt/.snapshots/rootfs/snapshot-0")
+    os.system(f"sudo btrfs sub snap {immutability} /mnt /mnt/.snapshots/rootfs/snapshot-0")
     os.system("sudo btrfs sub create /mnt/.snapshots/boot/boot-deploy")
     os.system("sudo btrfs sub create /mnt/.snapshots/etc/etc-deploy")
     os.system("sudo cp -r --reflink=auto /mnt/boot/. /mnt/.snapshots/boot/boot-deploy")
     os.system("sudo cp -r --reflink=auto /mnt/etc/. /mnt/.snapshots/etc/etc-deploy")
-    os.system("sudo btrfs sub snap -r /mnt/.snapshots/boot/boot-deploy /mnt/.snapshots/boot/boot-0")
-    os.system("sudo btrfs sub snap -r /mnt/.snapshots/etc/etc-deploy /mnt/.snapshots/etc/etc-0")
+    os.system(f"sudo btrfs sub snap {immutability} /mnt/.snapshots/boot/boot-deploy /mnt/.snapshots/boot/boot-0")
+    os.system(f"sudo btrfs sub snap {immutability} /mnt/.snapshots/etc/etc-deploy /mnt/.snapshots/etc/etc-0")
+    if immutability == "": # Mark base snapshot as mutable
+            os.system("touch /mnt/.snapshots/rootfs/snapshot-0/usr/share/ash/mutable")
     os.system("sudo btrfs sub snap /mnt/.snapshots/rootfs/snapshot-0 /mnt/.snapshots/rootfs/snapshot-deploy")
     os.system("sudo chroot /mnt sudo btrfs sub set-default /.snapshots/rootfs/snapshot-deploy")
     os.system("sudo cp -r /mnt/root/. /mnt/.snapshots/root/")
@@ -47,13 +49,48 @@ def deploy_to_common():
     if is_efi:
         os.system("sudo umount /mnt/boot/efi")
     os.system("sudo umount /mnt/boot")
-    os.system(f"sudo mount {os_root} -o subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
+    if is_bootpart:
+        os.system(f"sudo mount {bp} -o subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
+    else:
+        os.system(f"sudo mount {os_root} -o subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/boot/boot-deploy/. /mnt/boot/")
     os.system("sudo umount /mnt/etc")
     os.system(f"sudo mount {os_root} -o subvol=@etc{distro_suffix},compress=zstd,noatime /mnt/.snapshots/etc/etc-deploy")
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/etc/etc-deploy/. /mnt/etc/")
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/boot/boot-0/. /mnt/.snapshots/rootfs/snapshot-deploy/boot/")
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/etc/etc-0/. /mnt/.snapshots/rootfs/snapshot-deploy/etc/")
+
+#   Define a boot partition
+def get_bootpart():
+    clear()
+    bp = None
+    while is_bootpart:
+        print("Enter your /boot partition (eg: /dev/sda3)")
+        bp = input("> ")
+        if bp:
+            print("Happy with your boot partition? (y/n)")
+            reply = input("> ")
+            if reply.casefold() == "y":
+                break
+            else:
+                continue
+    return bp
+
+#   Define a home partition
+def get_homepart():
+    clear()
+    hp = None
+    while is_homepart:
+        print("Enter your /home partition (eg: /dev/sda3)")
+        hp = input("> ")
+        if hp:
+            print("Happy with your home partition? (y/n)")
+            reply = input("> ")
+            if reply.casefold() == "y":
+                break
+            else:
+                continue
+    return hp
 
 def get_hostname():
     clear()
@@ -167,6 +204,8 @@ def post_bootstrap(super_group):
         os.system(f"echo 'UUID=\"{to_uuid(os_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{'' if mntdir else ',ro'} 0 0' | sudo tee -a /mnt/etc/fstab") # ro only for / entry ### complex but one-liner
     if is_efi:
         os.system(f"echo 'UUID=\"{to_uuid(args[3])}\" /boot/efi vfat umask=0077 0 2' | sudo tee -a /mnt/etc/fstab")
+    if is_bootpart:
+        os.system(f"echo 'UUID=\"{to_uuid(bp)}\" /boot btrfs subvol=@boot{distro_suffix},compress=zstd,noatime,ro 0 0' | sudo tee -a /mnt/etc/fstab")
     os.system("echo '/.snapshots/ash/root /root none bind 0 0' | sudo tee -a /mnt/etc/fstab")
     os.system("echo '/.snapshots/ash/tmp /tmp none bind 0 0' | sudo tee -a /mnt/etc/fstab")
     os.system(f"sudo sed -i '0,/@{distro_suffix}/ s|@{distro_suffix}|@.snapshots{distro_suffix}/rootfs/snapshot-deploy|' /mnt/etc/fstab")
@@ -184,7 +223,7 @@ def post_bootstrap(super_group):
     os.system("echo {\\'name\\': \\'root\\', \\'children\\': [{\\'name\\': \\'0\\'}]} | sudo tee /mnt/.snapshots/ash/fstree") # Initialize fstree
   # Create user and set password
     set_password("root")
-    if distro !="kicksecure":
+    if distro !="kicksecure": ### REVIEW_LATER not generic enough!
         username = get_username()
         create_user(username, super_group)
         set_password(username)
@@ -213,10 +252,15 @@ def pre_bootstrap():
         os.system(f"sudo mount -o subvolid=5 {os_root} /mnt")
     for btrdir in btrdirs:
         os.system(f"sudo btrfs sub create /mnt/{btrdir}")
+    if is_bootpart:
+        os.system(f"sudo btrfs sub create /mnt/@boot{distro_suffix}")
     os.system("sudo umount /mnt")
     for mntdir in mntdirs:
         os.system(f"sudo mkdir -p /mnt/{mntdir}") # -p to ignore /mnt exists complaint
         os.system(f"sudo mount {os_root} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
+    if is_bootpart:
+        os.system(f"sudo mkdir /mnt/boot")
+        os.system(f"sudo mount -m {bp} subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/boot")
     for i in ("tmp", "root"):
         os.system(f"mkdir -p /mnt/{i}")
     for i in ("ash", "boot", "etc", "root", "rootfs", "tmp"):
@@ -253,6 +297,51 @@ def unmounts():
     if is_luks:
         os.system("sudo cryptsetup close luks_root")
 
+def use_separate_bootpart():
+    clear()
+    while True:
+        print("Would you like to use a separate boot partition? (y/n)")
+        reply = input("> ")
+        if reply.casefold() == "y":
+            bc = True
+            break
+        elif reply.casefold() == "n":
+            bc = False
+            break
+        else:
+            continue
+    return bc
+
+def use_separate_homepart():
+    clear()
+    while True:
+        print("Would you like to use a separate home partition? (y/n)")
+        reply = input("> ")
+        if reply.casefold() == "y":
+            bc = True
+            break
+        elif reply.casefold() == "n":
+            bc = False
+            break
+        else:
+            continue
+    return bc
+
+def use_immutable():
+    clear()
+    while True:
+        print("Would you like this installation to be immutable? (y/n)")
+        reply = input("> ")
+        if reply.casefold() == "y":
+            e = "-r"
+            break
+        elif reply.casefold() == "n":
+            e = ""
+            break
+        else:
+            continue
+    return e
+
 def use_luks():
     clear()
     while True:
@@ -277,8 +366,25 @@ with open('res/logos/logo.txt', 'r') as f:
 #   Define variables
 DEBUG = "" # options: "", " >/dev/null 2>&1"
 choice, distro_suffix = get_multiboot(distro)
-btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@boot{distro_suffix}", f"@etc{distro_suffix}", f"@home{distro_suffix}", f"@var{distro_suffix}"]
-mntdirs = ["", ".snapshots", "boot", "etc", "home", "var"]
+is_bootpart = use_separate_bootpart()
+is_homepart = use_separate_homepart()
+immutability = use_immutable()
+if is_bootpart and is_homepart:
+    btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@etc{distro_suffix}", f"@var{distro_suffix}"]
+    mntdirs = ["", ".snapshots", "etc", "var"]
+    bp = get_bootpart()
+    hp = get_homepart()
+elif is_bootpart:
+    btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@etc{distro_suffix}", f"@home{distro_suffix}", f"@var{distro_suffix}"]
+    mntdirs = ["", ".snapshots", "etc", "home", "var"]
+    bp = get_bootpart()
+elif is_homepart:
+    btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@boot{distro_suffix}", f"@etc{distro_suffix}", f"@var{distro_suffix}"]
+    mntdirs = ["", ".snapshots", "boot", "etc", "var"]
+    hp = get_homepart()
+else:
+    btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@boot{distro_suffix}", f"@etc{distro_suffix}", f"@home{distro_suffix}", f"@var{distro_suffix}"]
+    mntdirs = ["", ".snapshots", "boot", "etc", "home", "var"]
 is_luks = use_luks()
 is_efi = check_efi()
 if is_luks:

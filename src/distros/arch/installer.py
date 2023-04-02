@@ -36,7 +36,7 @@ def pacstrap(pkg):
 
 #   1. Define variables
 is_format_btrfs = True ### REVIEW TEMPORARY
-KERNEL = "" # options: https://wiki.archlinux.org/title/kernel
+KERNEL = "" # options: https://wiki.archlinux.org/title/kernel e.g. "-xanmod"
 packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano linux-firmware" # os-prober bash tmux arch-install-scripts
 super_group = "wheel"
 v = "" # GRUB version number in /boot/grubN
@@ -48,19 +48,19 @@ hostname = get_hostname()
 pre_bootstrap()
 
 #   2. Bootstrap and install packages in chroot
+if is_efi:
+    packages += " efibootmgr"
+if is_luks:
+    packages += " cryptsetup" ### REVIEW_LATER
 if KERNEL == "":
     excode = pacstrap(packages)
 else:
     if KERNEL not in ("-hardened", "-lts", "-zen"): # AUR needs to be enabled
         subprocess.call(f'./src/distros/{distro}/aur/aurutils.sh', shell=True)
         #subprocess.check_output(['./src/distros/arch/aur/aurutils.sh'])
-    excode = os.system(f"pacman -Sqg base | sed 's/^linux$/&{KERNEL}/' | pacstrap /mnt --needed {packages}")
+    excode = os.system(f"pacman -Sqg base | sed 's/^linux$/&{KERNEL}/' | pacstrap /mnt --needed {packages}") ### TODO restructure code by appending to packages
 if excode != 0:
     sys.exit("Failed to bootstrap!")
-if is_efi:
-    excode = pacstrap("efibootmgr")
-    if excode != 0:
-        sys.exit("Failed to download packages!")
 
 #   Mount-points for chrooting
 ash_chroot()
