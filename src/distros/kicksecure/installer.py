@@ -21,7 +21,13 @@ def initram_update_luks():
 ARCH = "amd64"
 RELEASE = "bullseye"
 KERNEL = ""
-packages = f"linux-image-{ARCH} btrfs-progs sudo curl python3 python3-anytree dhcpcd5 network-manager locales nano kicksecure-cli deb-multimedia-keyring cryptsetup cryptsetup-initramfs cryptsetup-run console-setup" # firmware-linux-nonfree os-prober
+packages = f"linux-image-{ARCH} network-manager btrfs-progs sudo curl python3 python3-anytree dhcpcd5 locales nano kicksecure-cli deb-multimedia-keyring" # console-setup firmware-linux firmware-linux-nonfree os-prober
+if is_efi:
+    packages += " grub-efi"  # includes efibootmgr
+else:
+    packages += " grub-pc"
+if is_luks:
+    packages += " cryptsetup cryptsetup-initramfs cryptsetup-run"
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
 tz = get_timezone()
@@ -31,6 +37,7 @@ hostname = get_hostname()
 #   Pre bootstrap
 pre_bootstrap()
 
+#   2. Bootstrap and install packages in chroot
 #excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
 os.system(f"sed 's/RELEASE/{RELEASE}/g' ./src/distros/{distro}/sources.list | sudo tee tmp_sources.list")
 excode = os.system(f"sudo SECURITY_MISC_INSTALL=force DERIVATIVE_APT_REPOSITORY_OPTS=stable anon_shared_inst_tb=open mmdebstrap --skip=check/empty --arch {ARCH}  --include='{packages}' --variant=required {RELEASE} /mnt tmp_sources.list") ### --include={packages} ? --variant=minbase ?
@@ -48,14 +55,6 @@ excode = os.system(f"sudo chroot /mnt apt-get -y update")
 excode = os.system(f"sudo chroot /mnt apt-get -y install --no-install-recommends --fix-broken {packages}")
 if excode != 0:
     sys.exit("Failed to download packages!")
-if is_efi:
-    excode = os.system("sudo chroot /mnt apt-get -y install --no-install-recommends grub-efi") ### efibootmgr does get installed. Does this do it?
-    if excode != 0:
-        sys.exit("Failed to install grub!")
-else:
-    excode = os.system("sudo chroot /mnt apt-get -y install --no-install-recommends grub-pc")
-    if excode != 0:
-        sys.exit("Failed to install grub!")
 
 #   3. Package manager database and config files
 os.system("sudo mv /mnt/var/lib/dpkg /mnt/usr/share/ash/db/")
@@ -73,14 +72,12 @@ os.system("sudo chroot /mnt sudo hwclock --systohc")
 
 #   Post bootstrap
 post_bootstrap(super_group)
+os.system("sudo chroot /mnt passwd user") # Change password for default user
 
-#   5. Change password for default user
-os.system("sudo chroot /mnt passwd user")
-
-#   6. Services (init, network, etc.)
+#   5. Services (init, network, etc.)
 os.system("sudo chroot /mnt systemctl enable NetworkManager")
 
-#   7. Boot and EFI
+#   6. Boot and EFI
 initram_update_luks()
 grub_ash(v)
 

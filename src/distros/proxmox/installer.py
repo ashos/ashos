@@ -17,17 +17,38 @@ def initram_update_luks():
         os.system(f"sudo echo 'luks_root '{args[1]}'  /etc/crypto_keyfile.bin luks' | sudo tee -a /mnt/etc/crypttab")
         os.system(f"sudo chroot /mnt update-initramfs -u") # REVIEW: Need sudo inside? What about kernel variants?
 
+def is_two_stage_install():
+    clear()
+    while True:
+        print("Would you like to install proxmox-ve in two stages (continues after reboot - recommended)? (y/n)")
+        print("Please note if you choose 'N', setup will finish but with errors as as some packages (e.g., apparmor) depend on specific kernel compile flags that need a live Proxmox VE kernel. Proxmox will still work but may have issues (untested)")
+        reply = input("> ")
+        if reply.casefold() == "y":
+            e = True
+            print("After rebooting, make a new snapshot, install `proxmox-ve` in it, deploy and reboot")
+            break
+        elif reply.casefold() == "n":
+            e = False
+            break
+        else:
+            continue
+    return e
+
 #   1. Define variables
 ARCH = "amd64"
-RELEASE = "kinetic"
-KERNEL = ""
-packages = f"linux-image-generic linux-firmware network-manager btrfs-progs sudo curl python3 python3-anytree dhcpcd5 locales nano" # firmware-linux-nonfree os-prober
+RELEASE = "bullseye" # for both proxmox and its debian base
+KERNEL = "5.15" # options: stable like "5.15" (recommended) or opt-in like "6.2"
+packages = f"open-iscsi postfix btrfs-progs sudo curl python3 python3-anytree dhcpcd5 locales nano" # network-manager firmware-linux firmware-linux-nonfree os-prober
 if is_efi:
     packages += " grub-efi"  # includes efibootmgr
 else:
     packages += " grub-pc"
 if is_luks:
     packages += " cryptsetup cryptsetup-initramfs cryptsetup-run"
+if is_two_stage_install():
+    packages += f" pve-kernel-{KERNEL}"
+else:
+    packages += " proxmox-ve"
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
 tz = get_timezone()
@@ -38,8 +59,8 @@ hostname = get_hostname()
 pre_bootstrap()
 
 #   2. Bootstrap and install packages in chroot
-#excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
-excode = os.system(f"sudo debootstrap --arch {ARCH} --variant=minbase {RELEASE} /mnt http://archive.ubuntu.com/ubuntu") ### --print-debs --include={packages} ? TODO: --exclude={excl} causes errors
+excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
+excode = os.system(f"sudo debootstrap --arch {ARCH} --exclude={excl} {RELEASE} /mnt http://ftp.debian.org/debian") ### --include={packages} ? --variant=minbase ?
 if excode != 0:
     sys.exit("Failed to bootstrap!")
 
@@ -48,28 +69,28 @@ ash_chroot()
 
 # Install anytree and necessary packages in chroot
 os.system("sudo systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
-os.system(f"echo 'deb [trusted=yes] http://www.deb-multimedia.org stable main' | sudo tee -a /mnt/etc/apt/sources.list.d/multimedia.list{DEBUG}")
+os.system(f"echo 'deb [arch=amd64] http://download.proxmox.com/debian/pve {RELEASE} pve-no-subscription' | sudo tee -a /mnt/etc/apt/sources.list.d/pve-install-repo.list{DEBUG}")
+#os.system(f"echo 'deb [arch=amd64] https://enterprise.proxmox.com/debian/pve {RELEASE} pve-enterprise' | sudo tee -a /mnt/etc/apt/sources.list.d/pve-enterprise.list{DEBUG}")
+os.system(f"sudo wget http://download.proxmox.com/debian/proxmox-release-{RELEASE}.gpg -O /mnt/etc/apt/trusted.gpg.d/proxmox-release-{RELEASE}.gpg")
+os.system(f"sudo chmod +r /mnt/etc/apt/trusted.gpg.d/proxmox-release-{RELEASE}.gpg") # optional: in case of a non-default umask
+os.system(f"echo 'deb [trusted=yes] http://www.deb-multimedia.org {RELEASE} main' | sudo tee -a /mnt/etc/apt/sources.list.d/multimedia.list{DEBUG}")
 os.system("sudo chmod 1777 /mnt/tmp") # Otherwise error "Couldn't create temporary file /tmp/apt.conf.XYZ"
-os.system("sudo cp -afr /etc/apt/sources* /mnt/etc/apt/")
-os.system("sudo chroot /mnt add-apt-repository -y universe")
 os.system("sudo chroot /mnt apt-get -y update -oAcquire::AllowInsecureRepositories=true")
 os.system("sudo chroot /mnt apt-get -y -f install deb-multimedia-keyring --allow-unauthenticated")
 os.system("sudo chroot /mnt apt-get -y full-upgrade --allow-unauthenticated") ### REVIEW_LATER necessary?
-excode = os.system(f"sudo chroot /mnt apt-get -y install --no-install-recommends --fix-broken {packages}")
+excode = os.system(f"sudo chroot /mnt apt-get -y install --fix-broken {packages}")
+os.system("sudo chroot /mnt apt-get -y remove os-prober") # proxmox-ve installs os-prober, grub-pc and stable pve-kernel-X.YZ
 if excode != 0:
     sys.exit("Failed to download packages!")
-# auto-remove packages at the end or include ash auto-remove function in ashpk.py
 
 #   3. Package manager database and config files
-#os.system(f"sed 's/RELEASE/{RELEASE}/g' ./src/distros/{distro}/sources.list | sudo tee /mnt/etc/apt/sources.list") ### REVIEW here or right before/after bootstrapping? ### REVIEW Needed?
-#os.system("sudo sed -i '/cdrom/d' /mnt/etc/apt/sources.list")
-os.system("sudo mv /mnt/var/lib/dpkg /mnt/usr/share/ash/db/") ### how about /var/lib/apt ?
+os.system("sudo mv /mnt/var/lib/dpkg /mnt/usr/share/ash/db/")
 os.system("sudo ln -srf /mnt/usr/share/ash/db/dpkg /mnt/var/lib/dpkg")
-#os.system(f"echo 'RootDir=/usr/share/ash/db/' | sudo tee -a /mnt/etc/apt/apt.conf") ### REVIEW I don't think this works?!
 
 #   4. Update hostname, hosts, locales and timezone, hosts
 os.system(f"echo {hostname} | sudo tee /mnt/etc/hostname")
-os.system(f"echo 127.0.0.1 {hostname} {distro} | sudo tee -a /mnt/etc/hosts") ### {distro} might not be needed
+os.system("echo 127.0.0.1 localhost | sudo tee -a /mnt/etc/hosts")
+os.system(f"echo 10.0.2.15 {hostname}.proxmox.com {hostname} | sudo tee -a /mnt/etc/hosts") ### REVIEW_LATER
 #os.system("sudo chroot /mnt sudo localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
 os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
 os.system("sudo chroot /mnt sudo locale-gen")
@@ -81,7 +102,7 @@ os.system("sudo chroot /mnt sudo hwclock --systohc")
 post_bootstrap(super_group)
 
 #   5. Services (init, network, etc.)
-os.system("sudo chroot /mnt systemctl enable NetworkManager")
+#os.system("sudo chroot /mnt systemctl enable NetworkManager")
 
 #   6. Boot and EFI
 initram_update_luks()
