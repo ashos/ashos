@@ -49,6 +49,7 @@
   * [Debian](https://github.com/ashos/ashos#debian)
   * [EndeavourOS](https://github.com/ashos/ashos#endeavouros)
   * [Ubuntu](https://github.com/ashos/ashos#ubuntu)
+  * [Proxmox](https://github.com/ashos/ashos#proxmox)
 
 ---
 
@@ -116,7 +117,7 @@ For instance to install GNOME in snapshot 1:
 ## Installation
 * (Note: All scripts during install should be run with super user privileges)
 * AshOS is installed from the official live iso for target distribution. For example [Arch Linux](https://archlinux.org/download/), [Debian](https://www.debian.org/CD/http-ftp/)/[Debian netinstaller](https://www.debian.org/distrib/netinst) etc.
-* Arch iso can be generally used to bootstrap other distros except: Use Debian iso to bootstrap Debian, Ubuntu iso to bootstrap Ubuntu
+* Arch iso can be generally used to bootstrap other distros except: Use Debian live iso-hybrid to bootstrap Debian, Ubuntu iso to bootstrap Ubuntu
 * Depending on the live iso, it is **very important** that scripts in `./src/prep/` be executed (preparing live environment as well as partition/formatting) otherwise there would be error because time is not in sync etc. By default the installer will call these scripts, but if you want to do them manually, just comment the respective lines
 * The commands to fix package db issues in live iso (i.e. arch_live.iso) take a long time to run. One can comment these to have installer run significantly faster. They are included mostly for virtual machine installation where time syncing issues are abundant.
 * If you run into issues installing packages during installation, make sure you're using the newest iso, and update the package manager's keyring if needed
@@ -610,9 +611,11 @@ ash fixdb <snapshots>
 * As of July 2022, Debian iso can't be used to bootstrap 'jammy' (zstd bug: https://bugs.debian.org/892664)
 ---
 
+## Proxmox
+* Use Debian live iso-hybrid
+* Find latest version of pve-kernel_*-pve from http://download.proxmox.com/debian/dists/{RELEASE}/pve-no-subscription/binary-amd64/ and update KERNEL_VERSION.
+* `sudo python3 setup.py /dev/sdXY /dev/sdX /dev/sdXZ proxmox "Proxmox VE"`
+* Note for the package `postfix`: Configure packages which require user input on installation according to your needs. If you have a mail server in your network, you should configure postfix as a satellite system. Your existing mail server will then be the relay host which will route the emails sent by Proxmox VE to their final recipient. If you don't know what to enter here, choose local only and leave the system name as is.
+
 **This project is licensed under the AGPLv3.**
-
-## Stargazers over time
-
-[![Stargazers over time](https://starchart.cc/ashos/ashos.svg)](https://starchart.cc/ashos/ashos)
 

@@ -19,9 +19,24 @@ def initram_update():
     if is_luks or is_format_btrfs:
         os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}")
 
+def pacstrap(pkg):
+    while True:
+        excode = int(os.system(f"sudo pacstrap /mnt --needed {pkg}"))
+        if excode:
+            inp = ""
+            print("Failed to strap package(s).\nRetry? (y/n)\n")
+            inp = input("> ")
+            while inp.casefold not in ["yes","y","no","n"]:
+                print("Failed to strap package(s).\nRetry? (y/n)\n")
+                inp = input("> ")
+            if inp in ["n","no"]:
+                return 1
+        else:
+            return 0
+
 #   1. Define variables
-is_format_btrfs = True
-KERNEL = "" # options: https://wiki.archlinux.org/title/kernel
+is_format_btrfs = True ### REVIEW TEMPORARY
+KERNEL = "" # options: https://wiki.archlinux.org/title/kernel e.g. "-xanmod"
 packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano linux-firmware" # os-prober bash tmux arch-install-scripts
 super_group = "wheel"
 v = "" # GRUB version number in /boot/grubN
@@ -35,19 +50,19 @@ EOS_pacman = "https://raw.githubusercontent.com/endeavouros-team/EndeavourOS-cal
 pre_bootstrap()
 
 #   2. Bootstrap and install packages in chroot
+if is_efi:
+    packages += " efibootmgr"
+if is_luks:
+    packages += " cryptsetup" ### REVIEW_LATER
 if KERNEL == "":
-    excode = os.system(f"sudo pacstrap /mnt --needed {packages}")
+    excode = pacstrap(packages)
 else:
     if KERNEL not in ("-hardened", "-lts", "-zen"): # AUR needs to be enabled
         subprocess.call(f'./src/distros/{distro}/aur/aurutils.sh', shell=True)
         #subprocess.check_output(['./src/distros/arch/aur/aurutils.sh'])
-    excode = os.system(f"pacman -Sqg base | sed 's/^linux$/&{KERNEL}/' | pacstrap /mnt --needed {packages}")
+    excode = os.system(f"pacman -Sqg base | sed 's/^linux$/&{KERNEL}/' | pacstrap /mnt --needed {packages}") ### TODO restructure code by appending to packages
 if excode != 0:
     sys.exit("Failed to bootstrap!")
-if is_efi:
-    excode = os.system("sudo pacstrap /mnt --needed efibootmgr")
-    if excode != 0:
-        sys.exit("Failed to download packages!")
 
 #   Mount-points for chrooting
 ash_chroot()

@@ -19,6 +19,21 @@ def initram_update():
     if is_luks or is_format_btrfs:
         os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}")
 
+def pacstrap(pkg):
+    while True:
+        excode = int(os.system(f"sudo pacstrap /mnt --needed {pkg}"))
+        if excode:
+            inp = ""
+            print("Failed to strap package(s).\nRetry? (y/n)\n")
+            inp = input("> ")
+            while inp.casefold not in ["yes","y","no","n"]:
+                print("Failed to strap package(s).\nRetry? (y/n)\n")
+                inp = input("> ")
+            if inp in ["n","no"]:
+                return 1
+        else:
+            return 0
+
 #   1. Define variables
 is_format_btrfs = True ### REVIEW TEMPORARY
 KERNEL = "-cachyos" # options: -cachyos, -cachyos-cfs, -cachyos-cacule, -cachyos-bmq, -cachyos-pds, -cachyos-tt
@@ -33,13 +48,13 @@ hostname = get_hostname()
 pre_bootstrap()
 
 #   2. Bootstrap and install packages in chroot
-excode = os.system(f"sudo pacstrap /mnt --needed {packages}")
+if is_efi:
+    packages += " efibootmgr"
+if is_luks:
+    packages += " cryptsetup" ### REVIEW_LATER
+excode = pacstrap(packages)
 if excode != 0:
     sys.exit("Failed to bootstrap!")
-if is_efi:
-    excode = os.system("sudo pacstrap /mnt --needed efibootmgr")
-    if excode != 0:
-        sys.exit("Failed to download packages!")
 
 #   Mount-points for chrooting
 ash_chroot()

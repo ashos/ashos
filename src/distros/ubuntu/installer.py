@@ -5,22 +5,23 @@ import subprocess
 import sys
 from src.installer_core import * # NOQA
 #from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_timezone, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
-from setup import args, distro, use_other_iso
+from setup import args, distro
 
 def initram_update_luks():
     if is_luks:
         os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
         os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
         os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
-        os.system("sudo sed -i -e '/^HOOKS/ s/filesystems/encrypt filesystems/' \
-                        -e 's|^FILES=(|FILES=(/etc/crypto_keyfile.bin|' /mnt/etc/mkinitcpio.conf")
-        os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}")
+        os.system("sudo sed -i -e 's|^#KEYFILE_PATTERN=|KEYFILE_PATTERN='/etc/crypto_keyfile.bin'|' /mnt/etc/cryptsetup-initramfs/conf-hook")
+        os.system("sudo echo UMASK=0077 >> /mnt/etc/initramfs-tools/initramfs.conf")
+        os.system(f"sudo echo 'luks_root '{args[1]}'  /etc/crypto_keyfile.bin luks' | sudo tee -a /mnt/etc/crypttab")
+        os.system(f"sudo chroot /mnt update-initramfs -u") # REVIEW: Need sudo inside? What about kernel variants?
 
 #   1. Define variables
 ARCH = "amd64"
 RELEASE = "kinetic"
 KERNEL = ""
-packages = f"linux-image-generic btrfs-progs sudo curl python3 python3-anytree dhcpcd5 network-manager locales nano linux-firmware" # firmware-linux-nonfree os-prober
+packages = f"linux-image-generic linux-firmware network-manager btrfs-progs sudo curl python3 python3-anytree dhcpcd5 locales nano" # firmware-linux-nonfree os-prober
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
 tz = get_timezone()
@@ -42,21 +43,21 @@ ash_chroot()
 # Install anytree and necessary packages in chroot
 os.system("sudo systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
 os.system(f"echo 'deb [trusted=yes] http://www.deb-multimedia.org stable main' | sudo tee -a /mnt/etc/apt/sources.list.d/multimedia.list{DEBUG}")
+os.system("sudo chmod 1777 /mnt/tmp") # Otherwise error "Couldn't create temporary file /tmp/apt.conf.XYZ"
 os.system("sudo cp -afr /etc/apt/sources* /mnt/etc/apt/")
 os.system("sudo chroot /mnt add-apt-repository -y universe")
-os.system("sudo chroot /mnt apt-get -y install deb-multimedia-keyring --allow-unauthenticated")
-os.system("sudo chroot /mnt apt-get -y update -oAcquire::AllowInsecureRepositories=true") ### REVIEW swapped place with line above
+os.system("sudo chroot /mnt apt-get -y update -oAcquire::AllowInsecureRepositories=true")
+os.system("sudo chroot /mnt apt-get -y -f install deb-multimedia-keyring --allow-unauthenticated")
+os.system("sudo chroot /mnt apt-get -y full-upgrade --allow-unauthenticated") ### REVIEW_LATER necessary?
+if is_efi:
+    packages += " grub-efi"  # includes efibootmgr
+else:
+    packages += " grub-pc"
+if is_luks:
+    packages += " cryptsetup cryptsetup-initramfs cryptsetup-run"
 excode = os.system(f"sudo chroot /mnt apt-get -y install --fix-broken {packages}")
 if excode != 0:
     sys.exit("Failed to download packages!")
-if is_efi:
-    excode = os.system("sudo chroot /mnt apt-get -y install grub-efi") # includes efibootmgr
-    if excode != 0:
-        sys.exit("Failed to install grub!")
-else:
-    excode = os.system("sudo chroot /mnt apt-get -y install grub-pc")
-    if excode != 0:
-        sys.exit("Failed to install grub!")
 # auto-remove packages at the end or include ash auto-remove function in ashpk.py
 
 #   3. Package manager database and config files

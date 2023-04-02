@@ -15,6 +15,7 @@ networkmanager
 
 [services]
 % sudo systemctl enable gdm3
+# OR sudo systemctl enable --now gdm3 ???
 % sudo systemctl start --now gdm3
 
 #gdm: either name of services to be enabled

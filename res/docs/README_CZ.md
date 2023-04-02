@@ -6,6 +6,10 @@
 
 ---
 
+**Please note that, for the purpose of this project, conforming to 'pythonic' way was not a goal as in future, implementation might change to Rust, C, C++, etc. We would like to be as close to POSIX-compliant sans-bashism shell as possible.**
+
+---
+
 ## Obsah
 
 - [Co je astOS?](https://github.com/astos/astos/blob/main/README_CZ.md#co-je-astos)
@@ -313,3 +317,4 @@ sudo chmod 666 /var/run/docker.sock
 ---
 
 **Projekt je licencován pod licencí AGPLv3**
+
