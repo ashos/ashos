@@ -33,8 +33,7 @@ def pacstrap(pkg):
                 return 1
         else:
             return 0
-            
-        
+
 #   1. Define variables
 is_format_btrfs = True ### REVIEW TEMPORARY
 KERNEL = "" # options: https://wiki.archlinux.org/title/kernel
