@@ -1,13 +1,17 @@
 <p align="center">
   <img src="../logos/logo.png" alt="AshOS">
   <br>
-  [<a href="README_CZ.md">Čeština</a>] | [<a href="README_zh-CN.md">中文</a>] | [<a href="README_FA.md">فارسی</a>]
+  [<a href="README_CZ.md">Čeština</a>] | [<a href="README_zh-CN.md">中文</a>] | [<a href="README_FA.md">پارسی</a>]
   <br>
   <b>ما به همکاری شما برای بازگردانی این نوشته نیازمندیم. <a href="https://github.com/i2/ashos-dev/tree/main/res/docs">اینجا را نگاه کنید!</a></b>
 </p>
 
 # AshOS (Any Snapshot Hierarchical OS)
 ### یک فرا-سیستم عامل تغییر ناپذیر با بکارگیری اسنپشات ها
+
+---
+
+**Please note that, for the purpose of this project, conforming to 'pythonic' way was not a goal as in future, implementation might change to Rust, C, C++, etc. We would like to be as close to POSIX-compliant sans-bashism shell as possible.**
 
 ---
 
@@ -574,4 +578,3 @@ ash fixdb <snapshots>
 
 **This project is licensed under the AGPLv3.**
 
-**Please note that, for the purpose of this project, comforming to 'pythonic' way was not a goal as in future, implementation might change to Rust, C, C++, etc. We would like to be as close to POSIX-compliant sans-bashism shell as possible.**
