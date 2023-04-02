@@ -424,5 +424,3 @@ sudo chmod 666 /var/run/docker.sock
 
 **本项目使用AGPLv3许可证**
 
-**Please note that, for the purpose of this project, conforming to 'pythonic' way was not a goal as in future, implementation might change to Rust, C, C++, etc. We would like to be as close to POSIX-compliant sans-bashism shell as possible.**
-
