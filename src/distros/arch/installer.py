@@ -5,7 +5,7 @@ import subprocess
 import sys
 from src.installer_core import * # NOQA
 #from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_timezone, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
-from setup import args, distro, use_other_iso
+from setup import args, distro
 
 def initram_update():
     if is_luks:

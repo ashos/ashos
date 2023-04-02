@@ -21,7 +21,7 @@ def initram_update_luks():
 ARCH = "amd64"
 RELEASE = "sid"
 KERNEL = ""
-packages = f"linux-image-{ARCH} btrfs-progs sudo curl python3 python3-anytree dhcpcd5 network-manager locales nano" # console-setup firmware-linux firmware-linux-nonfree os-prober
+packages = f"linux-image-{ARCH} network-manager btrfs-progs sudo curl python3 python3-anytree dhcpcd5 locales nano" # console-setup firmware-linux firmware-linux-nonfree os-prober
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
 tz = get_timezone()
@@ -43,14 +43,16 @@ ash_chroot()
 # Install anytree and necessary packages in chroot
 os.system("sudo systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
 os.system(f"echo 'deb [trusted=yes] http://www.deb-multimedia.org {RELEASE} main' | sudo tee -a /mnt/etc/apt/sources.list.d/multimedia.list{DEBUG}")
+os.system("sudo chmod 1777 /mnt/tmp") # Otherwise error "Couldn't create temporary file /tmp/apt.conf.XYZ"
 os.system("sudo chroot /mnt apt-get -y update -oAcquire::AllowInsecureRepositories=true")
-os.system("sudo chroot /mnt apt-get -y install deb-multimedia-keyring --allow-unauthenticated")
-if is_luks:
-    packages += " cryptsetup cryptsetup-initramfs cryptsetup-run"
+os.system("sudo chroot /mnt apt-get -y -f install deb-multimedia-keyring --allow-unauthenticated")
+os.system("sudo chroot /mnt apt-get -y full-upgrade --allow-unauthenticated") ### REVIEW_LATER necessary?
 if is_efi:
-    packages += " grub-efi"  ### Does this install efibootmgr?
+    packages += " grub-efi"  # includes efibootmgr
 else:
     packages += " grub-pc"
+if is_luks:
+    packages += " cryptsetup cryptsetup-initramfs cryptsetup-run"
 excode = os.system(f"sudo chroot /mnt apt-get -y install --fix-broken {packages}")
 if excode != 0:
     sys.exit("Failed to download packages!")
