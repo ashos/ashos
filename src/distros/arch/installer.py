@@ -16,7 +16,7 @@ def initram_update():
                         -e 's|^FILES=(|FILES=(/etc/crypto_keyfile.bin|' /mnt/etc/mkinitcpio.conf")
     if is_format_btrfs: ### REVIEW TEMPORARY
         os.system("sudo sed -i 's|^MODULES=(|MODULES=(btrfs|' /mnt/etc/mkinitcpio.conf") ### TODO if array not empty, needs to be "btrfs "
-    if is_luks or is_format_btrfs:
+    if is_luks or is_format_btrfs: ### REVIEW: does mkinitcpio need to be run without these conditions too?
         os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}")
 
 def pacstrap(pkg):

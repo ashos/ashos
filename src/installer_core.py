@@ -66,10 +66,10 @@ def get_bootpart():
     clear()
     bp = None
     while True:
-        print("Enter your /boot partition (eg: /dev/sda3)")
+        print("Enter your external boot partition (e.g. /dev/sda1):")
         bp = input("> ")
         if bp:
-            print("Happy with your boot partition? (y/n)")
+            print("Happy with your choice? (y/n)")
             reply = input("> ")
             if reply.casefold() == "y":
                 break
@@ -82,10 +82,10 @@ def get_homepart():
     clear()
     hp = None
     while True:
-        print("Enter your /home partition (eg: /dev/sda3)")
+        print("Enter your external home partition (e.g. /dev/sda3):")
         hp = input("> ")
         if hp:
-            print("Happy with your home partition? (y/n)")
+            print("Happy with your choice? (y/n)")
             reply = input("> ")
             if reply.casefold() == "y":
                 break
