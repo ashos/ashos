@@ -49,10 +49,11 @@ def deploy_to_common():
     if is_efi:
         os.system("sudo umount /mnt/boot/efi")
     os.system("sudo umount /mnt/boot")
-    if is_bootpart:
-        os.system(f"sudo mount {bp} -o subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
-    else:
-        os.system(f"sudo mount {os_root} -o subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
+    os.system(f'sudo mount {bp if is_bootpart else os_root} -o {"subvol="+f"@boot{distro_suffix}"+"," if not is_bootpart else ""}compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy') ### REVIEW_LATER A similar line for is_homepart needed?
+###    if is_bootpart: # easier to read
+###        os.system(f"sudo mount {bp} -o compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
+###    else:
+###        os.system(f"sudo mount {os_root} -o subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/boot/boot-deploy/. /mnt/boot/")
     os.system("sudo umount /mnt/etc")
     os.system(f"sudo mount {os_root} -o subvol=@etc{distro_suffix},compress=zstd,noatime /mnt/.snapshots/etc/etc-deploy")
@@ -60,11 +61,11 @@ def deploy_to_common():
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/boot/boot-0/. /mnt/.snapshots/rootfs/snapshot-deploy/boot/")
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/etc/etc-0/. /mnt/.snapshots/rootfs/snapshot-deploy/etc/")
 
-#   Define a boot partition
+#   Get a separate boot partition
 def get_bootpart():
     clear()
     bp = None
-    while is_bootpart:
+    while True:
         print("Enter your /boot partition (eg: /dev/sda3)")
         bp = input("> ")
         if bp:
@@ -76,11 +77,11 @@ def get_bootpart():
                 continue
     return bp
 
-#   Define a home partition
+#   Get a separate home partition
 def get_homepart():
     clear()
     hp = None
-    while is_homepart:
+    while True:
         print("Enter your /home partition (eg: /dev/sda3)")
         hp = input("> ")
         if hp:
@@ -166,20 +167,26 @@ def grub_ash(v):
     if distro != "fedora": # https://bugzilla.redhat.com/show_bug.cgi?id=1917213
         if is_efi:
             #os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --modules="{luks_grub_args}"')
-            os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --bootloader-id={distro} --modules="{luks_grub_args}" --target=x86_64-efi') # --efi-directory=/boot/efi 
+#            os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --bootloader-id={distro} --modules="{luks_grub_args}" --target=x86_64-efi') # --efi-directory=/boot/efi ### OLD TO_DELETE before adding separate boot partition code
+            os.system(f'sudo chroot /mnt sudo grub{v}-install {bp if is_bootpart else args[2]} --bootloader-id={distro} --modules="{luks_grub_args}" --target=x86_64-efi') # --efi-directory=/boot/efi ### REVIEW_LATER TODO NEW
         else:
-            os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --bootloader-id={distro} --modules="{luks_grub_args}"') ### REVIEW: specifying --target for non-uefi needed?
+#            os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --bootloader-id={distro} --modules="{luks_grub_args}"') ### REVIEW: specifying --target for non-uefi needed? ### OLD TO_DELETE before adding separate boot partition code
+            os.system(f'sudo chroot /mnt sudo grub{v}-install {bp if is_bootpart else args[2]} --bootloader-id={distro} --modules="{luks_grub_args}"') ### REVIEW: specifying --target for non-uefi needed? ### REVIEW_LATER TODO NEW
     if is_luks: # Make LUKS2 compatible grub image
         if is_efi:
             os.system(f'sudo chroot /mnt sudo grub{v}-mkimage -p "(crypto0)/@boot_{distro}/grub{v}" -O x86_64-efi -c /etc/grub_luks2.conf -o /boot/efi/EFI/{distro}/grubx64.efi {luks_grub_args}') # without '/grub' gives error normal.mod not found (maybe only one of these here and grub_luks2.conf is enough?!)
         else:
             os.system(f'sudo chroot /mnt sudo grub{v}-mkimage -p "(crypto0)/@boot_{distro}/grub{v}" -O i386-pc -c /etc/grub_luks2.conf -o /boot/grub{v}/i386-pc/core_luks2.img {luks_grub_args}') # without '/grub' gives error normal.mod not found (maybe only one of these here and grub_luks2.conf is enough?!) ### 'biosdisk' module not needed eh?
-            os.system(f'dd oflag=seek_bytes seek=512 if=/mnt/boot/grub{v}/i386-pc/core_luks2.img of={args[2]}')
-    os.system(f"sudo chroot /mnt sudo grub{v}-mkconfig {args[2]} -o /boot/grub{v}/grub.cfg")
+#            os.system(f'dd oflag=seek_bytes seek=512 if=/mnt/boot/grub{v}/i386-pc/core_luks2.img of={args[2]}') ### OLD TO_DELETE before adding separate boot partition code
+            os.system(f'dd oflag=seek_bytes seek=512 if=/mnt/boot/grub{v}/i386-pc/core_luks2.img of={bp if is_bootpart else args[2]}') ### REVIEW_LATER TODO NEW
+#    os.system(f"sudo chroot /mnt sudo grub{v}-mkconfig {args[2]} -o /boot/grub{v}/grub.cfg") ### OLD TO_DELETE before adding separate boot partition code
+    os.system(f"sudo chroot /mnt sudo grub{v}-mkconfig {bp if is_bootpart else args[2]} -o /boot/grub{v}/grub.cfg") ### REVIEW_LATER TODO NEW
     os.system(f"sudo mkdir -p /mnt/boot/grub{v}/BAK") # Folder for backing up grub configs created by ashpk
     os.system(f"sudo sed -i 's|subvol=@{distro_suffix}|subvol=@.snapshots{distro_suffix}/rootfs/snapshot-deploy|g' /mnt/boot/grub{v}/grub.cfg")
     # Create a mapping of "distro" <=> "BootOrder number". Ash reads from this file to switch between distros.
     if is_efi:
+        if is_bootpart: ### REVIEW_LATER TODO NEW this and next line are for "separate boot partition" functionality
+            os.system(f"efibootmgr -c -d {bp} -p 1 -L {distro_name} -l '\\EFI\\{distro}\\grubx64.efi'")
         if not os.path.exists("/mnt/boot/efi/EFI/map.txt"):
             os.system("echo DISTRO,BootOrder | sudo tee /mnt/boot/efi/EFI/map.txt")
         os.system(f"echo '{distro},'$(efibootmgr -v | grep -i {distro} | awk '"'{print $1}'"' | sed '"'s|[^0-9]*||g'"') | sudo tee -a /mnt/boot/efi/EFI/map.txt")
@@ -200,12 +207,19 @@ def post_bootstrap(super_group):
     if distro in ("arch", "cachyos", "endeavouros"):
         os.system("echo 'aur::False' | sudo tee -a /mnt/etc/ash.conf")
   # Update fstab
-    for mntdir in mntdirs:
-        os.system(f"echo 'UUID=\"{to_uuid(os_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{'' if mntdir else ',ro'} 0 0' | sudo tee -a /mnt/etc/fstab") # ro only for / entry ### complex but one-liner
-    if is_efi:
-        os.system(f"echo 'UUID=\"{to_uuid(args[3])}\" /boot/efi vfat umask=0077 0 2' | sudo tee -a /mnt/etc/fstab")
+    for mntdir in mntdirs: # common entries
+        os.system(f"echo 'UUID=\"{to_uuid(os_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{'' if mntdir else ',ro'} 0 0' | sudo tee -a /mnt/etc/fstab") # ro only for / entry ### complex but one-liner ### OLD TO_DELETE before adding code for separate boot partition
+
+#        os.system(f"echo 'UUID=\"{to_uuid(bp if is_bootpart and mntdir == 'boot' else os_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{'' if mntdir else ',ro'} 0 0' | sudo tee -a /mnt/etc/fstab") # ro only for / entry ### complex but one-liner ### OLD TO_DELETE before adding code for separate home partition as well - Update: won't work because of new structuring of mntdirs so REVERTED to first version
+
+#        os.system(f"echo 'UUID=\"{to_uuid(bp if (is_bootpart and mntdir == 'boot') else hp if (is_homepart and mntdir == 'home') else os_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{'' if mntdir else ',ro'} 0 0' | sudo tee -a /mnt/etc/fstab") # ro only for / entry ### complex but one-liner ### REVIEW_LATER NEW - Update: won't work because of new structuring of mntdirs so REVERTED to first version
+
     if is_bootpart:
         os.system(f"echo 'UUID=\"{to_uuid(bp)}\" /boot btrfs subvol=@boot{distro_suffix},compress=zstd,noatime,ro 0 0' | sudo tee -a /mnt/etc/fstab")
+    if is_homepart:
+        os.system(f"echo 'UUID=\"{to_uuid(hp)}\" /home btrfs subvol=@home{distro_suffix},compress=zstd,noatime,ro 0 0' | sudo tee -a /mnt/etc/fstab")
+    if is_efi:
+        os.system(f"echo 'UUID=\"{to_uuid(args[3])}\" /boot/efi vfat umask=0077 0 2' | sudo tee -a /mnt/etc/fstab")
     os.system("echo '/.snapshots/ash/root /root none bind 0 0' | sudo tee -a /mnt/etc/fstab")
     os.system("echo '/.snapshots/ash/tmp /tmp none bind 0 0' | sudo tee -a /mnt/etc/fstab")
     os.system(f"sudo sed -i '0,/@{distro_suffix}/ s|@{distro_suffix}|@.snapshots{distro_suffix}/rootfs/snapshot-deploy|' /mnt/etc/fstab")
@@ -250,20 +264,26 @@ def pre_bootstrap():
         os.system(f"sudo mount -t btrfs {os_root} /mnt")
     else:
         os.system(f"sudo mount -o subvolid=5 {os_root} /mnt")
-    for btrdir in btrdirs:
+    for btrdir in btrdirs: # common entries
         os.system(f"sudo btrfs sub create /mnt/{btrdir}")
     if is_bootpart:
         os.system(f"sudo btrfs sub create /mnt/@boot{distro_suffix}")
+    if is_homepart:
+        os.system(f"sudo btrfs sub create /mnt/@home{distro_suffix}")
     os.system("sudo umount /mnt")
-    for mntdir in mntdirs:
+    for mntdir in mntdirs: # common entries
         os.system(f"sudo mkdir -p /mnt/{mntdir}") # -p to ignore /mnt exists complaint
         os.system(f"sudo mount {os_root} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
+#        os.system(f'sudo mount {bp if is_bootpart and mntdir == "boot" else os_root} -o {"subvol="+btrdirs[mntdirs.index(mntdir)]+"," if not (is_bootpart and mntdir == "boot") else ""}compress=zstd,noatime /mnt/{mntdir}') ### NEWER but won't work because of new structuring of mntdirs so REVERTED to first version. Kept for future reference
     if is_bootpart:
         os.system(f"sudo mkdir /mnt/boot")
-        os.system(f"sudo mount -m {bp} subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/boot")
+        os.system(f"sudo mount -m {bp} -o compress=zstd,noatime /mnt/boot")
+    if is_homepart:
+        os.system(f"sudo mkdir /mnt/home")
+        os.system(f"sudo mount -m {hp} -o compress=zstd,noatime /mnt/home")
     for i in ("tmp", "root"):
         os.system(f"mkdir -p /mnt/{i}")
-    for i in ("ash", "boot", "etc", "root", "rootfs", "tmp"):
+    for i in ("ash", "boot", "etc", "root", "rootfs", "tmp"): ### REVIEW_LATER is "var" missing here?!!!
         os.system(f"mkdir -p /mnt/.snapshots/{i}")
   # Create following two because if not, error when booting in some distros
     for i in ("root", "tmp"):
