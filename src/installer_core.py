@@ -106,7 +106,7 @@ def get_hostname():
                 continue
     return h
 
-#   This function returns a tuple: (1. choice whether partitioning and formatting should happen
+#   This function returns a tuple: 1. choice whether partitioning and formatting should happen
 #   2. Underscore plus name of distro if it should be appended to sub-volume names
 def get_multiboot(dist):
     clear()
