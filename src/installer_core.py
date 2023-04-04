@@ -207,21 +207,18 @@ def post_bootstrap(super_group):
     if distro in ("arch", "cachyos", "endeavouros"):
         os.system("echo 'aur::False' | sudo tee -a /mnt/etc/ash.conf")
   # Update fstab
-    for mntdir in mntdirs: # common entries
-        os.system(f"echo 'UUID=\"{to_uuid(os_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{'' if mntdir else ',ro'} 0 0' | sudo tee -a /mnt/etc/fstab") # ro only for / entry ### complex but one-liner ### OLD TO_DELETE before adding code for separate boot partition
-
-#        os.system(f"echo 'UUID=\"{to_uuid(bp if is_bootpart and mntdir == 'boot' else os_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{'' if mntdir else ',ro'} 0 0' | sudo tee -a /mnt/etc/fstab") # ro only for / entry ### complex but one-liner ### OLD TO_DELETE before adding code for separate home partition as well - Update: won't work because of new structuring of mntdirs so REVERTED to first version
-
-#        os.system(f"echo 'UUID=\"{to_uuid(bp if (is_bootpart and mntdir == 'boot') else hp if (is_homepart and mntdir == 'home') else os_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{'' if mntdir else ',ro'} 0 0' | sudo tee -a /mnt/etc/fstab") # ro only for / entry ### complex but one-liner ### REVIEW_LATER NEW - Update: won't work because of new structuring of mntdirs so REVERTED to first version
-
-    if is_bootpart:
-        os.system(f"echo 'UUID=\"{to_uuid(bp)}\" /boot btrfs subvol=@boot{distro_suffix},compress=zstd,noatime,ro 0 0' | sudo tee -a /mnt/etc/fstab")
-    if is_homepart:
-        os.system(f"echo 'UUID=\"{to_uuid(hp)}\" /home btrfs subvol=@home{distro_suffix},compress=zstd,noatime,ro 0 0' | sudo tee -a /mnt/etc/fstab")
-    if is_efi:
-        os.system(f"echo 'UUID=\"{to_uuid(args[3])}\" /boot/efi vfat umask=0077 0 2' | sudo tee -a /mnt/etc/fstab")
-    os.system("echo '/.snapshots/ash/root /root none bind 0 0' | sudo tee -a /mnt/etc/fstab")
-    os.system("echo '/.snapshots/ash/tmp /tmp none bind 0 0' | sudo tee -a /mnt/etc/fstab")
+    with open('/mnt/etc/fstab', 'a') as f: # assumes script is run as root
+        for mntdir in mntdirs: # common entries
+            f.write(f'UUID=\"{to_uuid(os_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{"" if mntdir else ",ro"} 0 0\n') # ro only for / entry ### complex but one-liner
+        if is_bootpart:
+            f.write(f'UUID=\"{to_uuid(bp)}\" /boot btrfs subvol=@boot{distro_suffix},compress=zstd,noatime 0 0\n')
+        if is_homepart:
+            f.write(f'UUID=\"{to_uuid(hp)}\" /home btrfs subvol=@home{distro_suffix},compress=zstd,noatime 0 0\n')
+        if is_efi:
+            f.write(f'UUID=\"{to_uuid(args[3])}\" /boot/efi vfat umask=0077 0 2\n')
+        f.write('/.snapshots/ash/root /root none bind 0 0\n')
+        f.write('/.snapshots/ash/tmp /tmp none bind 0 0\n')
+  # TODO may write these in python
     os.system(f"sudo sed -i '0,/@{distro_suffix}/ s|@{distro_suffix}|@.snapshots{distro_suffix}/rootfs/snapshot-deploy|' /mnt/etc/fstab")
     os.system(f"sudo sed -i '0,/@boot{distro_suffix}/ s|@boot{distro_suffix}|@.snapshots{distro_suffix}/boot/boot-deploy|' /mnt/etc/fstab")
     os.system(f"sudo sed -i '0,/@etc{distro_suffix}/ s|@etc{distro_suffix}|@.snapshots{distro_suffix}/etc/etc-deploy|' /mnt/etc/fstab")
@@ -243,7 +240,7 @@ def post_bootstrap(super_group):
         set_password(username)
     else:
         print("Username is 'user' please change the default password")
-  # Modify OS release information (optional)
+  # Modify OS release information (optional) ### TODO may write in python
     os.system(f"sudo sed -i 's|^ID.*$|ID={distro}_ashos|' /mnt/etc/os-release")
     os.system(f"sudo sed -i 's|^NAME=.*$|NAME=\"{distro_name}\"|' /mnt/etc/os-release")
     os.system(f"sudo sed -i 's|^PRETTY_NAME=.*$|PRETTY_NAME=\"{distro_name}\"|' /mnt/etc/os-release")
@@ -285,8 +282,7 @@ def pre_bootstrap():
         os.system(f"mkdir -p /mnt/{i}")
     for i in ("ash", "boot", "etc", "root", "rootfs", "tmp"): ### REVIEW_LATER is "var" missing here?!!!
         os.system(f"mkdir -p /mnt/.snapshots/{i}")
-  # Create following two because if not, error when booting in some distros
-    for i in ("root", "tmp"):
+    for i in ("root", "tmp"): # necessary to prevent error booting some distros
         os.system(f"mkdir -p /mnt/.snapshots/ash/{i}")
     os.system("sudo mkdir -p /mnt/usr/share/ash/db") ### REVIEW was in step "Database and config files" before (better to create after bootstrap for aesthetics)
     if is_efi:
