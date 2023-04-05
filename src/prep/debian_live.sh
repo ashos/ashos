@@ -8,7 +8,7 @@
 main() {
     if [ -z "$HOME" ]; then HOME=~ ; fi
     RELEASE="sid"
-    prep_packages="btrfs-progs cryptsetup debootstrap dosfstools efibootmgr git ntp parted tmux"
+    prep_packages="btrfs-progs cryptsetup debootstrap dialog dosfstools efibootmgr git ntp parted tmux"
 
   # attempt to install and if errors sync time and database
     apt-get -y --fix-broken install $prep_packages
@@ -18,7 +18,8 @@ main() {
     #git clone http://github.com/ashos/ashos
     git config --global --add safe.directory $HOME/ashos # prevent fatal error "unsafe repository is owned by someone else"
     #cd ashos
-    #/bin/bash ./src/prep/parted_gpt_example.sh $2
+    dialog --stdout --msgbox "CAUTION: If you hit Okay, your HDD will be partitioned. You should confirm you edited script in prep folder!" 0 0
+    /bin/bash ./src/prep/parted_gpt_example.sh $2
     #python3 setup.py $1 $2 $3
 }
 

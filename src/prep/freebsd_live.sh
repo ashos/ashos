@@ -3,7 +3,7 @@
 main() {
     if [ -z "$HOME" ]; then HOME=~ ; fi
     network="em0"
-    prep_packages="git"
+    prep_packages="dialog git"
 
     su
 
@@ -20,7 +20,8 @@ main() {
     #git clone http://github.com/i2/ashos-dev
     #git config --global --add safe.directory ./ashos-dev # prevent fatal error "unsafe repository is owned by someone else"
     #cd ashos-dev
-    #/bin/sh ./src/prep/parted_gpt_example.sh $2
+    dialog --stdout --msgbox "CAUTION: If you hit Okay, your HDD will be partitioned. You should confirm you edited script in prep folder!" 0 0
+    /bin/sh ./src/prep/parted_gpt_example.sh $2
     #python3 setup.py $1 $2 $3
 }
 

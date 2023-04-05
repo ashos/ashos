@@ -21,11 +21,11 @@ except IndexError:
     distro_name = subprocess.check_output(['./src/detect_os.sh', 'name']).decode('utf-8').replace('"', "").strip()
 
 if distro:
-    try: # CAUTION: comment lines 24-35 if prepared manually
-        if use_other_iso != "":
-            use_distro = use_other_iso
-        else:
-            use_distro = distro
+    if use_other_iso != "":
+        use_distro = use_other_iso
+    else:
+        use_distro = distro
+    try: # CAUTION: comment lines 28-35 & unindent line 36 if prepared manually
         if is_efi:
             subprocess.check_output([f'./src/prep/{use_distro}_live.sh', f'{args[1]}', f'{args[2]}', f'{args[3]}'])
         else:

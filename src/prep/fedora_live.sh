@@ -3,7 +3,7 @@
 main() {
     if [ $(id -u) -ne 0 ]; then echo "Please run as root!"; exit 1; fi
     if [ -z "$HOME" ]; then HOME=~ ; fi
-    prep_packages="git dnf"
+    prep_packages="dialog dnf git"
 
   # Prevent error of running out of space in /
     mount / -o remount,size=4G /run/archiso/cowspace
@@ -16,7 +16,8 @@ main() {
     #git clone http://github.com/ashos/ashos
     #git config --global --add safe.directory ./ashos # prevent fatal error "unsafe repository is owned by someone else"
     #cd ashos
-    #/bin/sh ./src/prep/parted_gpt_example.sh $2
+    dialog --stdout --msgbox "CAUTION: If you hit Okay, your HDD will be partitioned. You should confirm you edited script in prep folder!" 0 0
+    /bin/sh ./src/prep/parted_gpt_example.sh $2
     #python3 setup.py $1 $2 $3
 }
 
