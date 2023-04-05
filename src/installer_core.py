@@ -49,8 +49,8 @@ def deploy_to_common():
     if is_efi:
         os.system("sudo umount /mnt/boot/efi")
     os.system("sudo umount /mnt/boot")
-    os.system(f'sudo mount {bp if is_bootpart else os_root} -o {"subvol="+f"@boot{distro_suffix}"+"," if not is_bootpart else ""}compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy') ### REVIEW_LATER A similar line for is_homepart needed?
-###    if is_bootpart: # easier to read
+    os.system(f'sudo mount {bp if is_boot_external else os_root} -o {"subvol="+f"@boot{distro_suffix}"+"," if not is_boot_external else ""}compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy') ### REVIEW_LATER A similar line for is_home_external needed?
+###    if is_boot_external: # easier to read
 ###        os.system(f"sudo mount {bp} -o compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
 ###    else:
 ###        os.system(f"sudo mount {os_root} -o subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
@@ -62,7 +62,7 @@ def deploy_to_common():
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/etc/etc-0/. /mnt/.snapshots/rootfs/snapshot-deploy/etc/")
 
 #   Get a separate boot partition
-def get_bootpart():
+def get_boot():
     clear()
     bp = None
     while True:
@@ -78,7 +78,7 @@ def get_bootpart():
     return bp
 
 #   Get a separate home partition
-def get_homepart():
+def get_home():
     clear()
     hp = None
     while True:
@@ -168,24 +168,24 @@ def grub_ash(v):
         if is_efi:
             #os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --modules="{luks_grub_args}"')
 #            os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --bootloader-id={distro} --modules="{luks_grub_args}" --target=x86_64-efi') # --efi-directory=/boot/efi ### OLD TO_DELETE before adding separate boot partition code
-            os.system(f'sudo chroot /mnt sudo grub{v}-install {bp if is_bootpart else args[2]} --bootloader-id={distro} --modules="{luks_grub_args}" --target=x86_64-efi') # --efi-directory=/boot/efi ### REVIEW_LATER TODO NEW
+            os.system(f'sudo chroot /mnt sudo grub{v}-install {bp if is_boot_external else args[2]} --bootloader-id={distro} --modules="{luks_grub_args}" --target=x86_64-efi') # --efi-directory=/boot/efi ### REVIEW_LATER TODO NEW
         else:
 #            os.system(f'sudo chroot /mnt sudo grub{v}-install {args[2]} --bootloader-id={distro} --modules="{luks_grub_args}"') ### REVIEW: specifying --target for non-uefi needed? ### OLD TO_DELETE before adding separate boot partition code
-            os.system(f'sudo chroot /mnt sudo grub{v}-install {bp if is_bootpart else args[2]} --bootloader-id={distro} --modules="{luks_grub_args}"') ### REVIEW: specifying --target for non-uefi needed? ### REVIEW_LATER TODO NEW
+            os.system(f'sudo chroot /mnt sudo grub{v}-install {bp if is_boot_external else args[2]} --bootloader-id={distro} --modules="{luks_grub_args}"') ### REVIEW: specifying --target for non-uefi needed? ### REVIEW_LATER TODO NEW
     if is_luks: # Make LUKS2 compatible grub image
         if is_efi:
             os.system(f'sudo chroot /mnt sudo grub{v}-mkimage -p "(crypto0)/@boot_{distro}/grub{v}" -O x86_64-efi -c /etc/grub_luks2.conf -o /boot/efi/EFI/{distro}/grubx64.efi {luks_grub_args}') # without '/grub' gives error normal.mod not found (maybe only one of these here and grub_luks2.conf is enough?!)
         else:
             os.system(f'sudo chroot /mnt sudo grub{v}-mkimage -p "(crypto0)/@boot_{distro}/grub{v}" -O i386-pc -c /etc/grub_luks2.conf -o /boot/grub{v}/i386-pc/core_luks2.img {luks_grub_args}') # without '/grub' gives error normal.mod not found (maybe only one of these here and grub_luks2.conf is enough?!) ### 'biosdisk' module not needed eh?
 #            os.system(f'dd oflag=seek_bytes seek=512 if=/mnt/boot/grub{v}/i386-pc/core_luks2.img of={args[2]}') ### OLD TO_DELETE before adding separate boot partition code
-            os.system(f'dd oflag=seek_bytes seek=512 if=/mnt/boot/grub{v}/i386-pc/core_luks2.img of={bp if is_bootpart else args[2]}') ### REVIEW_LATER TODO NEW
+            os.system(f'dd oflag=seek_bytes seek=512 if=/mnt/boot/grub{v}/i386-pc/core_luks2.img of={bp if is_boot_external else args[2]}') ### REVIEW_LATER TODO NEW
 #    os.system(f"sudo chroot /mnt sudo grub{v}-mkconfig {args[2]} -o /boot/grub{v}/grub.cfg") ### OLD TO_DELETE before adding separate boot partition code
-    os.system(f"sudo chroot /mnt sudo grub{v}-mkconfig {bp if is_bootpart else args[2]} -o /boot/grub{v}/grub.cfg") ### REVIEW_LATER TODO NEW
+    os.system(f"sudo chroot /mnt sudo grub{v}-mkconfig {bp if is_boot_external else args[2]} -o /boot/grub{v}/grub.cfg") ### REVIEW_LATER TODO NEW
     os.system(f"sudo mkdir -p /mnt/boot/grub{v}/BAK") # Folder for backing up grub configs created by ashpk
     os.system(f"sudo sed -i 's|subvol=@{distro_suffix}|subvol=@.snapshots{distro_suffix}/rootfs/snapshot-deploy|g' /mnt/boot/grub{v}/grub.cfg")
     # Create a mapping of "distro" <=> "BootOrder number". Ash reads from this file to switch between distros.
     if is_efi:
-        if is_bootpart: ### REVIEW_LATER TODO NEW this and next line are for "separate boot partition" functionality
+        if is_boot_external: ### REVIEW_LATER TODO NEW this and next line are for "separate boot partition" functionality
             os.system(f"efibootmgr -c -d {bp} -p 1 -L {distro_name} -l '\\EFI\\{distro}\\grubx64.efi'")
         if not os.path.exists("/mnt/boot/efi/EFI/map.txt"):
             os.system("echo DISTRO,BootOrder | sudo tee /mnt/boot/efi/EFI/map.txt")
@@ -210,9 +210,9 @@ def post_bootstrap(super_group):
     with open('/mnt/etc/fstab', 'a') as f: # assumes script is run as root
         for mntdir in mntdirs: # common entries
             f.write(f'UUID=\"{to_uuid(os_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{"" if mntdir else ",ro"} 0 0\n') # ro only for / entry ### complex but one-liner
-        if is_bootpart:
+        if is_boot_external:
             f.write(f'UUID=\"{to_uuid(bp)}\" /boot btrfs subvol=@boot{distro_suffix},compress=zstd,noatime 0 0\n')
-        if is_homepart:
+        if is_home_external:
             f.write(f'UUID=\"{to_uuid(hp)}\" /home btrfs subvol=@home{distro_suffix},compress=zstd,noatime 0 0\n')
         if is_efi:
             f.write(f'UUID=\"{to_uuid(args[3])}\" /boot/efi vfat umask=0077 0 2\n')
@@ -263,19 +263,19 @@ def pre_bootstrap():
         os.system(f"sudo mount -o subvolid=5 {os_root} /mnt")
     for btrdir in btrdirs: # common entries
         os.system(f"sudo btrfs sub create /mnt/{btrdir}")
-    if is_bootpart:
+    if is_boot_external:
         os.system(f"sudo btrfs sub create /mnt/@boot{distro_suffix}")
-    if is_homepart:
+    if is_home_external:
         os.system(f"sudo btrfs sub create /mnt/@home{distro_suffix}")
     os.system("sudo umount /mnt")
     for mntdir in mntdirs: # common entries
         os.system(f"sudo mkdir -p /mnt/{mntdir}") # -p to ignore /mnt exists complaint
         os.system(f"sudo mount {os_root} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
-#        os.system(f'sudo mount {bp if is_bootpart and mntdir == "boot" else os_root} -o {"subvol="+btrdirs[mntdirs.index(mntdir)]+"," if not (is_bootpart and mntdir == "boot") else ""}compress=zstd,noatime /mnt/{mntdir}') ### NEWER but won't work because of new structuring of mntdirs so REVERTED to first version. Kept for future reference
-    if is_bootpart:
+#        os.system(f'sudo mount {bp if is_boot_external and mntdir == "boot" else os_root} -o {"subvol="+btrdirs[mntdirs.index(mntdir)]+"," if not (is_boot_external and mntdir == "boot") else ""}compress=zstd,noatime /mnt/{mntdir}') ### NEWER but won't work because of new structuring of mntdirs so REVERTED to first version. Kept for future reference
+    if is_boot_external:
         os.system(f"sudo mkdir /mnt/boot")
         os.system(f"sudo mount -m {bp} -o compress=zstd,noatime /mnt/boot")
-    if is_homepart:
+    if is_home_external:
         os.system(f"sudo mkdir /mnt/home")
         os.system(f"sudo mount -m {hp} -o compress=zstd,noatime /mnt/home")
     for i in ("tmp", "root"):
@@ -313,7 +313,7 @@ def unmounts():
     if is_luks:
         os.system("sudo cryptsetup close luks_root")
 
-def use_separate_bootpart():
+def use_external_boot():
     clear()
     while True:
         print("Would you like to use a separate boot partition? (y/n)")
@@ -328,7 +328,7 @@ def use_separate_bootpart():
             continue
     return bc
 
-def use_separate_homepart():
+def use_external_home():
     clear()
     while True:
         print("Would you like to use a separate home partition? (y/n)")
@@ -382,22 +382,22 @@ with open('res/logos/logo.txt', 'r') as f:
 #   Define variables
 DEBUG = "" # options: "", " >/dev/null 2>&1"
 choice, distro_suffix = get_multiboot(distro)
-is_bootpart = use_separate_bootpart()
-is_homepart = use_separate_homepart()
+is_boot_external = use_external_boot()
+is_home_external = use_external_home()
 immutability = use_immutable()
-if is_bootpart and is_homepart:
+if is_boot_external and is_home_external:
     btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@etc{distro_suffix}", f"@var{distro_suffix}"]
     mntdirs = ["", ".snapshots", "etc", "var"]
-    bp = get_bootpart()
-    hp = get_homepart()
-elif is_bootpart:
+    bp = get_boot()
+    hp = get_home()
+elif is_boot_external:
     btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@etc{distro_suffix}", f"@home{distro_suffix}", f"@var{distro_suffix}"]
     mntdirs = ["", ".snapshots", "etc", "home", "var"]
-    bp = get_bootpart()
-elif is_homepart:
+    bp = get_boot()
+elif is_home_external:
     btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@boot{distro_suffix}", f"@etc{distro_suffix}", f"@var{distro_suffix}"]
     mntdirs = ["", ".snapshots", "boot", "etc", "var"]
-    hp = get_homepart()
+    hp = get_home()
 else:
     btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@boot{distro_suffix}", f"@etc{distro_suffix}", f"@home{distro_suffix}", f"@var{distro_suffix}"]
     mntdirs = ["", ".snapshots", "boot", "etc", "home", "var"]
