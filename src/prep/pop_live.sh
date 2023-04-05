@@ -7,7 +7,7 @@ main() {
     if [ $(id -u) -ne 0 ]; then echo "Please run as root!"; exit 1; fi
     if [ -z "$HOME" ]; then HOME="/root" ; fi
     RELEASE="jammy"
-    prep_packages="btrfs-progs debootstrap dialog tmux"
+    prep_packages=(btrfs-progs debootstrap dialog tmux)
     #prep_packages="${prep_packages} ntp" # if using Debian/Ubuntu iso
 
   # attempt to install and if errors sync time and database

@@ -3,7 +3,7 @@
 main() {
     if [ -z "$HOME" ]; then HOME=~ ; fi
     network="em0"
-    prep_packages="dialog git"
+    prep_packages=(dialog git)
 
     su
 
