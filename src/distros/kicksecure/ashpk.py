@@ -55,7 +55,7 @@ def pkg_list(CHR, snap):
 def refresh_helper(snapshot):
     return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apt-get update")
 
-#   Show diff of packages between 2 snapshots TODO: make this function not depend on bash
+#   Show diff of packages between two snapshots TODO: make this function not depend on bash
 def snapshot_diff(snap1, snap2):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap1}"):
         print(f"Snapshot {snap1} not found.")

@@ -7,7 +7,7 @@ main() {
     if [ $(id -u) -ne 0 ]; then echo "Please run as root!"; exit 1; fi
     if [ -z "$HOME" ]; then HOME="/root" ; fi
     RELEASE="jammy"
-    prep_packages="btrfs-progs debootstrap tmux"
+    prep_packages="btrfs-progs debootstrap dialog tmux"
     #prep_packages="${prep_packages} ntp" # if using Debian/Ubuntu iso
 
   # attempt to install and if errors sync time and database
@@ -18,7 +18,8 @@ main() {
     #git clone http://github.com/ashos/ashos
     #git config --global --add safe.directory ./ashos # prevent fatal error "unsafe repository is owned by someone else"
     #cd ashos
-    #/bin/bash ./src/prep/parted_gpt_example.sh $2
+    dialog --stdout --msgbox "CAUTION: If you hit Okay, your HDD will be partitioned. You should confirm you edited script in prep folder!" 0 0
+    /bin/bash ./src/prep/parted_gpt_example.sh $2
     #python3 setup.py $1 $2 $3
 }
 
