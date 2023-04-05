@@ -4,7 +4,7 @@
 def aur_check(snap):
     return os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}/usr/bin/paru")
 
-#   Set up AUR in snapshot (if enabled)
+#   Set up AUR in snapshot (if enabled, return true)
 def aur_install(snapshot):
     options = snapshot_config_get(snapshot)
     aur = False
@@ -12,7 +12,7 @@ def aur_install(snapshot):
         aur = True
         if aur and not aur_check(snapshot):
             prepare(snapshot) ### REVIEW NEEDED? Being called twice!
-            excode = int(aur_install_helper(snapshot))
+            excode = aur_install_helper(snapshot)
             if excode:
                 chr_delete(snapshot)
                 print("F: Setting up AUR failed!")
@@ -23,7 +23,7 @@ def aur_install(snapshot):
 #   Set up AUR in snapshot
 def aur_install_helper(snap):
     required = ["sudo", "git", "base-devel"]
-    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} pacman -Sy --needed --noconfirm {' '.join(required)}"))
+    excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} pacman -Sy --needed --noconfirm {' '.join(required)}")
     if excode:
         print("F: failed to install necessary packages to target!")
         chr_delete(snap)
@@ -35,12 +35,12 @@ def aur_install_helper(snap):
     os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} mkdir -p /home/aur")
     os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} chown -R aur /home/aur{DEBUG}")
     # TODO: more checking here
-    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'rm -rf /home/aur/paru-bin && cd /home/aur && git clone https://aur.archlinux.org/paru-bin.git'{DEBUG}"))
+    excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'rm -rf /home/aur/paru-bin && cd /home/aur && git clone https://aur.archlinux.org/paru-bin.git'{DEBUG}")
     if excode:
         print("F: failed to download paru-bin")
         chr_delete(snap)
         return excode
-    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'cd /home/aur/paru-bin && makepkg -si'"))
+    excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'cd /home/aur/paru-bin && makepkg -si'")
     if excode:
         print("F: failed installing paru-bin")
         chr_delete(snap)
@@ -50,7 +50,7 @@ def aur_install_helper(snap):
 #   Set up AUR support for live snapshot
 def aur_install_live_helper(snap):
     print("setting up AUR...")
-    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} pacman -S --noconfirm --needed sudo git base-devel{DEBUG}"))
+    excode = os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} pacman -S --noconfirm --needed sudo git base-devel{DEBUG}")
     if excode:
         return excode
     os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} useradd aur")
@@ -60,11 +60,11 @@ def aur_install_live_helper(snap):
     os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} mkdir -p /home/aur")
     os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} chown -R aur /home/aur{DEBUG}")
     # TODO: no error checking here
-    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'rm -rf /home/aur/paru-bin && cd /home/aur && git clone https://aur.archlinux.org/paru-bin.git'{DEBUG}"))
+    excode = os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'rm -rf /home/aur/paru-bin && cd /home/aur && git clone https://aur.archlinux.org/paru-bin.git'{DEBUG}")
     if excode:
         print("F: failed to download paru-bin")
         return excode
-    excode = int(os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'cd /home/aur/paru-bin && makepkg --noconfirm -si{DEBUG}'"))
+    excode = os.system(f"chroot /.snapshots/rootfs/snapshot-{snap} su aur -c 'cd /home/aur/paru-bin && makepkg --noconfirm -si{DEBUG}'")
     if excode:
         print("F: failed installing paru-bin")
         return excode
@@ -176,7 +176,7 @@ def install_package_live(snapshot, tmp, pkg):
             if excode:
                 os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
                 os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-                print("F: Live install failed and changes discarded!")
+                print("F: Live install failed!") # Before: Live install failed and changes discarded
                 return excode
         if snapshot_config_get(snapshot)["aur"] == "True":
             aur_in_destination_snapshot = True
@@ -196,11 +196,11 @@ def install_package_live(snapshot, tmp, pkg):
                     if excode:
                         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
                         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-                        print("F: Live install failed and changes discarded!")
-                        return excode
+                        print("F: Live install failed!") # Before: Live install failed and changes discarded
+                        return excode # i.e. aur = True
             else:
                 print("F: Not enabling AUR for live snapshot!")
-                excode = 1
+                excode = 1 # i.e. aur = False
     else:
         #ash_chroot_mounts(tmp) ### REVIEW If issues to have this in ashpk_core.py, uncomment this
         excode = os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite '*' --noconfirm {pkg}{DEBUG}") ### REVIEW Maybe just do this in try section and remove else section!
@@ -214,7 +214,7 @@ def pkg_list(CHR, snap):
 def refresh_helper(snapshot):
     return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syy")
 
-#   Show diff of packages between 2 snapshots TODO: make this function not depend on bash
+#   Show diff of packages between two snapshots TODO: make this function not depend on bash
 def snapshot_diff(snap1, snap2):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap1}"):
         print(f"Snapshot {snap1} not found.")
@@ -232,9 +232,9 @@ def upgrade_helper(snapshot):
     aur = aur_install(snapshot)
     prepare(snapshot) ### REVIEW tried it outside of this function in ashpk_core before aur_install and it works fine!
     if not aur:
-        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu"))
+        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu")
     else:
-        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c 'paru -Syyu'"))
+        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c 'paru -Syyu'")
     return excode
 
 # ---------------------------------------------------------------------------- #
