@@ -5,12 +5,9 @@ main() {
     if [ -z "$HOME" ]; then HOME=~ ; fi
     prep_packages="bash btrfs-progs coreutils curl git mount parted python3 sudo tmux tzdata umount" #  [[[[coreutils needed for ln -srf]]]] make fakeroot dialog [[[[[#### default mount and umount from busybox gives errors]]]] ---> REMOVE bash
 
-  # Prevent error of running out of space in /
-    mount / -o remount,size=4G /run/archiso/cowspace
-
   # attempt to install and if errors sync time and database
-    pacman -Syy --noconfirm $prep_packages
-    [ $? != 0 ] && sync_time && fixdb && pacman -S --noconfirm $prep_packages
+    apk add --no-cache -v $prep_packages
+    [ $? != 0 ] && sync_time && apk update && apk add --no-cache -v $prep_packages ### "apk update" can be in fixdb()
 
     #configs
     #git clone http://github.com/ashos/ashos
