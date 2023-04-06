@@ -3,7 +3,7 @@
 main() {
     if [ $(id -u) -ne 0 ]; then echo "Please run as root!"; exit 1; fi
     if [ -z "$HOME" ]; then HOME=~ ; fi
-    prep_packages="bash btrfs-progs coreutils curl git mount parted python sudo tmux tzdata umount" #  [[[[coreutils needed for ln -srf]]]] make fakeroot dialog [[[[[#### default mount and umount from busybox gives errors]]]] ---> REMOVE bash
+    prep_packages="bash btrfs-progs coreutils curl git mount parted python3 sudo tmux tzdata umount" #  [[[[coreutils needed for ln -srf]]]] make fakeroot dialog [[[[[#### default mount and umount from busybox gives errors]]]] ---> REMOVE bash
 
   # Prevent error of running out of space in /
     mount / -o remount,size=4G /run/archiso/cowspace

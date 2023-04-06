@@ -48,10 +48,10 @@ pre_bootstrap()
 URL = f"https://dl-cdn.alpinelinux.org/alpine/{RELEASE}/main"
 os.system(f"curl -LO {URL}/{ARCH}/apk-tools-static-{APK}.apk")
 os.system("tar zxf apk-tools-static-*.apk")
-###os.system("sudo cp ./src/distros/alpine/repositories /mnt/etc/apk/")
-###excode = int(os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X http://dl-cdn.alpinelinux.org/alpine/{RELEASE}/main/ \
-###                             -U --allow-untrusted --root /mnt --initdb add --no-cache {packages}"))
+###excode = os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X http://dl-cdn.alpinelinux.org/alpine/{RELEASE}/main/ \
+###                             -U --allow-untrusted --root /mnt --initdb add --no-cache {packages}")
 excode1 = os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add alpine-base") ### REVIEW Is "/" needed after {URL} ?
+os.system("sudo cp ./src/distros/alpine/repositories /mnt/etc/apk/") ### REVIEW MOVED from down at section 3 to here as installing 'bash' was giving error
 excode2 = os.system(f"sudo chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'") ### changed bash to sh
 ### excode = os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add {packages}") # only had "alpine-base" at first - Possible to combine these 2 commands?
 if excode1 != 0 and excode2 != 0:
@@ -61,7 +61,6 @@ if excode1 != 0 and excode2 != 0:
 ash_chroot()
 
 #   3. Package manager database and config files
-os.system("sudo cp ./src/distros/alpine/repositories /mnt/etc/apk/")
 os.system("sudo cp --dereference /etc/resolv.conf /mnt/etc/") # --remove-destination ### not writing through dangling symlink! (TODO: try except)
 os.system("sudo cp -r /mnt/var/lib/apk/. /mnt/usr/share/ash/db")
 
