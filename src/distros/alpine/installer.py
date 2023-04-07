@@ -51,9 +51,6 @@ if is_luks:
     packages += " cryptsetup" ### REVIEW_LATER
 super_group = "wheel"
 v = "" # GRUB version number in /boot/grubN
-tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
-hostname = get_name('hostname')
-#hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
 URL = f"https://dl-cdn.alpinelinux.org/alpine/{RELEASE}/main"
 
 #   Pre bootstrap

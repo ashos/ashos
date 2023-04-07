@@ -27,9 +27,6 @@ if is_efi:
         packages += " shim-x64 grub2-efi-x64-modules"
 super_group = "wheel"
 v = "2" # GRUB version number in /boot/grubN
-tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
-hostname = get_name('hostname')
-#hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
 
 #   Pre bootstrap
 pre_bootstrap()

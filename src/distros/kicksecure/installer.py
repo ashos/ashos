@@ -30,9 +30,6 @@ if is_luks:
     packages += " cryptsetup cryptsetup-initramfs cryptsetup-run"
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
-tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
-hostname = get_name('hostname')
-#hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
 
 #   Pre bootstrap
 pre_bootstrap()

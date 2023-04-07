@@ -38,11 +38,8 @@ if is_luks:
     packages += " cryptsetup" ### REVIEW_LATER
 super_group = "wheel"
 v = "" # GRUB version number in /boot/grubN
-tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
-hostname = get_name('hostname')
 EOS_mirrorlist = "https://gitlab.com/endeavouros-filemirror/PKGBUILDS/-/raw/master/endeavouros-mirrorlist/endeavouros-mirrorlist"
 EOS_pacman = "https://raw.githubusercontent.com/endeavouros-team/EndeavourOS-calamares/main/calamares/files/pacman.conf"
-#hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
 
 #   Pre bootstrap
 pre_bootstrap()
