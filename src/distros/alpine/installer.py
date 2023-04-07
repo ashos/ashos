@@ -109,7 +109,7 @@ os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add savecache shu
 initram_update()
 #os.system('grep -qxF GRUB_ENABLE_BLSCFG="false" /mnt/etc/default/grub || \
 #           echo GRUB_ENABLE_BLSCFG="false" | sudo tee -a /mnt/etc/default/grub')
-os.system('echo GRUB_CMDLINE_LINUX_DEFAULT="modules=sd-mod,usb-storage,btrfs quiet rootfstype=btrfs" | sudo tee -a /mnt/etc/default/grub')
+os.system('echo GRUB_CMDLINE_LINUX_DEFAULT=\\"modules=sd-mod,usb-storage,btrfs quiet rootfstype=btrfs\\" | sudo tee -a /mnt/etc/default/grub')
 grub_ash(v)
 
 #   BTRFS snapshots
