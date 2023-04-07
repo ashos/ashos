@@ -28,7 +28,7 @@ def initram_update():
             kv = None
             while True:
                 try:
-                    kv = get_item_from_path("kernel version", "/lib/modules")
+                    kv = get_item_from_path("kernel version", "/mnt/lib/modules")
                     subprocess.check_output(f"sudo chroot /mnt sudo mkinitfs -b / -f /etc/fstab -k {kv}", shell=True)
                     break # Success
                 except subprocess.CalledProcessError:
@@ -40,9 +40,9 @@ is_format_btrfs = True ### REVIEW TEMPORARY
 APK = "2.12.11-r0" # https://git.alpinelinux.org/aports/plain/main/apk-tools/APKBUILD
 ARCH = "x86_64"
 RELEASE = "edge"
-KERNEL = "lts" ### edge
-packages = f"alpine-base linux-lts tzdata sudo python3 py3-anytree bash \
-            btrfs-progs networkmanager tmux mount umount mkinitfs" #linux-firmware nano doas os-prober ###linux-{KERNEL} musl-locales musl-locales-lang #### default mount from busybox gives errors. Do I also need umount?!
+KERNEL = "edge" ### lts
+packages = f"alpine-base linux-{KERNEL} tzdata sudo python3 py3-anytree bash \
+            btrfs-progs networkmanager tmux mount umount mkinitfs" #linux-firmware nano doas os-prober musl-locales musl-locales-lang #### default mount from busybox gives errors. Do I also need umount?!
 if is_efi:
     packages += " grub-efi efibootmgr"
 else:
@@ -54,16 +54,14 @@ v = "" # GRUB version number in /boot/grubN
 tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
 hostname = get_hostname()
 #hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
+URL = f"https://dl-cdn.alpinelinux.org/alpine/{RELEASE}/main"
 
 #   Pre bootstrap
 pre_bootstrap()
 
 #   2. Bootstrap and install packages in chroot
-URL = f"https://dl-cdn.alpinelinux.org/alpine/{RELEASE}/main"
 os.system(f"curl -LO {URL}/{ARCH}/apk-tools-static-{APK}.apk")
 os.system("tar zxf apk-tools-static-*.apk")
-###excode = os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X http://dl-cdn.alpinelinux.org/alpine/{RELEASE}/main/ \
-###                             -U --allow-untrusted --root /mnt --initdb add --no-cache {packages}")
 excode1 = os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add alpine-base") ### REVIEW Is "/" needed after {URL} ?
 os.system("sudo cp ./src/distros/alpine/repositories /mnt/etc/apk/") ### REVIEW MOVED from down at section 3 to here as installing 'bash' was giving error
 excode2 = os.system(f"sudo chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'") ### changed bash to sh
@@ -109,6 +107,9 @@ os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add savecache shu
 
 #   6. Boot and EFI
 initram_update()
+#os.system('grep -qxF GRUB_ENABLE_BLSCFG="false" /mnt/etc/default/grub || \
+#           echo GRUB_ENABLE_BLSCFG="false" | sudo tee -a /mnt/etc/default/grub')
+os.system('echo GRUB_CMDLINE_LINUX_DEFAULT="modules=sd-mod,usb-storage,btrfs quiet rootfstype=btrfs" | sudo tee -a /mnt/etc/default/grub')
 grub_ash(v)
 
 #   BTRFS snapshots

@@ -240,7 +240,7 @@ def post_bootstrap(super_group):
     else:
         set_password("root")
     if distro !="kicksecure": ### REVIEW not generic enough!
-        username = get_username()
+        #username = get_username()
         create_user(username, super_group)
         if distro == "alpine": ### REVIEW not generic enough!
             set_password(username, "") # will fix for "doas"
@@ -420,5 +420,5 @@ if is_luks:
 else:
     os_root = args[1]
     luks_grub_args = ""
-username = None ### REVIEW 2023 made it global variable for Alpine installer
+username = get_username() ### REVIEW 2023 made it global variable for Alpine installer
 
