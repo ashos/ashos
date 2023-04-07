@@ -1,5 +1,0 @@
-snowflakeos.org
-
-https://nixos.org/manual/nixos/stable/
-
-nixos-install

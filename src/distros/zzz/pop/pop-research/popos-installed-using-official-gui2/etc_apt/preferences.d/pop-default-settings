@@ -1,3 +1,0 @@
-Package: *
-Pin: release o=pop-os-release
-Pin-Priority: 1001

@@ -1,5 +1,0 @@
-[RHEL_Disk]
-name=rhel-x86_64-dvd
-baseurl="file:///run/install/repo/AppStream/"
-gpgcheck=0
-

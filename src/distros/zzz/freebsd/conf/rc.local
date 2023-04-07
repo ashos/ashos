@@ -1,8 +1,0 @@
-ifconfig wlan0 create wlandev run0
-
-# If necessary:
-ifconfig wlan0 regdomain <regulatory domains like ETSI> country <country code>
-
-# A list can be viewed with 'ifconfig wlan0 list countries' . More in ifconfig(8).
-wpa_supplicant -i wlan0 -c /etc/wpa_supplicant &
-
