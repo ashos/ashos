@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 from src.installer_core import * # NOQA
-#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_timezone, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
+#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_item_from_path, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 from setup import args, distro
 
 def initram_update_luks():
@@ -25,7 +25,7 @@ packages = f"linux-mainline curl python3 python3-anytree \
              btrfs-progs NetworkManager sudo nano tmux" # os-prober firmware-linux-nonfree linux-image-{ARCH} dhcpcd
 super_group = "wheel"
 v = "" # GRUB version number in /boot/grubN
-tz = get_timezone()
+tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
 hostname = get_hostname()
 #hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
 
@@ -74,7 +74,7 @@ if RELEASE == "": # For glibc variant ### what about musl?
 elif RELEASE == "-musl":
     print("TODO")
 os.system("echo 'LANG=en_US.UTF-8' | sudo tee /mnt/etc/locale.conf")
-os.system(f"sudo ln -srf /mnt{tz} /mnt/etc/localtime")
+os.system(f"sudo ln -srf /mnt/usr/share/zoneinfo/{tz} /mnt/etc/localtime")
 os.system("sudo chroot /mnt sudo hwclock --systohc")
 
 #   Post bootstrap

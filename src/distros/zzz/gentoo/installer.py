@@ -101,7 +101,7 @@ def main(args, distro):
     astpart = to_uuid(args[1])
     btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@boot{distro_suffix}", f"@etc{distro_suffix}", f"@home{distro_suffix}", f"@var{distro_suffix}"]
     mntdirs = ["", ".snapshots", "boot", "etc", "home", "var"]
-    tz = get_timezone()
+    tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
 #    hostname = get_hostname()
     hostname = subprocess.check_output(f"git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
     if os.path.exists("/sys/firmware/efi"):
@@ -202,7 +202,7 @@ def main(args, distro):
     os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
     os.system("sudo chroot /mnt sudo locale-gen")
     #os.system("echo 'LANG=en_US.UTF-8' | sudo tee /mnt/etc/locale.conf") ### REVIEW It already has C.UTF-8 should I add en_US.UTF-8 ?
-    os.system(f"sudo ln -srf /mnt{tz} /mnt/etc/localtime")
+    os.system(f"sudo ln -srf /mnt/usr/share/zoneinfo/{tz} /mnt/etc/localtime")
     os.system("sudo chroot /mnt /sbin/hwclock --systohc")
 
 #   Copy and symlink ashpk and detect_os.sh

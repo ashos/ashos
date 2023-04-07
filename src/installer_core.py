@@ -124,25 +124,24 @@ def get_multiboot(dist):
             print("Invalid choice!")
             continue
 
-def get_timezone():
+def get_item_from_path(thing, apath):
     clear()
     while True:
-        print("Select a timezone (type list to list):")
-        zone = input("> ")
-        if zone == "list":
-            zoneinfo_path = '/usr/share/zoneinfo'
-            zones = []
-            for root, _dirs, files in os.walk(zoneinfo_path, followlinks=True):
+        print(f"Select a {thing} (type list to list):")
+        choice = input("> ")
+        if choice == "list":
+            choice = []
+            for root, _dirs, files in os.walk(apath, followlinks=True):
                 for file in files:
-                    zones.append(os.path.join(root, file).replace(f"{zoneinfo_path}/", ""))
-            zones = "\n".join(sorted(zones))
-            os.system(f"echo '{zones}' | less")
+                    choice.append(os.path.join(root, file).replace(f"{apath}/", ""))
+            choice = "\n".join(sorted(choice))
+            os.system(f"echo '{choice}' | less")
         else:
-            timezone = str(f"/usr/share/zoneinfo/{zone}")
-            if not os.path.isfile(timezone):
-                print("Invalid timezone!")
+            temp = str(f"{apath}/{choice}")
+            if not ( os.path.isfile(temp) or os.path.isdir(temp) ):
+                print(f"Invalid {thing}!")
                 continue
-            break
+            return choice ### REVIEW originally was just break
 
 def get_username():
     clear()

@@ -6,7 +6,7 @@ import os
 import subprocess
 import sys ### REMOVE WHEN TRY EXCEPT ELSE IS IMPLEMENTED
 from src.installer_core import * # NOQA
-#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_timezone, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
+#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_item_from_path, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 from setup import args, distro
 
 def initram_update():
@@ -15,11 +15,25 @@ def initram_update():
         os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
         os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
         os.system("sudo sed -i -e '/^HOOKS/ s/filesystems/encrypt filesystems/' \
-                        -e 's|^FILES=(|FILES=(/etc/crypto_keyfile.bin|' /mnt/etc/mkinitcpio.conf")
+                        -e 's|^FILES=(|FILES=(/etc/crypto_keyfile.bin|' /mnt/etc/mkinitcpio.conf") ### IMPORTANT TODO
     if is_format_btrfs: ### REVIEW TEMPORARY
-        os.system("sudo sed -i 's|^MODULES=(|MODULES=(btrfs|' /mnt/etc/mkinitcpio.conf") ### TODO if array not empty, needs to be "btrfs "
+        os.system("sudo sed -i 's|ext4|ext4 btrfs|' /mnt/etc/mkinitfs/mkinitfs.conf") ### TODO if array not empty, needs to be "btrfs "
     if is_luks or is_format_btrfs: ### REVIEW: does mkinitcpio need to be run without these conditions too?
-        os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}")
+        try: # work with default kernel modules first
+            subprocess.check_output("sudo chroot /mnt sudo mkinitfs -b / -f /etc/fstab", shell=True) ### REVIEW <kernelvers>
+        except subprocess.CalledProcessError: # and if errors
+            #if len(next(os.walk('dir_name'))[1]) == 1:
+            print("F: Creating initfs with default kernel failed!")
+            print("Next, type just folder name i.e. 5.15.104-0-lts")
+            kv = None
+            while True:
+                try:
+                    kv = get_item_from_path("kernel version", "/lib/modules")
+                    subprocess.check_output(f"sudo chroot /mnt sudo mkinitfs -b / -f /etc/fstab -k {kv}", shell=True)
+                    break # Success
+                except subprocess.CalledProcessError:
+                    print(f"F: Creating initfs with kernel {kv} failed!")
+                    continue
 
 #   1. Define variables
 is_format_btrfs = True ### REVIEW TEMPORARY
@@ -28,7 +42,7 @@ ARCH = "x86_64"
 RELEASE = "edge"
 KERNEL = "lts" ### edge
 packages = f"alpine-base linux-lts tzdata sudo python3 py3-anytree bash \
-            btrfs-progs networkmanager tmux mount umount" #linux-firmware nano doas os-prober ###linux-{KERNEL} musl-locales musl-locales-lang #### default mount from busybox gives errors. Do I also need umount?!
+            btrfs-progs networkmanager tmux mount umount mkinitfs" #linux-firmware nano doas os-prober ###linux-{KERNEL} musl-locales musl-locales-lang #### default mount from busybox gives errors. Do I also need umount?!
 if is_efi:
     packages += " grub-efi efibootmgr"
 else:
@@ -37,7 +51,7 @@ if is_luks:
     packages += " cryptsetup" ### REVIEW_LATER
 super_group = "wheel"
 v = "" # GRUB version number in /boot/grubN
-tz = get_timezone()
+tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
 hostname = get_hostname()
 #hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
 
@@ -70,7 +84,7 @@ os.system(f"echo 127.0.0.1 {hostname} {distro} | sudo tee -a /mnt/etc/hosts")
 #os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
 #os.system("sudo chroot /mnt sudo locale-gen")
 #os.system("echo 'LANG=en_US.UTF-8' | sudo tee /mnt/etc/locale.conf")
-os.system(f"sudo ln -srf /mnt{tz} /mnt/etc/localtime")
+os.system(f"sudo ln -srf /mnt/usr/share/zoneinfo/{tz} /mnt/etc/localtime")
 os.system("sudo chroot /mnt /sbin/hwclock --systohc")
 
 #   Post bootstrap

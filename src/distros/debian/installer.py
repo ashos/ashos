@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 from src.installer_core import * # NOQA
-#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_timezone, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
+#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_item_from_path, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 from setup import args, distro
 
 def initram_update_luks():
@@ -30,7 +30,7 @@ if is_luks:
     packages += " cryptsetup cryptsetup-initramfs cryptsetup-run"
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
-tz = get_timezone()
+tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
 hostname = get_hostname()
 #hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
 
@@ -68,7 +68,7 @@ os.system(f"echo 127.0.0.1 {hostname} {distro} | sudo tee -a /mnt/etc/hosts")
 os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
 os.system("sudo chroot /mnt sudo locale-gen")
 os.system("echo 'LANG=en_US.UTF-8' | sudo tee /mnt/etc/locale.conf")
-os.system(f"sudo ln -srf /mnt{tz} /mnt/etc/localtime")
+os.system(f"sudo ln -srf /mnt/usr/share/zoneinfo/{tz} /mnt/etc/localtime")
 os.system("sudo chroot /mnt sudo hwclock --systohc")
 
 #   Post bootstrap
