@@ -14,9 +14,9 @@ networkmanager
 # gnome-shell-extension-pop-shell-bin (from aur)
 
 [services]
-% sudo systemctl enable gdm3
+% sudo systemctl enable gdm
 # OR sudo systemctl enable --now gdm3 ???
-% sudo systemctl start --now gdm3
+% sudo systemctl start --now gdm
 
 #gdm: either name of services to be enabled
 #OR
