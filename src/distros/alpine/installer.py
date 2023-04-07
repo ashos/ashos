@@ -52,7 +52,7 @@ if is_luks:
 super_group = "wheel"
 v = "" # GRUB version number in /boot/grubN
 tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
-hostname = get_hostname()
+hostname = get_name('hostname')
 #hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
 URL = f"https://dl-cdn.alpinelinux.org/alpine/{RELEASE}/main"
 
@@ -87,6 +87,12 @@ os.system("sudo chroot /mnt /sbin/hwclock --systohc")
 
 #   Post bootstrap
 post_bootstrap(super_group)
+if yes_no("Replace Busybox's ash with Ash? Use with caution!"):
+    os.system(f"sudo mv /mnt/bin/ash /mnt/bin/busyash")
+    print("Ash replaced Busybox's ash (which is now busyash)!")
+else:
+    os.system(f"sudo mv /mnt/usr/bin/ash /mnt/usr/bin/asd")
+    print("Run asd instead of ash!")
 
 #   5. Services (init, network, etc.)
 os.system("sudo chroot /mnt /bin/bash -c '/sbin/rc-service networkmanager start'")

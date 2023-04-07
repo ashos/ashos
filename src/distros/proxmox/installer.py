@@ -17,23 +17,6 @@ def initram_update_luks():
         os.system(f"sudo echo 'luks_root '{args[1]}'  /etc/crypto_keyfile.bin luks' | sudo tee -a /mnt/etc/crypttab")
         os.system(f"sudo chroot /mnt update-initramfs -u") # REVIEW: Need sudo inside? What about kernel variants?
 
-def is_two_stage_install():
-    clear()
-    while True:
-        print("Would you like to install proxmox-ve in two stages (continues after reboot - recommended)? (y/n)")
-        print("Please note if you choose 'N', setup will finish but with errors as as some packages (e.g., apparmor) depend on specific kernel compile flags that need a live Proxmox VE kernel. Proxmox will still work but may have issues (untested)")
-        reply = input("> ")
-        if reply.casefold() == "y":
-            e = True
-            print("After rebooting, make a new snapshot, install `proxmox-ve` in it, deploy and reboot")
-            break
-        elif reply.casefold() == "n":
-            e = False
-            break
-        else:
-            continue
-    return e
-
 #   1. Define variables
 ARCH = "amd64"
 RELEASE = "bullseye" # for both proxmox and its debian base
@@ -45,14 +28,20 @@ else:
     packages += " grub-pc"
 if is_luks:
     packages += " cryptsetup cryptsetup-initramfs cryptsetup-run"
-if is_two_stage_install():
+note2s = "Note on 2-stage setup: If you choose Yes (recommended), after first \
+    reboot, make a new snapshot, install 'proxmox-ve' in it, deploy & reboot. \
+    If you choose No, setup will finish but with errors as some packages like \
+    'apparmor' depend on specific kernel compile flags that need live Proxmox \
+    VE kernel. Proxmox can still work but may have issues (untested).\n Would \
+    you like to install proxmox-ve in two stages?"
+if yes_no(note2s):
     packages += f" pve-kernel-{KERNEL}"
 else:
     packages += " proxmox-ve"
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
 tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
-hostname = get_hostname()
+hostname = get_name('hostname')
 #hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
 
 #   Pre bootstrap

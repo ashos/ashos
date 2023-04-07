@@ -31,14 +31,14 @@ def create_user(u, g):
 
 #   BTRFS snapshots
 def deploy_base_snapshot():
-    os.system(f"sudo btrfs sub snap {immutability} /mnt /mnt/.snapshots/rootfs/snapshot-0")
+    os.system(f"sudo btrfs sub snap {'' if is_mutable else '-r'} /mnt /mnt/.snapshots/rootfs/snapshot-0")
     os.system("sudo btrfs sub create /mnt/.snapshots/boot/boot-deploy")
     os.system("sudo btrfs sub create /mnt/.snapshots/etc/etc-deploy")
     os.system("sudo cp -r --reflink=auto /mnt/boot/. /mnt/.snapshots/boot/boot-deploy")
     os.system("sudo cp -r --reflink=auto /mnt/etc/. /mnt/.snapshots/etc/etc-deploy")
-    os.system(f"sudo btrfs sub snap {immutability} /mnt/.snapshots/boot/boot-deploy /mnt/.snapshots/boot/boot-0")
-    os.system(f"sudo btrfs sub snap {immutability} /mnt/.snapshots/etc/etc-deploy /mnt/.snapshots/etc/etc-0")
-    if immutability == "": # Mark base snapshot as mutable
+    os.system(f"sudo btrfs sub snap {'' if is_mutable else '-r'} /mnt/.snapshots/boot/boot-deploy /mnt/.snapshots/boot/boot-0")
+    os.system(f"sudo btrfs sub snap {'' if is_mutable else '-r'} /mnt/.snapshots/etc/etc-deploy /mnt/.snapshots/etc/etc-0")
+    if is_mutable: # Mark base snapshot as mutable
             os.system("touch /mnt/.snapshots/rootfs/snapshot-0/usr/share/ash/mutable")
     os.system("sudo btrfs sub snap /mnt/.snapshots/rootfs/snapshot-0 /mnt/.snapshots/rootfs/snapshot-deploy")
     os.system("sudo chroot /mnt sudo btrfs sub set-default /.snapshots/rootfs/snapshot-deploy")
@@ -64,51 +64,29 @@ def deploy_to_common():
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/boot/boot-0/. /mnt/.snapshots/rootfs/snapshot-deploy/boot/")
     os.system("sudo cp -r --reflink=auto /mnt/.snapshots/etc/etc-0/. /mnt/.snapshots/rootfs/snapshot-deploy/etc/")
 
-#   Get a separate boot partition
-def get_boot():
+def get_external_partition(thing):
     clear()
-    bp = None
     while True:
-        print("Enter your external boot partition (e.g. /dev/sda1):")
-        bp = input("> ")
-        if bp:
-            print("Happy with your choice? (y/n)")
-            reply = input("> ")
-            if reply.casefold() == "y":
+        print(f"Enter your external {thing} partition (e.g. /dev/sdaX):")
+        p = input("> ")
+        if p:
+            if yes_no("Happy with your choice?"):
                 break
             else:
                 continue
-    return bp
+    return p
 
-#   Get a separate home partition
-def get_home():
+def get_name(thing):
     clear()
-    hp = None
     while True:
-        print("Enter your external home partition (e.g. /dev/sda3):")
-        hp = input("> ")
-        if hp:
-            print("Happy with your choice? (y/n)")
-            reply = input("> ")
-            if reply.casefold() == "y":
+        print(f"Enter {thing} (all lowercase):")
+        u = input("> ")
+        if u:
+            if yes_no(f"Happy with your {thing}?"):
                 break
             else:
                 continue
-    return hp
-
-def get_hostname():
-    clear()
-    while True:
-        print("Enter hostname:")
-        h = input("> ")
-        if h:
-            print("Happy with your hostname? (y/n)")
-            reply = input("> ")
-            if reply.casefold() == "y":
-                break
-            else:
-                continue
-    return h
+    return u
 
 #   This function returns a tuple: 1. choice whether partitioning and formatting should happen
 #   2. Underscore plus name of distro if it should be appended to sub-volume names
@@ -142,20 +120,6 @@ def get_item_from_path(thing, apath):
                 print(f"Invalid {thing}!")
                 continue
             return choice ### REVIEW originally was just break
-
-def get_username():
-    clear()
-    while True:
-        print("Enter username (all lowercase):")
-        u = input("> ")
-        if u:
-            print("Happy with your username? (y/n)")
-            reply = input("> ")
-            if reply.casefold() == "y":
-                break
-            else:
-                continue
-    return u
 
 #   GRUB and EFI
 def grub_ash(v):
@@ -302,9 +266,7 @@ def set_password(u, s="sudo"): ### REVIEW Use super_group?
     while True:
         print(f"Setting a password for '{u}':")
         os.system(f"sudo chroot /mnt {s} passwd {u}")
-        print("Was your password set properly? (y/n)")
-        reply = input("> ")
-        if reply.casefold() == "y":
+        if yes_no("Was your password set properly?"):
             break
         else:
             continue
@@ -321,63 +283,20 @@ def unmounts():
     if is_luks:
         os.system("sudo cryptsetup close luks_root")
 
-def use_external_boot():
+#   Generic yes no prompt
+def yes_no(msg):
     clear()
     while True:
-        print("Would you like to use a separate boot partition? (y/n)")
+        print(f"{msg} (y/n)")
         reply = input("> ")
-        if reply.casefold() == "y":
-            bc = True
-            break
-        elif reply.casefold() == "n":
-            bc = False
-            break
-        else:
-            continue
-    return bc
-
-def use_external_home():
-    clear()
-    while True:
-        print("Would you like to use a separate home partition? (y/n)")
-        reply = input("> ")
-        if reply.casefold() == "y":
-            bc = True
-            break
-        elif reply.casefold() == "n":
-            bc = False
-            break
-        else:
-            continue
-    return bc
-
-def use_immutable():
-    clear()
-    while True:
-        print("Would you like this installation to be immutable? (y/n)")
-        reply = input("> ")
-        if reply.casefold() == "y":
-            e = "-r"
-            break
-        elif reply.casefold() == "n":
-            e = ""
-            break
-        else:
-            continue
-    return e
-
-def use_luks():
-    clear()
-    while True:
-        print("Would you like to use LUKS? (y/n)")
-        reply = input("> ")
-        if reply.casefold() == "y":
+        if reply.casefold() in ('yes', 'y'):
             e = True
             break
-        elif reply.casefold() == "n":
+        elif reply.casefold() in ('no', 'n'):
             e = False
             break
         else:
+            print("F: Invalid choice!")
             continue
     return e
 
@@ -390,26 +309,26 @@ with open('res/logos/logo.txt', 'r') as f:
 #   Define variables
 DEBUG = "" # options: "", " >/dev/null 2>&1"
 choice, distro_suffix = get_multiboot(distro)
-is_boot_external = use_external_boot()
-is_home_external = use_external_home()
-immutability = use_immutable()
+is_boot_external = yes_no("Would you like to use a separate boot partition?")
+is_home_external = yes_no("Would you like to use a separate home partition?")
+is_mutable = yes_no("Would you like this installation to be mutable?")
 if is_boot_external and is_home_external:
     btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@etc{distro_suffix}", f"@var{distro_suffix}"]
     mntdirs = ["", ".snapshots", "etc", "var"]
-    bp = get_boot()
-    hp = get_home()
+    bp = get_external_partition('boot')
+    hp = get_external_partition('home')
 elif is_boot_external:
     btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@etc{distro_suffix}", f"@home{distro_suffix}", f"@var{distro_suffix}"]
     mntdirs = ["", ".snapshots", "etc", "home", "var"]
-    bp = get_boot()
+    bp = get_external_partition('boot')
 elif is_home_external:
     btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@boot{distro_suffix}", f"@etc{distro_suffix}", f"@var{distro_suffix}"]
     mntdirs = ["", ".snapshots", "boot", "etc", "var"]
-    hp = get_home()
+    hp = get_external_partition('home')
 else:
     btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@boot{distro_suffix}", f"@etc{distro_suffix}", f"@home{distro_suffix}", f"@var{distro_suffix}"]
     mntdirs = ["", ".snapshots", "boot", "etc", "home", "var"]
-is_luks = use_luks()
+is_luks = yes_no("Would you like to use LUKS?")
 is_efi = check_efi()
 if is_luks:
     os_root = "/dev/mapper/luks_root"
@@ -420,5 +339,5 @@ if is_luks:
 else:
     os_root = args[1]
     luks_grub_args = ""
-username = get_username() ### REVIEW 2023 made it global variable for Alpine installer
+username = get_name('username') ### REVIEW 2023 made it global variable for Alpine installer
 

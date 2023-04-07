@@ -19,19 +19,13 @@ def initram_update():
     if is_luks or is_format_btrfs:
         os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}")
 
-def pacstrap(pkg):
+def strap(pkg):
     while True:
-        excode = int(os.system(f"sudo pacstrap /mnt --needed {pkg}"))
+        excode = os.system(f"sudo pacstrap /mnt --needed {pkg}")
         if excode:
-            inp = ""
-            print("Failed to strap package(s).\nRetry? (y/n)\n")
-            inp = input("> ")
-            while inp.casefold not in ["yes","y","no","n"]:
-                print("Failed to strap package(s).\nRetry? (y/n)\n")
-                inp = input("> ")
-            if inp in ["n","no"]:
+            if not yes_no("F: Failed to strap package(s). Retry?"): # User said no
                 return 1
-        else:
+        else: # Success
             return 0
 
 #   1. Define variables
@@ -45,7 +39,7 @@ if is_luks:
 super_group = "wheel"
 v = "" # GRUB version number in /boot/grubN
 tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
-hostname = get_hostname()
+hostname = get_name('hostname')
 EOS_mirrorlist = "https://gitlab.com/endeavouros-filemirror/PKGBUILDS/-/raw/master/endeavouros-mirrorlist/endeavouros-mirrorlist"
 EOS_pacman = "https://raw.githubusercontent.com/endeavouros-team/EndeavourOS-calamares/main/calamares/files/pacman.conf"
 #hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
@@ -55,7 +49,7 @@ pre_bootstrap()
 
 #   2. Bootstrap and install packages in chroot
 if KERNEL == "":
-    excode = pacstrap(packages)
+    excode = strap(packages)
 else:
     if KERNEL not in ("-hardened", "-lts", "-zen"): # AUR needs to be enabled
         subprocess.call(f'./src/distros/{distro}/aur/aurutils.sh', shell=True)
