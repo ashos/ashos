@@ -1,0 +1,4 @@
+## See sources.list(5) for more information, especialy
+# Remember that you can only use http, ftp or file URIs
+# CDROMs are managed through the apt-cdrom tool.
+deb cdrom:[Pop_OS 22.04 _Jammy Jellyfish_ - Release amd64 (20220922)]/ RELEASE main restricted

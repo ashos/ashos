@@ -1,0 +1,4 @@
+deb [trusted=yes] http://archive.ubuntu.com/ubuntu/ RELEASE main restricted universe
+deb [trusted=yes] http://archive.ubuntu.com/ubuntu/ RELEASE-updates main restricted universe
+deb [trusted=yes] http://security.ubuntu.com/ubuntu/ RELEASE-security main restricted universe
+

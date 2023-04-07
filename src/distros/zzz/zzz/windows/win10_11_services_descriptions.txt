@@ -1,0 +1,206 @@
+Display Name, Service Name, Startup Type
+
+ActiveX Installer, AxInstSV, Manual
+AllJoyn Router Service, AJRouter, Manual
+App Readiness, AppReadiness, Manual
+Application Identity, AppIDSvc, Manual
+Application Information, Appinfo, Manual
+Application Layer Gateway Service, ALG, Manual
+Application Management, AppMgmt, Manual
+AppX Deployment Service (AppXSVC), AppXSvc, Manual
+Background Intelligent Transfer Service, BITS, Automatic Delayed
+Background Tasks Infrastructure Service, BrokerInfrastructure, Automatic
+Base Filtering Engine, BFE, Automatic
+BitLocker Drive Encryption Service, BDESVC, Manual
+Block Level Backup Engine Service, wbengine, Manual
+Bluetooth Handsfree Service, BthHFSrv, Manual
+Bluetooth Support Service, bthserv, Manual
+BranchCache, PeerDistSvc, Manual
+CDPSvc, CDPSvc, Manual
+Certificate Propagation, CertPropSvc, Manual
+Client License Service, ClipSVC, Manual
+CNG Key Isolation, KeyIso, Manual
+COM+ Event System, EventSystem, Automatic
+COM+ System Application, COMSysApp, Manual
+Computer Browser, Browser, Manual
+CoreMessaging, CoreMessagingRegistrar, Automatic
+Credential Manager, VaultSvc, Manual
+Cryptographic Services, CryptSvc, Automatic
+Data Sharing Service, DsSvc, Manual
+DataCollectionPublishingService, DcpSvc, Manual
+DCOM Server Process Launcher, DcomLaunch, Automatic
+Delivery Optimization, DoSvc, Automatic (Delayed Start)
+Device Association Service, DeviceAssociationService, Manual
+Device Install Service, DeviceInstall, Manual
+Device Management Enrollment Service, DmEnrollmentSvc, Manual
+Device Setup Manager, DsmSvc, Manual
+DevQuery Background Discovery Broker, DevQueryBroker, Manual
+DHCP Client, Dhcp, Automatic
+Diagnostic Policy Service, DPS, Automatic
+Diagnostic Service Host, WdiServiceHost, Manual
+Diagnostic System Host, WdiSystemHost, Manual
+Connected User Experiences and Telemetry (a.k.a. Diagnostics Tracking Service), DiagTrack, Automatic
+Distributed Link Tracking Client, TrkWks, Automatic
+Distributed Transaction Coordinator, MSDTC, Manual
+dmwappushservice, dmwappushservice, Automatic (old name: dmwappushsvc)
+DNS Client, Dnscache, Automatic
+Downloaded Maps Manager, MapsBroker, Automatic
+embeddedmode, embeddedmode, Manual
+Encrypting File System (EFS), EFS, Manual
+Enterprise App Management Service, EntAppSvc, Manual
+Extensible Authentication Protocol, EapHost, Manual
+Family Safety, WPCSvc, Manual
+Fax, Fax, Manual
+File History Service, fhsvc, Manual
+Function Discovery Provider Host, fdPHost, Manual
+Function Discovery Resource Publication, FDResPub, Manual
+Geolocation Service, lfsvc, Manual
+Group Policy Client, gpsvc, Automatic
+HomeGroup Listener, HomeGroupListener, Manual
+HomeGroup Provider, HomeGroupProvider, Manual
+Human Interface Device Service, hidserv, Manual
+Hyper-V Data Exchange Service, vmickvpexchange, Manual
+Hyper-V Guest Service Interface, vmicguestinterface, Manual
+Hyper-V Guest Shutdown Service, vmicshutdown, Manual
+Hyper-V Heartbeat Service, vmicheartbeat, Manual
+Hyper-V Remote Desktop Virtualization Service, vmicrdv, Manual
+Hyper-V Time Synchronization Service, vmictimesync, Manual
+Hyper-V VM Session Service, vmicvmsession, Manual
+Hyper-V Volume Shadow Copy Requestor, vmicvss, Manual
+IKE and AuthIP IPsec Keying Modules, IKEEXT, Manual
+Interactive Services Detection, UI0Detect, Manual
+Internet Connection Sharing (ICS), SharedAccess, Manual
+Internet Explorer ETW Collector Service, IEEtwCollectorService, Manual
+IP Helper, iphlpsvc, Automatic
+IPsec Policy Agent, PolicyAgent, Manual
+KtmRm for Distributed Transaction Coordinator, KtmRm, Manual
+Link-Layer Topology Discovery Mapper, lltdsvc, Manual
+Local Session Manager, LSM, Automatic
+Microsoft Diagnostics Hub Standard Collector Service, diagnosticshub.standardcollector.service, Manual
+Microsoft Account Sign-in Assistant, wlidsvc, Manual
+Microsoft iSCSI Initiator Service, MSiSCSI, Manual
+Microsoft Passport, NgcSvc, Manual
+Microsoft Passport Container, NgcCtnrSvc, Manual
+Microsoft Software Shadow Copy Provider, swprv, Manual
+Microsoft Storage Spaces SMP, smphost, Manual
+Microsoft Windows SMS Router Service, SmsRouter, Manual
+Net.Tcp Port Sharing Service, NetTcpPortSharing, Disabled
+Netlogon, Netlogon, Manual
+Network Connected Devices Auto-Setup, NcdAutoSetup, Manual
+Network Connection Broker, NcbService, Manual
+Network Connections, Netman, Manual
+Network Connectivity Assistant, NcaSvc, Manual
+Network List Service, netprofm, Manual
+Network Location Awareness, NlaSvc, Automatic
+Network Setup Service, NetSetupSvc, Manual
+Network Store Interface Service, nsi, Automatic
+Offline Files, CscService, Manual
+Optimize drives, defragsvc, Manual
+Peer Name Resolution Protocol, PNRPsvc, Manual
+Peer Networking Grouping, p2psvc, Manual
+Peer Networking Identity Manager, p2pimsvc, Manual
+Performance Logs & Alerts, pla, Manual
+Plug and Play, PlugPlay, Manual
+PNRP Machine Name Publication Service, PNRPAutoReg, Manual
+Portable Device Enumerator Service, WPDBusEnum, Manual
+Power, Power, Automatic
+Print Spooler, Spooler, Automatic
+Printer Extensions and Notifications, PrintNotify, Manual
+Problem Reports and Solutions Control Panel Support, wercplsupport, Manual
+Program Compatibility Assistant Service, PcaSvc, Manual
+Quality Windows Audio Video Experience, QWAVE, Manual
+Remote Access Auto Connection Manager, RasAuto, Manual
+Remote Access Connection Manager, RasMan, Manual
+Remote Desktop Configuration, SessionEnv, Manual
+Remote Desktop Services, TermService, Manual
+Remote Desktop Services UserMode Port Redirector, UmRdpService, Manual
+Remote Procedure Call (RPC), RpcSs, Automatic
+Remote Procedure Call (RPC) Locator, RpcLocator, Manual
+Remote Registry, RemoteRegistry, Disabled
+Retail Demo Service, RetailDemo, Manual
+Routing and Remote Access, RemoteAccess, Disabled
+RPC Endpoint Mapper, RpcEptMapper, Automatic
+Secondary Logon, seclogon, Manual
+Secure Socket Tunneling Protocol Service, SstpSvc, Manual
+Security Accounts Manager, SamSs, Automatic
+Security Center, wscsvc, Automatic (Delayed Start)
+Sensor Data Service, SensorDataService, Manual
+Sensor Monitoring Service, SensrSvc, Manual
+Sensor Service, SensorService, Manual
+Server, LanmanServer, Automatic
+Shell Hardware Detection, ShellHWDetection, Automatic
+Smart Card, SCardSvr, Disabled
+Smart Card Device Enumeration Service, ScDeviceEnum, Manual
+Smart Card Removal Policy, SCPolicySvc, Manual
+SNMP Trap, SNMPTRAP, Manual
+Software Protection, sppsvc, Automatic (Delayed Start)
+Spot Verifier, svsvc, Manual
+SSDP Discovery, SSDPSRV, Manual
+State Repository Service, StateRepository, Manual
+Still Image Acquisition Events, WiaRpc, Manual
+Storage Service, StorSvc, Manual
+Superfetch, SysMain, Automatic
+System Event Notification Service, SENS, Automatic
+System Events Broker, SystemEventsBroker, Automatic
+Task Scheduler, Schedule, Automatic
+TCP/IP NetBIOS Helper, lmhosts, Manual
+Telephony, TapiSrv, Manual
+Themes, Themes, Automatic
+Tile Data model server, tiledatamodelsvc, Automatic
+Time Broker, TimeBroker, Manual
+Touch Keyboard and Handwriting Panel Service, TabletInputService, Manual
+Update Orchestrator Service, UsoSvc, Manual
+UPnP Device Host, upnphost, Manual
+User Manager, UserManager, Automatic
+User Profile Service, ProfSvc, Automatic
+Virtual Disk, vds, Manual
+Volume Shadow Copy, VSS, Manual
+WalletService, WalletService, Manual
+WebClient, WebClient, Manual
+Windows Audio, AudioSrv, Automatic
+Windows Audio Endpoint Builder, AudioEndpointBuilder, Automatic
+Windows Backup, SDRSVC, Manual
+Windows Biometric Service, WbioSrvc, Manual
+Windows Color System, WcsPlugInService, Manual
+Windows Connect Now - Config Registrar, wcncsvc, Manual
+Windows Connection Manager, Wcmsvc, Automatic
+Windows Defender Network Inspection Service, WdNisSvc, Manual
+Windows Defender Service, WinDefend, Automatic
+Windows Defender Firewall, MpsSvc, Automatic
+Windows Defender Advanced Threat Protection Service, Sense, Manual
+Windows Driver Foundation - User-mode Driver Framework, wudfsvc, Manual
+Windows Encryption Provider Host Service, WEPHOSTSVC, Manual
+Windows Error Reporting Service, WerSvc, Manual
+Windows Event Collector, Wecsvc, Manual
+Windows Event Log, EventLog, Automatic
+Windows Font Cache Service, FontCache, Automatic
+Windows Image Acquisition (WIA), StiSvc, Manual
+Windows Installer, msiserver, Manual
+Windows License Manager Service, LicenseManager, Manual
+Windows Management Instrumentation, Winmgmt, Automatic
+Windows Media Player Network Sharing Service, WMPNetworkSvc, Manual
+Windows Mobile Hotspot Service, icssvc, Manual
+Windows Modules Installer, TrustedInstaller, Manual
+Windows Push Notifications Service, WpnService, Manual
+Windows Remote Management (WS-Management), WinRM, Manual
+Windows Search, WSearch, Automatic (Delayed Start)
+Windows Store Service (WSService), WSService, Manual
+Windows Time, W32Time, Manual
+Windows Update, wuauserv, Manual
+WinHTTP Web Proxy Auto-Discovery Service, WinHttpAutoProxySvc, Manual
+Wired AutoConfig, dot3svc, Manual
+WLAN AutoConfig, Wlansvc, Manual
+WMI Performance Adapter, wmiApSrv, Manual
+Work Folders, workfolderssvc, Manual
+Workstation, LanmanWorkstation, Automatic
+WWAN AutoConfig, WwanSvc, Manual
+Xbox Live Auth Manager, XblAuthManager, Manual
+Xbox Live Game Save, XblGameSave, Manual
+XboxNetApiSvc, XboxNetApiSvc, Manual
+
+
+
+
+TODOOOOOO: try to reboot to linux and rename windows defender and then sc config disable wd services
+
+

@@ -1,0 +1,6 @@
+X-Repolib-Name: Pop_OS Applications
+Enabled: yes
+Types: deb
+URIs: http://apt.pop-os.org/proprietary
+Suites: jammy
+Components: main

@@ -1,0 +1,472 @@
+#
+# Certificate-Based Repositories
+# Managed by (rhsm) subscription-manager
+#
+# *** This file is auto-generated.  Changes made here will be over-written. ***
+# *** Use "subscription-manager repo-override --help" if you wish to make changes. ***
+#
+# If this file is empty and this system is subscribed consider
+# a "yum repolist" to refresh available repos
+#
+
+[rhel-9-for-x86_64-highavailability-beta-debug-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - High Availability Beta (Debug RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/highavailability/debug
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-baseos-beta-debug-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - BaseOS Beta (Debug RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/baseos/debug
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-highavailability-beta-source-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - High Availability Beta (Source RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/highavailability/source/SRPMS
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-appstream-beta-source-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - AppStream Beta (Source RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/appstream/source/SRPMS
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-baseos-beta-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - BaseOS Beta (RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/baseos/os
+enabled = 1
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 1
+
+[rhel-9-for-x86_64-rt-beta-debug-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - Real Time Beta (Debug RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/rt/debug
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-sap-netweaver-beta-source-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - SAP NetWeaver Beta (Source RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/sap/source/SRPMS
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[codeready-builder-beta-for-rhel-9-x86_64-rpms]
+name = Red Hat CodeReady Linux Builder Beta for RHEL 9 x86_64 (RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/codeready-builder/os
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-sap-netweaver-beta-debug-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - SAP NetWeaver Beta (Debug RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/sap/debug
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-appstream-beta-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - AppStream Beta (RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/appstream/os
+enabled = 1
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 1
+
+[codeready-builder-beta-for-rhel-9-x86_64-debug-rpms]
+name = Red Hat CodeReady Linux Builder Beta for RHEL 9 x86_64 (Debug RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/codeready-builder/debug
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-resilientstorage-beta-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - Resilient Storage Beta (RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/resilientstorage/os
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-rt-beta-source-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - Real Time Beta (Source RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/rt/source/SRPMS
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-sap-solutions-beta-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - SAP Solutions Beta (RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/sap-solutions/os
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-supplementary-beta-source-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - Supplementary Beta (Source RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/supplementary/source/SRPMS
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[dirsrv-beta-for-rhel-9-x86_64-source-rpms]
+name = Red Hat Directory Server Beta for RHEL 9 x86_64 (Source RPMs)
+baseurl = https://cdn.redhat.com/content/beta/layered/rhel9/x86_64/dirsrv/source/SRPMS
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-sap-netweaver-beta-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - SAP NetWeaver Beta (RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/sap/os
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-nfv-beta-debug-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - Real Time for NFV Beta (Debug RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/nfv/debug
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-supplementary-beta-debug-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - Supplementary Beta (Debug RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/supplementary/debug
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-nfv-beta-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - Real Time for NFV Beta (RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/nfv/os
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-resilientstorage-beta-source-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - Resilient Storage Beta (Source RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/resilientstorage/source/SRPMS
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-sap-solutions-beta-debug-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - SAP Solutions Beta (Debug RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/sap-solutions/debug
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-resilientstorage-beta-debug-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - Resilient Storage Beta (Debug RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/resilientstorage/debug
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[dirsrv-beta-for-rhel-9-x86_64-debug-rpms]
+name = Red Hat Directory Server Beta for RHEL 9 x86_64 (Debug RPMs)
+baseurl = https://cdn.redhat.com/content/beta/layered/rhel9/x86_64/dirsrv/debug
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-appstream-beta-debug-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - AppStream Beta (Debug RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/appstream/debug
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-highavailability-beta-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - High Availability Beta (RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/highavailability/os
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[codeready-builder-beta-for-rhel-9-x86_64-source-rpms]
+name = Red Hat CodeReady Linux Builder Beta for RHEL 9 x86_64 (Source RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/codeready-builder/source/SRPMS
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-baseos-beta-source-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - BaseOS Beta (Source RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/baseos/source/SRPMS
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-sap-solutions-beta-source-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - SAP Solutions Beta (Source RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/sap-solutions/source/SRPMS
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-supplementary-beta-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - Supplementary Beta (RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/supplementary/os
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-nfv-beta-source-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - Real Time for NFV Beta (Source RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/nfv/source/SRPMS
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[dirsrv-beta-for-rhel-9-x86_64-rpms]
+name = Red Hat Directory Server Beta for RHEL 9 x86_64 (RPMs)
+baseurl = https://cdn.redhat.com/content/beta/layered/rhel9/x86_64/dirsrv/os
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0
+
+[rhel-9-for-x86_64-rt-beta-rpms]
+name = Red Hat Enterprise Linux 9 for x86_64 - Real Time Beta (RPMs)
+baseurl = https://cdn.redhat.com/content/beta/rhel9/9/x86_64/rt/os
+enabled = 0
+gpgcheck = 1
+gpgkey = file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-beta,file:///etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release
+sslverify = 1
+sslcacert = /etc/rhsm/ca/redhat-uep.pem
+sslclientkey = /etc/pki/entitlement/272610803673502272-key.pem
+sslclientcert = /etc/pki/entitlement/272610803673502272.pem
+sslverifystatus = 1
+metadata_expire = 86400
+enabled_metadata = 0

@@ -22,7 +22,10 @@ def clear():
 
 #   Users
 def create_user(u, g):
-    os.system(f"sudo chroot /mnt sudo useradd -m -G {g} -s /bin/bash {u}")
+    if distro == "alpine": ### REVIEW 2023 not generic enough
+        os.system(f"sudo chroot /mnt sudo /usr/sbin/adduser -h /home/{u} -G {g} -s /bin/bash {u}")
+    else:
+        os.system(f"sudo chroot /mnt sudo useradd -m -G {g} -s /bin/bash {u}")
     os.system(f"echo '%{g} ALL=(ALL:ALL) ALL' | sudo tee -a /mnt/etc/sudoers")
     os.system(f"echo 'export XDG_RUNTIME_DIR=\"/run/user/1000\"' | sudo tee -a /mnt/home/{u}/.bashrc")
 
@@ -121,25 +124,24 @@ def get_multiboot(dist):
             print("Invalid choice!")
             continue
 
-def get_timezone():
+def get_item_from_path(thing, apath):
     clear()
     while True:
-        print("Select a timezone (type list to list):")
-        zone = input("> ")
-        if zone == "list":
-            zoneinfo_path = '/usr/share/zoneinfo'
-            zones = []
-            for root, _dirs, files in os.walk(zoneinfo_path, followlinks=True):
+        print(f"Select a {thing} (type list to list):")
+        choice = input("> ")
+        if choice == "list":
+            choice = []
+            for root, _dirs, files in os.walk(apath, followlinks=True):
                 for file in files:
-                    zones.append(os.path.join(root, file).replace(f"{zoneinfo_path}/", ""))
-            zones = "\n".join(sorted(zones))
-            os.system(f"echo '{zones}' | less")
+                    choice.append(os.path.join(root, file).replace(f"{apath}/", ""))
+            choice = "\n".join(sorted(choice))
+            os.system(f"echo '{choice}' | less")
         else:
-            timezone = str(f"/usr/share/zoneinfo/{zone}")
-            if not os.path.isfile(timezone):
-                print("Invalid timezone!")
+            temp = str(f"{apath}/{choice}")
+            if not ( os.path.isfile(temp) or os.path.isdir(temp) ):
+                print(f"Invalid {thing}!")
                 continue
-            break
+            return choice ### REVIEW originally was just break
 
 def get_username():
     clear()
@@ -233,11 +235,17 @@ def post_bootstrap(super_group):
     os.system("sudo ln -srf /mnt/.snapshots/ash /mnt/var/lib/ash")
     os.system("echo {\\'name\\': \\'root\\', \\'children\\': [{\\'name\\': \\'0\\'}]} | sudo tee /mnt/.snapshots/ash/fstree") # Initialize fstree
   # Create user and set password
-    set_password("root")
-    if distro !="kicksecure": ### REVIEW_LATER not generic enough!
+    if distro == "alpine": ### REVIEW not generic enough!
+        set_password("root", "") # will fix for "doas"
+    else:
+        set_password("root")
+    if distro !="kicksecure": ### REVIEW not generic enough!
         username = get_username()
         create_user(username, super_group)
-        set_password(username)
+        if distro == "alpine": ### REVIEW not generic enough!
+            set_password(username, "") # will fix for "doas"
+        else:
+            set_password(username)
     else:
         print("Username is 'user' please change the default password")
   # Modify OS release information (optional) ### TODO may write in python
@@ -289,11 +297,11 @@ def pre_bootstrap():
         os.system("sudo mkdir -p /mnt/boot/efi")
         os.system(f"sudo mount {args[3]} /mnt/boot/efi")
 
-def set_password(u):
+def set_password(u, s="sudo"): ### REVIEW Use super_group?
     clear()
     while True:
         print(f"Setting a password for '{u}':")
-        os.system(f"sudo chroot /mnt sudo passwd {u}")
+        os.system(f"sudo chroot /mnt {s} passwd {u}")
         print("Was your password set properly? (y/n)")
         reply = input("> ")
         if reply.casefold() == "y":
@@ -412,4 +420,5 @@ if is_luks:
 else:
     os_root = args[1]
     luks_grub_args = ""
+username = None ### REVIEW 2023 made it global variable for Alpine installer
 

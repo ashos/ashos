@@ -1,0 +1,48 @@
+curl ... "$P/$LATEST"
+
+LATEST=$(sed -ne '/href=/ s@.*href=".*/\([0-9]\+_[^"]\+\).*@\1@p' < listing.txt | sort -nr | head -1)
+iLATEST=$(sed -ne '/href=/ s@.*href="\(.*\)".*$@\1@p' < listing.txt | sort -nr | head -1)
+
+
+P=https://repo-default.voidlinux.org/live/current/
+curl https://repo-default.voidlinux.org/live/current/ | grep -o '<a .*href=.*>' | sed -e 's/<a /\n<a /g' | sed -e 's/<a .*href=['"'"'"]//' -e 's/["'"'"'].*$//' -e '/^$/ d' | grep -w tar.xz | grep -w $ARCH
+
+
+RELEASE="-musl"
+RELEASE="-"
+iLATEST=$(sed -ne '/href=/ s@.*href="\(.*\)".*$@\1@p' < listing.txt | grep -w tar.xz | grep -w $ARCH | grep -w $RELEASE | sort -nr)
+
+iLATEST=$(sed -ne '/href=/ s@.*href="\(.*\)".*$@\1@p' < listing.txt | awk '/tar.xz/ && /$ARCH/ && /$RELEASE/' | sort -nr)
+
+iLATEST=$(sed -ne '/href=/ s@.*href="\(.*\)".*$@\1@p' < listing.txt | grep -wE 'tar.xz&$ARCH&$RELEASE' | sort -nr)
+
+grep -vE 'Googlebot|msnbot-media|YandexBot|bingbot' yourlogfile
+
+iLATEST=$(sed -ne '/href=/ s@.*href="\(.*\)".*$@\1@p' < listing.txt | grep -we 'tar.xz' -e '$ARCH' -e '$RELEASE' | sort -nr)
+
+iLATEST=$(sed -ne '/href=/ s@.*href="\(.*\)".*$@\1@p' < listing.txt | grep -e -w tar.xz -e -w $ARCH -e -w $RELEASE | sort -nr)
+
+iLATEST=$(sed -ne '/href=/ s@.*href="\(.*\)".*$@\1@p' < listing.txt | grep -E -w 'tar.xz & $ARCH & $RELEASE' | sort -nr)
+
+
+RELEASE="musl"
+URL=https://repo-default.voidlinux.org/live/current/
+xxx=$(curl "$URL" | sed -ne '/href=/ s@.*href="\(.*\)".*$@\1@p' | grep -w tar.xz | grep -w $ARCH | grep -w $RELEASE | sort -nr | head -1) works
+
+
+
+
+
+
+
+
+
+
+
+awk -v pat="$pattern" '$0 ~ pat'
+
+
+iLATEST=$(sed -ne '/href=/ s@.*href="\(.*\)".*$@\1@p' < listing.txt | awk '/tar.xz/ && !/musl/ && /x86_64/' | sort -nr | head -1) WORKs
+
+
+iLATEST=$(sed -ne '/href=/ s@.*href="\(.*\)".*$@\1@p' < listing.txt | awk -v arch="$ARCH" rel="$RELEASE" '/tar.xz/ && !/musl/ && $0 ~ arch' | sort -nr | head -1)

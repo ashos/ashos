@@ -1,0 +1,2 @@
+https://cdn.download.clearlinux.org/releases/36010/clear/clear-36010-pxe.tar.xz
+
