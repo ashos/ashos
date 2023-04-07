@@ -4,7 +4,7 @@
 gnome-shell
 gnome-terminal
 # or maybe better urxvt
-gnome-tweak-tool
+gnome-tweaks
 gnome-control-center
 xdg-user-dirs
 gdm
