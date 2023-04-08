@@ -1,11 +1,10 @@
 [packages]
-which
-glibc
-gcc-libs
-cantarell-fonts
+#####which
+########glibc
+########3gcc-libs
+#########cantarell-fonts
 xorg-server
-xorg-xinit
-i3-wm
+jwm
 
 [packages::optional]
 xterm

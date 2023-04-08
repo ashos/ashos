@@ -948,7 +948,7 @@ def tmp_delete():
 #   Print out tree with descriptions
 def tree_print(tree):
     snapshot = get_current_snapshot()
-    for pre, fill, node in RenderTree(tree, style=AsciiStyle()):
+    for pre, fill, node in RenderTree(tree, style=AsciiStyle()): # simpler tree style
         if os.path.isfile(f"/.snapshots/ash/snapshots/{node.name}-desc"):
             with open(f"/.snapshots/ash/snapshots/{node.name}-desc", "r") as descfile:
                 desc = descfile.readline()

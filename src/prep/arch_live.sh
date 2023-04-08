@@ -3,7 +3,7 @@
 main() {
     if [ $(id -u) -ne 0 ]; then echo "Please run as root!"; exit 1; fi
     if [ -z "$HOME" ]; then HOME=~ ; fi
-    prep_packages="dialog fakeroot git make tmux"
+    prep_packages=(dialog fakeroot git make tmux)
 
   # Prevent error of running out of space in /
     mount / -o remount,size=4G /run/archiso/cowspace
@@ -41,7 +41,9 @@ fixdb() {
     rm -rf /etc/pacman.d/gnupg ~/.gnupg
     rm -r /var/lib/pacman/db.lck
     systemctl start haveged # otherwise --init step takes long
-    pacman-mirrors -f # --geoip
+    if [ -x "$(command -v pacman-mirrors)" ]; then
+        pacman-mirrors -f # --geoip
+    fi
     pacman -Syy --noconfirm gnupg
     gpg --refresh-keys
     killall gpg-agent

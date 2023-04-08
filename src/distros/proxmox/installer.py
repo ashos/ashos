@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 from src.installer_core import * # NOQA
-#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_timezone, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
+#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_item_from_path, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 from setup import args, distro
 
 def initram_update_luks():
@@ -17,23 +17,6 @@ def initram_update_luks():
         os.system(f"sudo echo 'luks_root '{args[1]}'  /etc/crypto_keyfile.bin luks' | sudo tee -a /mnt/etc/crypttab")
         os.system(f"sudo chroot /mnt update-initramfs -u") # REVIEW: Need sudo inside? What about kernel variants?
 
-def is_two_stage_install():
-    clear()
-    while True:
-        print("Would you like to install proxmox-ve in two stages (continues after reboot - recommended)? (y/n)")
-        print("Please note if you choose 'N', setup will finish but with errors as as some packages (e.g., apparmor) depend on specific kernel compile flags that need a live Proxmox VE kernel. Proxmox will still work but may have issues (untested)")
-        reply = input("> ")
-        if reply.casefold() == "y":
-            e = True
-            print("After rebooting, make a new snapshot, install `proxmox-ve` in it, deploy and reboot")
-            break
-        elif reply.casefold() == "n":
-            e = False
-            break
-        else:
-            continue
-    return e
-
 #   1. Define variables
 ARCH = "amd64"
 RELEASE = "bullseye" # for both proxmox and its debian base
@@ -45,15 +28,18 @@ else:
     packages += " grub-pc"
 if is_luks:
     packages += " cryptsetup cryptsetup-initramfs cryptsetup-run"
-if is_two_stage_install():
+note2s = "Note on 2-stage setup: If you choose Yes (recommended), after first \
+    reboot, make a new snapshot, install 'proxmox-ve' in it, deploy & reboot. \
+    If you choose No, setup will finish but with errors as some packages like \
+    'apparmor' depend on specific kernel compile flags that need live Proxmox \
+    VE kernel. Proxmox can still work but may have issues (untested).\n Would \
+    you like to install proxmox-ve in two stages?"
+if yes_no(note2s):
     packages += f" pve-kernel-{KERNEL}"
 else:
     packages += " proxmox-ve"
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
-tz = get_timezone()
-hostname = get_hostname()
-#hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
 
 #   Pre bootstrap
 pre_bootstrap()
@@ -95,7 +81,7 @@ os.system(f"echo 10.0.2.15 {hostname}.proxmox.com {hostname} | sudo tee -a /mnt/
 os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
 os.system("sudo chroot /mnt sudo locale-gen")
 os.system("echo 'LANG=en_US.UTF-8' | sudo tee /mnt/etc/locale.conf")
-os.system(f"sudo ln -srf /mnt{tz} /mnt/etc/localtime")
+os.system(f"sudo ln -srf /mnt/usr/share/zoneinfo/{tz} /mnt/etc/localtime")
 os.system("sudo chroot /mnt sudo hwclock --systohc")
 
 #   Post bootstrap

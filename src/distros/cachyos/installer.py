@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 from src.installer_core import * # NOQA
-#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_timezone, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
+#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_item_from_path, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 from setup import args, distro
 
 def initram_update():
@@ -19,19 +19,13 @@ def initram_update():
     if is_luks or is_format_btrfs:
         os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}")
 
-def pacstrap(pkg):
+def strap(pkg):
     while True:
-        excode = int(os.system(f"sudo pacstrap /mnt --needed {pkg}"))
+        excode = os.system(f"sudo pacstrap /mnt --needed {pkg}")
         if excode:
-            inp = ""
-            print("Failed to strap package(s).\nRetry? (y/n)\n")
-            inp = input("> ")
-            while inp.casefold not in ["yes","y","no","n"]:
-                print("Failed to strap package(s).\nRetry? (y/n)\n")
-                inp = input("> ")
-            if inp in ["n","no"]:
+            if not yes_no("F: Failed to strap package(s). Retry?"): # User said no
                 return 1
-        else:
+        else: # Success
             return 0
 
 #   1. Define variables
@@ -44,15 +38,12 @@ if is_luks:
     packages += " cryptsetup" ### REVIEW_LATER
 super_group = "wheel"
 v = "" # GRUB version number in /boot/grubN
-tz = get_timezone()
-hostname = get_hostname()
-#hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
 
 #   Pre bootstrap
 pre_bootstrap()
 
 #   2. Bootstrap and install packages in chroot
-excode = pacstrap(packages)
+excode = strap(packages)
 if excode != 0:
     sys.exit("Failed to bootstrap!")
 
@@ -70,7 +61,7 @@ os.system(f"echo 127.0.0.1 {hostname} {distro} | sudo tee -a /mnt/etc/hosts")
 os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
 os.system("sudo chroot /mnt sudo locale-gen")
 os.system("echo 'LANG=en_US.UTF-8' | sudo tee /mnt/etc/locale.conf")
-os.system(f"sudo ln -srf /mnt{tz} /mnt/etc/localtime")
+os.system(f"sudo ln -srf /mnt/usr/share/zoneinfo/{tz} /mnt/etc/localtime")
 os.system("sudo chroot /mnt sudo hwclock --systohc")
 
 #   Post bootstrap
