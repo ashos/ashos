@@ -1,12 +1,11 @@
 #!/usr/bin/python3
 
-#################### remove bash to sh
-
 import os
+import shutil
 import subprocess
 import sys ### REMOVE WHEN TRY EXCEPT ELSE IS IMPLEMENTED
 from src.installer_core import * # NOQA
-#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_item_from_path, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
+#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 from setup import args, distro
 
 def initram_update():
@@ -41,8 +40,8 @@ APK = "2.12.11-r0" # https://git.alpinelinux.org/aports/plain/main/apk-tools/APK
 ARCH = "x86_64"
 RELEASE = "edge"
 KERNEL = "edge" ### lts
-packages = f"alpine-base linux-{KERNEL} tzdata sudo python3 py3-anytree bash \
-            btrfs-progs networkmanager tmux mount umount mkinitfs" #linux-firmware nano doas os-prober musl-locales musl-locales-lang #### default mount from busybox gives errors. Do I also need umount?!
+packages = f"linux-{KERNEL} tzdata sudo python3 py3-anytree bash btrfs-progs networkmanager tmux mount umount mkinitfs blkid"
+            #linux-firmware nano doas os-prober musl-locales musl-locales-lang #### default mount from busybox gives errors. Do I also need umount?!
 if is_efi:
     packages += " grub-efi efibootmgr"
 else:
@@ -60,17 +59,22 @@ pre_bootstrap()
 os.system(f"curl -LO {URL}/{ARCH}/apk-tools-static-{APK}.apk")
 os.system("tar zxf apk-tools-static-*.apk")
 excode1 = os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add alpine-base") ### REVIEW Is "/" needed after {URL} ?
-os.system("sudo cp ./src/distros/alpine/repositories /mnt/etc/apk/") ### REVIEW MOVED from down at section 3 to here as installing 'bash' was giving error
-excode2 = os.system(f"sudo chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'") ### changed bash to sh
-### excode = os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add {packages}") # only had "alpine-base" at first - Possible to combine these 2 commands?
-if excode1 != 0 and excode2 != 0:
+shutil.copy("./src/distros/alpine/repositories", "/mnt/etc/apk/") ### REVIEW MOVED from down at section 3 to here as installing 'bash' was giving error
+os.system("sudo cp --dereference /etc/resolv.conf /mnt/etc/") # --remove-destination ### not writing through dangling symlink! (TODO: try except)
+excode2 = os.system(f"sudo chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'") ### changed bash to sh ############## IMPORTANT: this is where I get following error:
+
+### EXecuting mkinitfs success
+### Executing grub-2.06-r7.trigger
+### /usr/sbin/grub-probe  error failed to get canonical path of /dev/sda2
+### ERROR grub-2.06-r7.trigger script exited with error 1
+
+if excode1 or excode2:
     sys.exit("Failed to bootstrap!")
 
 #   Mount-points for chrooting
 ash_chroot()
 
 #   3. Package manager database and config files
-os.system("sudo cp --dereference /etc/resolv.conf /mnt/etc/") # --remove-destination ### not writing through dangling symlink! (TODO: try except)
 #os.system("sudo cp -r /mnt/var/lib/apk/. /mnt/usr/share/ash/db") ### REVIEW seems always empty?
 # /var/cache/apk/ , /var/lib/apk/ , /etc/apk/cache/
 os.system("sudo mv /mnt/lib/apk /mnt/usr/share/ash/db/")
@@ -87,7 +91,7 @@ os.system("sudo chroot /mnt /sbin/hwclock --systohc")
 
 #   Post bootstrap
 post_bootstrap(super_group)
-if yes_no("Replace Busybox's ash with Ash? Use with caution!"):
+if yes_no("Replace Busybox's ash with Ash? Be cautious!"):
     os.system(f"sudo mv /mnt/bin/ash /mnt/bin/busyash")
     print("Ash replaced Busybox's ash (which is now busyash)!")
 else:
@@ -115,7 +119,7 @@ os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add savecache shu
 initram_update()
 #os.system('grep -qxF GRUB_ENABLE_BLSCFG="false" /mnt/etc/default/grub || \
 #           echo GRUB_ENABLE_BLSCFG="false" | sudo tee -a /mnt/etc/default/grub')
-os.system('echo GRUB_CMDLINE_LINUX_DEFAULT=\\"modules=sd-mod,usb-storage,btrfs quiet rootfstype=btrfs\\" | sudo tee -a /mnt/etc/default/grub')
+os.system('echo GRUB_CMDLINE_LINUX_DEFAULT=\\"modules=sd-mod,usb-storage,btrfs quiet rootfstype=btrfs\\" | sudo tee -a /mnt/etc/default/grub') ########## maybe moving this before bootstrapping packages would prevent canonical error
 grub_ash(v)
 
 #   BTRFS snapshots
@@ -136,3 +140,5 @@ print("You can reboot now :)")
 ###### export PATH=/bin:$PATH
 ####### STILL NEED to actually add LUKS2 for alpine (right now just copied from archinst)
 
+#########ERRRRRRRRROR /mnt/dev target is busy
+#### sda2 already moutned on /mnt, is it because of deplot_to_common use inside cp ---xyz? is cp there from busybox?reO
