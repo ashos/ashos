@@ -1,3 +1,0 @@
-[packages]
-xorg-xwayland
-sway

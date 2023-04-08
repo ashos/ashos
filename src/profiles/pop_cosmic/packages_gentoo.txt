@@ -1,2 +1,0 @@
-emerge gnome-shell-extension-pop-shell
-
