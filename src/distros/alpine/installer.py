@@ -43,8 +43,8 @@ packages = f"linux-{KERNEL} blkid curl sudo tzdata mount mkinitfs umount tmux py
             #linux-firmware-none networkmanager linux-firmware nano doas os-prober musl-locales musl-locales-lang dbus #### default mount from busybox gives errors. Do I also need umount?!
 if is_efi:
     packages += " grub-efi efibootmgr"
-    if is_mutable:
-        packages += " dosfstools" # Optional for fsck.vfat checks at boot up
+#    if is_mutable: ### TODO still errors
+#        packages += " dosfstools" # Optional for fsck.vfat checks at boot up
 else:
     packages += " grub-bios"
 if is_format_btrfs:
@@ -96,6 +96,8 @@ os.system("sudo chroot /mnt /sbin/hwclock --systohc")
 post_bootstrap(super_group)
 if yes_no("Replace Busybox's ash with Ash? (NOT recommended yet!)"):
     os.system(f"sudo mv /mnt/bin/ash /mnt/bin/busyash")
+    #os.system(f"sudo mv /mnt/bin/ash /mnt/usr/bin/ash")
+    #os.system(f"sudo mv /mnt/usr/bin/ash /mnt/bin/ash")
     print("Ash replaced Busybox's ash (which is now busyash)!")
 else:
     os.system(f"sudo mv /mnt/usr/bin/ash /mnt/usr/bin/asd")
