@@ -343,6 +343,6 @@ else:
     luks_grub_args = ""
 hostname = get_name('hostname')
 #hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
-tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
 username = get_name('username') ### REVIEW 2023 made it global variable for Alpine installer
+tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
 
