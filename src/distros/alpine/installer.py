@@ -21,18 +21,21 @@ def initram_update():
         try: # work with default kernel modules first
             subprocess.check_output("sudo chroot /mnt sudo mkinitfs -b / -f /etc/fstab", shell=True) ### REVIEW <kernelvers>
         except subprocess.CalledProcessError: # and if errors
-            #if len(next(os.walk('dir_name'))[1]) == 1:
-            print("F: Creating initfs with default kernel failed!")
-            print("Next, type just folder name from /mnt/lib/modules i.e. 5.15.104-0-lts")
-            kv = None
-            while True:
-                try:
-                    kv = get_item_from_path("kernel version", "/mnt/lib/modules")
-                    subprocess.check_output(f"sudo chroot /mnt sudo mkinitfs -b / -f /etc/fstab -k {kv}", shell=True)
-                    break # Success
-                except subprocess.CalledProcessError:
-                    print(f"F: Creating initfs with kernel {kv} failed!")
-                    continue
+            kv = os.listdir('/mnt/lib/modules')
+            try:
+                if len(kv) == 1:
+                    subprocess.check_output(f"sudo chroot /mnt sudo mkinitfs -b / -f /etc/fstab -k {''.join(kv)}", shell=True)
+            except:
+                print(f"F: Creating initfs with either live default or {kv} kernels failed!")
+                print("Next, type just folder name from /mnt/lib/modules i.e. 5.15.104-0-lts")
+                while True:
+                    try:
+                        kv = get_item_from_path("kernel version", "/mnt/lib/modules")
+                        subprocess.check_output(f"sudo chroot /mnt sudo mkinitfs -b / -f /etc/fstab -k {kv}", shell=True)
+                        break # Success
+                    except subprocess.CalledProcessError:
+                        print(f"F: Creating initfs with kernel {kv} failed!")
+                        continue
 
 #   1. Define variables
 APK = "2.12.11-r0" # https://git.alpinelinux.org/aports/plain/main/apk-tools/APKBUILD
