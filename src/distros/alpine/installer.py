@@ -23,7 +23,7 @@ def initram_update():
         except subprocess.CalledProcessError: # and if errors
             #if len(next(os.walk('dir_name'))[1]) == 1:
             print("F: Creating initfs with default kernel failed!")
-            print("Next, type just folder name i.e. 5.15.104-0-lts")
+            print("Next, type just folder name from /mnt/lib/modules i.e. 5.15.104-0-lts")
             kv = None
             while True:
                 try:
@@ -42,7 +42,7 @@ KERNEL = "edge" ### lts
 packages = f"linux-{KERNEL} tzdata sudo python3 py3-anytree bash btrfs-progs networkmanager tmux mount umount mkinitfs blkid"
             #linux-firmware nano doas os-prober musl-locales musl-locales-lang #### default mount from busybox gives errors. Do I also need umount?!
 if is_efi:
-    packages += " grub-efi efibootmgr"
+    packages += " grub-efi efibootmgr dosfstools" # Optional for fsck.vfat
 else:
     packages += " grub-bios"
 if is_luks:

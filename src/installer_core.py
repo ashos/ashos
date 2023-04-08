@@ -23,9 +23,9 @@ def clear():
 #   Users
 def create_user(u, g):
     if distro == "alpine": ### REVIEW 2023 not generic enough
-        os.system(f"sudo chroot /mnt sudo /usr/sbin/adduser -h /home/{u} -G {g} -s /bin/bash {u}")
+        os.system(f"sudo chroot /mnt sudo /usr/sbin/adduser -h /home/{u} -G {g} -s /bin/sh -D {u}")
     else:
-        os.system(f"sudo chroot /mnt sudo useradd -m -G {g} -s /bin/bash {u}")
+        os.system(f"sudo chroot /mnt sudo useradd -m -G {g} -s /bin/sh {u}")
     os.system(f"echo '%{g} ALL=(ALL:ALL) ALL' | sudo tee -a /mnt/etc/sudoers")
     os.system(f"echo 'export XDG_RUNTIME_DIR=\"/run/user/1000\"' | sudo tee -a /mnt/home/{u}/.bashrc")
 
