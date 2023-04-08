@@ -244,7 +244,7 @@ def install_live(pkg):
     os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var >/dev/null 2>&1")
     os.system(f"mount --bind /etc /.snapshots/rootfs/snapshot-{tmp}/etc >/dev/null 2>&1")
     os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp >/dev/null 2>&1")
-    os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} pacman -S --overwrite \\* --noconfirm {pkg}")
+    os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} apk add --force-overwrite {pkg}") # -S --overwrite \\* --noconfirm
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/* >/dev/null 2>&1")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp} >/dev/null 2>&1")
 
@@ -271,7 +271,7 @@ def install(snapshot, pkg):
         print(f"F: snapshot {snapshot} appears to be in use. If you're certain it's not in use clear lock with 'ash unlock {snapshot}'.")
     else:
         prepare(snapshot)
-        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --overwrite '/var/*'"))
+        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apk add --force-overwrite -i {pkg}")) ### REVIEW '/var/*'
         if int(excode) == 0:
             post_transactions(snapshot)
             print(f"Package {pkg} installed in snapshot {snapshot} successfully.")
@@ -293,7 +293,7 @@ def remove(snapshot, pkg):
         print(f"F: snapshot {snapshot} appears to be in use. If you're certain it's not in use clear lock with 'ash unlock {snapshot}'.")
     else:
         prepare(snapshot)
-        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman --noconfirm -Rns {pkg}"))
+        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apk del --purge {pkg}")) ### -Rns REVIEW
         if int(excode) == 0:
             post_transactions(snapshot)
             print(f"Package {pkg} removed from snapshot {snapshot} successfully.")
@@ -333,7 +333,7 @@ def update_base():
         print(f"F: snapshot {snapshot} appears to be in use. If you're certain it's not in use clear lock with 'ash unlock {snapshot}'.")
     else:
         prepare(snapshot)
-        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu"))
+        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apk update")) ### REVIEW -Syyu
         if int(excode) == 0:
             post_transactions(snapshot)
             print(f"Snapshot {snapshot} upgraded successfully.")
@@ -382,7 +382,7 @@ def post_transactions(snapshot):
     os.system(f"rm -rf /.snapshots/etc/etc-chr{snapshot}/* >/dev/null 2>&1")
     os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/etc/. /.snapshots/etc/etc-chr{snapshot} >/dev/null 2>&1")
     # Keep package manager's cache after installing packages. This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
-    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/pkg/. /var/cache/pacman/pkg/ >/dev/null 2>&1") ### REVIEW IS THIS NEEDED?
+    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/apk/pkg/. /var/cache/apk/pkg/ >/dev/null 2>&1") ### REVIEW IS THIS NEEDED?
     os.system(f"rm -rf /.snapshots/boot/boot-chr{snapshot}/* >/dev/null 2>&1")
     os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/boot/. /.snapshots/boot/boot-chr{snapshot} >/dev/null 2>&1")
     os.system(f"btrfs sub del /.snapshots/etc/etc-{etc} >/dev/null 2>&1")
@@ -408,7 +408,7 @@ def upgrade(snapshot):
         print(f"F: snapshot {snapshot} appears to be in use. If you're certain it's not in use clear lock with 'ash unlock {snapshot}'.")
     else:
         prepare(snapshot)
-        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu")) # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
+        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apk update -i")) ### REVIEW "-Syyu" # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
         if int(excode) == 0:
             post_transactions(snapshot)
             print(f"Snapshot {snapshot} upgraded successfully.")
@@ -426,7 +426,7 @@ def refresh(snapshot):
         print(f"F: snapshot {snapshot} appears to be in use. If you're certain it's not in use clear lock with 'ash unlock {snapshot}'.")
     else:
         prepare(snapshot)
-        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syy"))
+        excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apk update -i")) ### REVIEW -Syy
         if int(excode) == 0:
             post_transactions(snapshot)
             print(f"Snapshot {snapshot} refreshed successfully.")
@@ -437,7 +437,7 @@ def refresh(snapshot):
 #   Noninteractive update
 def auto_upgrade(snapshot):
     prepare(snapshot)
-    excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman --noconfirm -Syyu"))
+    excode = str(os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apk update")) ### REVIEW --noconfirm -Syyu
     if int(excode) == 0:
         post_transactions(snapshot)
         os.system("echo 0 > /.snapshots/ash/upstate")

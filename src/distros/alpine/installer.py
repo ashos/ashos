@@ -71,7 +71,10 @@ ash_chroot()
 
 #   3. Package manager database and config files
 os.system("sudo cp --dereference /etc/resolv.conf /mnt/etc/") # --remove-destination ### not writing through dangling symlink! (TODO: try except)
-os.system("sudo cp -r /mnt/var/lib/apk/. /mnt/usr/share/ash/db")
+#os.system("sudo cp -r /mnt/var/lib/apk/. /mnt/usr/share/ash/db") ### REVIEW seems always empty?
+# /var/cache/apk/ , /var/lib/apk/ , /etc/apk/cache/
+os.system("sudo mv /mnt/lib/apk /mnt/usr/share/ash/db/")
+os.system("sudo ln -srf /mnt/usr/share/ash/db/apk /mnt/lib/apk")
 
 #   4. Update hostname, hosts, locales and timezone, hosts
 os.system(f"echo {hostname} | sudo tee /mnt/etc/hostname")
