@@ -24,7 +24,7 @@ def fix_package_db(snapshot = "0"):
 
 #   Delete init system files (Systemd, OpenRC, etc.)
 def init_system_clean(snapshot, FROM):
-    print("TODO)
+    print("TODO")
     #if FROM == "prepare":
         #os.system(f"rm -rf /.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/systemd/*{DEBUG}")
     #elif FROM == "deploy":
@@ -44,7 +44,7 @@ def install_package(snapshot, pkg):
 
 #   Install atomic-operation in live snapshot
 def install_package_live(snapshot, tmp, pkg):
-    return os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} apk add --force-overwrite {pkg}{DEBUG}) # --sysroot # -Sy --overwrite '*' --noconfirm
+    return os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} apk add --force-overwrite {pkg}{DEBUG}") # --sysroot # -Sy --overwrite '*' --noconfirm
 
 #   Get list of packages installed in a snapshot
 def pkg_list(CHR, snap):

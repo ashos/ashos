@@ -40,9 +40,9 @@ ARCH = "x86_64"
 RELEASE = "edge"
 KERNEL = "edge" ### lts
 packages = f"linux-{KERNEL} blkid curl sudo tzdata mount mkinitfs umount tmux python3 py3-anytree bash"
-            #networkmanager linux-firmware nano doas os-prober musl-locales musl-locales-lang #### default mount from busybox gives errors. Do I also need umount?!
+            #linux-firmware-none networkmanager linux-firmware nano doas os-prober musl-locales musl-locales-lang #### default mount from busybox gives errors. Do I also need umount?!
 if is_efi:
-    packages += " grub-efi efibootmgr dosfstools" # Optional for fsck.vfat
+    packages += " grub-efi efibootmgr" # Optional for fsck.vfat
 else:
     packages += " grub-bios"
 if is_format_btrfs:
@@ -100,7 +100,7 @@ else:
     print("Use asd instead of ash!")
 
 #   5. Services (init, network, etc.)
-os.system("sudo chroot /mnt /bin/bash -c '/sbin/rc-service networkmanager start'")
+os.system("sudo chroot /mnt /bin/bash -c '/sbin/setup-interfaces'")
 os.system(f"sudo chroot /mnt /bin/bash -c '/usr/sbin/adduser {username} plugdev'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add devfs sysinit'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add dmesg sysinit'")
@@ -119,6 +119,7 @@ os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add seedrng boot'
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add mount-ro shutdown'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add killprocs shutdown'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add savecache shutdown'")
+#os.system("sudo chroot /mnt /bin/bash -c '/sbin/rc-service networkmanager start'")
 
 #   6. Boot and EFI
 initram_update()
