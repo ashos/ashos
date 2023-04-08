@@ -61,6 +61,14 @@ def ash_chroot_mounts(i, CHR=""):
         os.system(f"mount --rbind --make-rslave /sys/firmware/efi/efivars /.snapshots/rootfs/snapshot-{CHR}{i}/sys/firmware/efi/efivars{DEBUG}")
     os.system(f"cp --dereference /etc/resolv.conf /.snapshots/rootfs/snapshot-{CHR}{i}/etc/{DEBUG}") ### REVIEW Maybe not needed?
 
+###   Lock ash (no longer needed) REVIEW 2023
+###def ash_lock():
+###    os.system("touch /.snapshots/ash/lock-disable")
+
+###   Unlock ash (no longer needed) REVIEW 2023
+###def ash_unlock():
+###    os.system("rm -rf /.snapshots/ash/lock")
+
 #   Update ash itself
 def ash_update():
     try:
@@ -1082,7 +1090,7 @@ def uninstall_package(snapshot, pkg):
             print("F: Remove failed and changes discarded!")
 
 #   Update boot
-def update_boot(snapshot):
+def update_boot(snapshot): ### TODO Other bootloaders
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
         print(f"F: Cannot update boot as snapshot {snapshot} doesn't exist.")
     else:
