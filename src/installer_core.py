@@ -204,12 +204,11 @@ def post_bootstrap(super_group):
     else:
         set_password("root")
     if distro !="kicksecure": ### REVIEW not generic enough!
-        #username = get_username()
         create_user(username, super_group)
         if distro == "alpine": ### REVIEW not generic enough!
             set_password(username, "") # will fix for "doas"
         else:
-            set_password(username)
+            set_password(username) ################ important password for user gets called TWICE!!!
     else:
         print("Username is 'user' please change the default password")
   # Modify OS release information (optional) ### TODO may write in python

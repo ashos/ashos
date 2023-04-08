@@ -3,7 +3,7 @@
 main() {
     if [ $(id -u) -ne 0 ]; then echo "Please run as root!"; exit 1; fi
     if [ -z "$HOME" ]; then HOME=~ ; fi
-    prep_packages="bash btrfs-progs coreutils curl efibootmgr git lsblk mount parted python3 sudo tmux tzdata umount" #  coreutils needed for ln -srf, also default mount and umount from busybox gives errors, make fakeroot dialog, REMOVE bash
+    prep_packages="bash blkid btrfs-progs coreutils curl efibootmgr git lsblk mount parted python3 sudo tmux tzdata umount" #  coreutils needed for ln -srf, also default mount and umount from busybox gives errors, make fakeroot dialog, REMOVE bash
 
   # attempt to install and if errors sync time and database
     apk add --no-cache -v $prep_packages
