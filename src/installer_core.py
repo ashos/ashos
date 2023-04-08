@@ -226,22 +226,25 @@ def pre_bootstrap():
         print("--- Open LUKS partition --- ")
         os.system(f"sudo cryptsetup --allow-discards --persistent --type luks2 open {args[1]} luks_root")
   # Mount and create necessary sub-volumes and directories
-    if choice == "1":
-        os.system(f"sudo mkfs.btrfs -L LINUX -f {os_root}")
-        os.system(f"sudo mount -t btrfs {os_root} /mnt")
-    elif choice == "2":
-        os.system(f"sudo mount -o subvolid=5 {os_root} /mnt")
-    for btrdir in btrdirs: # common entries
-        os.system(f"sudo btrfs sub create /mnt/{btrdir}")
-    if is_boot_external:
-        os.system(f"sudo btrfs sub create /mnt/@boot{distro_suffix}")
-    if is_home_external:
-        os.system(f"sudo btrfs sub create /mnt/@home{distro_suffix}")
-    os.system("sudo umount /mnt")
-    for mntdir in mntdirs: # common entries
-        os.system(f"sudo mkdir -p /mnt/{mntdir}") # -p to ignore /mnt exists complaint
-        os.system(f"sudo mount {os_root} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
-#        os.system(f'sudo mount {bp if is_boot_external and mntdir == "boot" else os_root} -o {"subvol="+btrdirs[mntdirs.index(mntdir)]+"," if not (is_boot_external and mntdir == "boot") else ""}compress=zstd,noatime /mnt/{mntdir}') ### NEWER but won't work because of new structuring of mntdirs so REVERTED to first version. Kept for future reference
+    if is_format_btrfs:
+        if not os.path.isfile("/dev/btrfs-control"): # Recommended for Alpine for instance (optional)
+            os.system("sudo btrfs rescue create-control-device")
+        if choice == "1":
+            os.system(f"sudo mkfs.btrfs -L LINUX -f {os_root}")
+            os.system(f"sudo mount -t btrfs {os_root} /mnt")
+        elif choice == "2":
+            os.system(f"sudo mount -o subvolid=5 {os_root} /mnt")
+        for btrdir in btrdirs: # common entries
+            os.system(f"sudo btrfs sub create /mnt/{btrdir}")
+        if is_boot_external:
+            os.system(f"sudo btrfs sub create /mnt/@boot{distro_suffix}")
+        if is_home_external:
+            os.system(f"sudo btrfs sub create /mnt/@home{distro_suffix}")
+        os.system("sudo umount /mnt")
+        for mntdir in mntdirs: # common entries
+            os.system(f"sudo mkdir -p /mnt/{mntdir}") # -p to ignore /mnt exists complaint
+            os.system(f"sudo mount {os_root} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
+            #os.system(f'sudo mount {bp if is_boot_external and mntdir == "boot" else os_root} -o {"subvol="+btrdirs[mntdirs.index(mntdir)]+"," if not (is_boot_external and mntdir == "boot") else ""}compress=zstd,noatime /mnt/{mntdir}') ### NEWER but won't work because of new structuring of mntdirs so REVERTED to first version. Kept for future reference
     if is_boot_external:
         os.system(f"sudo mkdir /mnt/boot")
         os.system(f"sudo mount -m {bp} -o compress=zstd,noatime /mnt/boot")
@@ -307,6 +310,7 @@ with open('res/logos/logo.txt', 'r') as f:
 #   Define variables
 DEBUG = "" # options: "", " >/dev/null 2>&1"
 choice, distro_suffix = get_multiboot(distro)
+is_format_btrfs = True ### REVIEW TEMPORARY
 is_boot_external = yes_no("Would you like to use a separate boot partition?")
 is_home_external = yes_no("Would you like to use a separate home partition?")
 is_mutable = yes_no("Would you like this installation to be mutable?")

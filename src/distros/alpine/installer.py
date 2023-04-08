@@ -35,7 +35,6 @@ def initram_update():
                     continue
 
 #   1. Define variables
-is_format_btrfs = True ### REVIEW TEMPORARY
 APK = "2.12.11-r0" # https://git.alpinelinux.org/aports/plain/main/apk-tools/APKBUILD
 ARCH = "x86_64"
 RELEASE = "edge"
