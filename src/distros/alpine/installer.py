@@ -115,15 +115,13 @@ os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add bootmisc boot
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add syslog boot'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add swap boot'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add networking boot'")
-os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add urandom boot'")
+os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add seedrng boot'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add mount-ro shutdown'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add killprocs shutdown'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add savecache shutdown'")
 
 #   6. Boot and EFI
 initram_update()
-#os.system('grep -qxF GRUB_ENABLE_BLSCFG="false" /mnt/etc/default/grub || \
-#           echo GRUB_ENABLE_BLSCFG="false" | sudo tee -a /mnt/etc/default/grub')
 os.system('echo GRUB_CMDLINE_LINUX_DEFAULT=\\"modules=sd-mod,usb-storage,btrfs quiet rootfstype=btrfs\\" | sudo tee -a /mnt/etc/default/grub') ########## maybe moving this before bootstrapping packages would prevent canonical error
 grub_ash(v)
 
@@ -140,10 +138,3 @@ clear()
 print("Installation complete!")
 print("You can reboot now :)")
 
-
-######33 /sbin/apk add py3
-###### export PATH=/bin:$PATH
-####### STILL NEED to actually add LUKS2 for alpine (right now just copied from archinst)
-
-#########ERRRRRRRRROR /mnt/dev target is busy
-#### sda2 already moutned on /mnt, is it because of deplot_to_common use inside cp ---xyz? is cp there from busybox?reO
