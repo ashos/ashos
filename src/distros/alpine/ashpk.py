@@ -24,7 +24,7 @@ def fix_package_db(snapshot = "0"):
 
 #   Delete init system files (Systemd, OpenRC, etc.)
 def init_system_clean(snapshot, FROM):
-    print("TODO")
+    print("TODO init_system_clean")
     #if FROM == "prepare":
         #os.system(f"rm -rf /.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/systemd/*{DEBUG}")
     #elif FROM == "deploy":
@@ -40,10 +40,10 @@ def init_system_copy(snapshot, FROM):
 #   Install atomic-operation
 def install_package(snapshot, pkg):
     prepare(snapshot)
-    return os.system(f"apk add --force-overwrite -i {pkg}") # --sysroot ### REVIEW '/var/*'
+    return os.system(f"chroot /.snapshots/rootfs/snapshot-{snapshot} apk add --force-overwrite -i {pkg}") # --sysroot ### REVIEW '/var/*'
 
 #   Install atomic-operation in live snapshot
-def install_package_live(snapshot, tmp, pkg):
+def install_package_live(snapshot, tmp, pkg): ### TODO remove 'snapshot' as not used
     return os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} apk add --force-overwrite {pkg}{DEBUG}") # --sysroot # -Sy --overwrite '*' --noconfirm
 
 #   Get list of packages installed in a snapshot
@@ -69,7 +69,7 @@ def uninstall_package_helper(snapshot, pkg):
 
 #   Upgrade snapshot atomic-operation
 def upgrade_helper(snapshot):
-    prepare(snapshot) ### REVIEW tried it outside of this function in ashpk_core before aur_install and it works fine!
+    prepare(snapshot)
     return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apk update -i") ### REVIEW "-Syyu" # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
 
 # ---------------------------------------------------------------------------- #
