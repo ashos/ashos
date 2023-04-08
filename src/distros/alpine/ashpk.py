@@ -16,7 +16,7 @@ def auto_upgrade(snapshot):
 
 #   Copy cache of downloaded packages to shared
 def cache_copy(snapshot, FROM):
-    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/apk/pkg/. /var/cache/apk/pkg/{DEBUG}") ### REVIEW IS THIS NEEDED?
+    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/apk/. /var/cache/apk/{DEBUG}") ### REVIEW IS THIS NEEDED?
 
 #   Fix signature invalid error
 def fix_package_db(snapshot = "0"):
