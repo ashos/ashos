@@ -20,7 +20,31 @@ def cache_copy(snapshot, FROM):
 
 #   Fix signature invalid error
 def fix_package_db(snapshot = "0"):
-    return 0
+    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
+        print(f"F: Cannot fix package manager database as snapshot {snapshot} doesn't exist.")
+        return
+    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
+        print(f"F: Snapshot {snapshot} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snapshot}'.")
+        return
+    elif snapshot == "0":
+        P = "" ### I think this is wrong. It should be check if snapshot = current-deployed-snapshot, then this.
+    else:
+        P = f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} "
+    try:
+        if check_mutability(snapshot):
+            flip = False # Snapshot is mutable so do not make it immutable after fixdb is done
+        else:
+            immutability_disable(snapshot)
+            flip = True
+        prepare(snapshot)
+        os.system(f"{P}apk -sv fix") ### REVIEW NEEDED
+        post_transactions(snapshot)
+        if flip:
+            immutability_enable(snapshot)
+        print(f"Snapshot {snapshot}'s package manager database fixed successfully.")
+    except subprocess.CalledProcessError:
+        chr_delete(snapshot)
+        print("F: Fixing package manager database failed.")
 
 #   Delete init system files (Systemd, OpenRC, etc.)
 def init_system_clean(snapshot, FROM):

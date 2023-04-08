@@ -1,0 +1,16 @@
+[packages]
+which
+xorg-server
+xfce4
+dbus
+slim
+
+[postinstall]
+& echo "exec startxfce4" > $HOME/.xinitrc
+
+[services]
+% sudo adduser $USER input
+% sudo adduser $USER video
+% sudo rc-service dbus start
+% sudo rc-service slim start
+
