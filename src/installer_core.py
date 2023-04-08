@@ -175,7 +175,7 @@ def post_bootstrap(super_group):
   # Update fstab
     with open('/mnt/etc/fstab', 'a') as f: # assumes script is run as root
         for mntdir in mntdirs: # common entries
-            f.write(f'UUID=\"{to_uuid(os_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{"" if mntdir else ",ro"} 0 0\n') # ro only for / entry ### complex but one-liner
+            f.write(f'UUID=\"{to_uuid(os_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{"" if mntdir or is_mutable else ",ro"} 0 0\n') # ro only for / entry (and just for immutable installs) ### complex but one-liner
         if is_boot_external:
             f.write(f'UUID=\"{to_uuid(bp)}\" /boot btrfs subvol=@boot{distro_suffix},compress=zstd,noatime 0 0\n')
         if is_home_external:

@@ -42,7 +42,9 @@ KERNEL = "edge" ### lts
 packages = f"linux-{KERNEL} blkid curl sudo tzdata mount mkinitfs umount tmux python3 py3-anytree bash"
             #linux-firmware-none networkmanager linux-firmware nano doas os-prober musl-locales musl-locales-lang dbus #### default mount from busybox gives errors. Do I also need umount?!
 if is_efi:
-    packages += " grub-efi efibootmgr" # Optional for fsck.vfat
+    packages += " grub-efi efibootmgr"
+    if is_mutable:
+        packages += " dosfstools" # Optional for fsck.vfat checks at boot up
 else:
     packages += " grub-bios"
 if is_format_btrfs:
