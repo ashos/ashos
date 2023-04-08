@@ -1,12 +1,11 @@
 #!/usr/bin/python3
 
-#################### remove bash to sh
-
 import os
+import shutil
 import subprocess
 import sys ### REMOVE WHEN TRY EXCEPT ELSE IS IMPLEMENTED
 from src.installer_core import * # NOQA
-#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, get_hostname, get_item_from_path, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
+#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 from setup import args, distro
 
 def initram_update():
@@ -41,8 +40,8 @@ APK = "2.12.11-r0" # https://git.alpinelinux.org/aports/plain/main/apk-tools/APK
 ARCH = "x86_64"
 RELEASE = "edge"
 KERNEL = "edge" ### lts
-packages = f"alpine-base linux-{KERNEL} tzdata sudo python3 py3-anytree bash \
-            btrfs-progs networkmanager tmux mount umount mkinitfs" #linux-firmware nano doas os-prober musl-locales musl-locales-lang #### default mount from busybox gives errors. Do I also need umount?!
+packages = f"linux-{KERNEL} tzdata sudo python3 py3-anytree bash btrfs-progs networkmanager tmux mount umount mkinitfs"
+            #linux-firmware nano doas os-prober musl-locales musl-locales-lang #### default mount from busybox gives errors. Do I also need umount?!
 if is_efi:
     packages += " grub-efi efibootmgr"
 else:
@@ -60,10 +59,9 @@ pre_bootstrap()
 os.system(f"curl -LO {URL}/{ARCH}/apk-tools-static-{APK}.apk")
 os.system("tar zxf apk-tools-static-*.apk")
 excode1 = os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add alpine-base") ### REVIEW Is "/" needed after {URL} ?
-os.system("sudo cp ./src/distros/alpine/repositories /mnt/etc/apk/") ### REVIEW MOVED from down at section 3 to here as installing 'bash' was giving error
+shutil.copy("./src/distros/alpine/repositories", "/mnt/etc/apk/") ### REVIEW MOVED from down at section 3 to here as installing 'bash' was giving error
 excode2 = os.system(f"sudo chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'") ### changed bash to sh
-### excode = os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add {packages}") # only had "alpine-base" at first - Possible to combine these 2 commands?
-if excode1 != 0 and excode2 != 0:
+if excode1 or excode2:
     sys.exit("Failed to bootstrap!")
 
 #   Mount-points for chrooting
@@ -87,7 +85,7 @@ os.system("sudo chroot /mnt /sbin/hwclock --systohc")
 
 #   Post bootstrap
 post_bootstrap(super_group)
-if yes_no("Replace Busybox's ash with Ash? Use with caution!"):
+if yes_no("Replace Busybox's ash with Ash? Be cautious!"):
     os.system(f"sudo mv /mnt/bin/ash /mnt/bin/busyash")
     print("Ash replaced Busybox's ash (which is now busyash)!")
 else:

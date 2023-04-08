@@ -106,20 +106,20 @@ def get_item_from_path(thing, apath):
     clear()
     while True:
         print(f"Select a {thing} (type list to list):")
-        choice = input("> ")
-        if choice == "list":
-            choice = []
+        ch = input("> ")
+        if ch == "list":
+            ch = []
             for root, _dirs, files in os.walk(apath, followlinks=True):
                 for file in files:
-                    choice.append(os.path.join(root, file).replace(f"{apath}/", ""))
-            choice = "\n".join(sorted(choice))
-            os.system(f"echo '{choice}' | less")
+                    ch.append(os.path.join(root, file).replace(f"{apath}/", ""))
+            ch = "\n".join(sorted(ch))
+            os.system(f"echo '{ch}' | less")
         else:
-            temp = str(f"{apath}/{choice}")
+            temp = str(f"{apath}/{ch}")
             if not ( os.path.isfile(temp) or os.path.isdir(temp) ):
                 print(f"Invalid {thing}!")
                 continue
-            return choice ### REVIEW originally was just break
+            return ch ### REVIEW originally was just break
 
 #   GRUB and EFI
 def grub_ash(v):
@@ -220,18 +220,17 @@ def post_bootstrap(super_group):
 #   Common steps before bootstrapping
 def pre_bootstrap():
   # Prep (format partition, etc.)
-    if is_luks and choice != "3":
+    if is_luks and choice != "2":
         os.system("sudo modprobe dm-crypt")
         print("--- Create LUKS partition --- ")
         os.system(f"sudo cryptsetup -y -v -c aes-xts-plain64 -s 512 --hash sha512 --pbkdf pbkdf2 --type luks2 luksFormat {args[1]}")
         print("--- Open LUKS partition --- ")
         os.system(f"sudo cryptsetup --allow-discards --persistent --type luks2 open {args[1]} luks_root")
-    if choice != "3":
-        os.system(f"sudo mkfs.btrfs -L LINUX -f {os_root}")
   # Mount and create necessary sub-volumes and directories
-    if choice != "3":
+    if choice == "1":
+        os.system(f"sudo mkfs.btrfs -L LINUX -f {os_root}")
         os.system(f"sudo mount -t btrfs {os_root} /mnt")
-    else:
+    elif choice == "2":
         os.system(f"sudo mount -o subvolid=5 {os_root} /mnt")
     for btrdir in btrdirs: # common entries
         os.system(f"sudo btrfs sub create /mnt/{btrdir}")
