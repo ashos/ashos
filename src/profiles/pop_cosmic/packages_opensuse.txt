@@ -1,2 +1,0 @@
-Tumbleweed: sudo zypper install gnome-shell-extension-pop-shell
-

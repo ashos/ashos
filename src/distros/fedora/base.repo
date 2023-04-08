@@ -1,5 +1,0 @@
-[ashos_fedora]
-name=AshOS Fedora Repository
-baseurl=http://download.fedoraproject.org/pub/fedora/linux/development/$releasever/Everything/$basearch/os
-enabled=1
-
