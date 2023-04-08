@@ -39,12 +39,14 @@ APK = "2.12.11-r0" # https://git.alpinelinux.org/aports/plain/main/apk-tools/APK
 ARCH = "x86_64"
 RELEASE = "edge"
 KERNEL = "edge" ### lts
-packages = f"linux-{KERNEL} tzdata sudo python3 py3-anytree bash btrfs-progs networkmanager tmux mount umount mkinitfs blkid"
-            #linux-firmware nano doas os-prober musl-locales musl-locales-lang #### default mount from busybox gives errors. Do I also need umount?!
+packages = f"linux-{KERNEL} blkid curl sudo tzdata mount mkinitfs umount tmux python3 py3-anytree bash"
+            #networkmanager linux-firmware nano doas os-prober musl-locales musl-locales-lang #### default mount from busybox gives errors. Do I also need umount?!
 if is_efi:
     packages += " grub-efi efibootmgr dosfstools" # Optional for fsck.vfat
 else:
     packages += " grub-bios"
+if is_format_btrfs:
+    packages += " btrfs-progs"
 if is_luks:
     packages += " cryptsetup" ### REVIEW_LATER
 super_group = "wheel"
@@ -90,12 +92,12 @@ os.system("sudo chroot /mnt /sbin/hwclock --systohc")
 
 #   Post bootstrap
 post_bootstrap(super_group)
-if yes_no("Replace Busybox's ash with Ash? Be cautious!"):
+if yes_no("Replace Busybox's ash with Ash? (NOT recommended yet!)"):
     os.system(f"sudo mv /mnt/bin/ash /mnt/bin/busyash")
     print("Ash replaced Busybox's ash (which is now busyash)!")
 else:
     os.system(f"sudo mv /mnt/usr/bin/ash /mnt/usr/bin/asd")
-    print("Run asd instead of ash!")
+    print("Use asd instead of ash!")
 
 #   5. Services (init, network, etc.)
 os.system("sudo chroot /mnt /bin/bash -c '/sbin/rc-service networkmanager start'")
