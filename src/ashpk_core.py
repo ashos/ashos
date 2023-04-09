@@ -151,7 +151,7 @@ def chroot(snapshot, cmd=""): ### make cmd to cmds (IMPORTANT for install_profil
         print("F: Changing base snapshot is not allowed.")
     else:
         prepare(snapshot)
-        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} {' '.join(cmd)}")
+        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} {' '.join(cmd)}") ### TODO if you chroot, then run 'dua' and exit, it makes excode non-zero!
         if excode == 0:
             post_transactions(snapshot)
             return 0
