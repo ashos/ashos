@@ -21,31 +21,37 @@ def initram_update():
         try: # work with default kernel modules first
             subprocess.check_output("sudo chroot /mnt sudo mkinitfs -b / -f /etc/fstab", shell=True) ### REVIEW <kernelvers>
         except subprocess.CalledProcessError: # and if errors
-            #if len(next(os.walk('dir_name'))[1]) == 1:
-            print("F: Creating initfs with default kernel failed!")
-            print("Next, type just folder name i.e. 5.15.104-0-lts")
-            kv = None
-            while True:
-                try:
-                    kv = get_item_from_path("kernel version", "/mnt/lib/modules")
-                    subprocess.check_output(f"sudo chroot /mnt sudo mkinitfs -b / -f /etc/fstab -k {kv}", shell=True)
-                    break # Success
-                except subprocess.CalledProcessError:
-                    print(f"F: Creating initfs with kernel {kv} failed!")
-                    continue
+            kv = os.listdir('/mnt/lib/modules')
+            try:
+                if len(kv) == 1:
+                    subprocess.check_output(f"sudo chroot /mnt sudo mkinitfs -b / -f /etc/fstab -k {''.join(kv)}", shell=True)
+            except:
+                print(f"F: Creating initfs with either live default or {kv} kernels failed!")
+                print("Next, type just folder name from /mnt/lib/modules i.e. 5.15.104-0-lts")
+                while True:
+                    try:
+                        kv = get_item_from_path("kernel version", "/mnt/lib/modules")
+                        subprocess.check_output(f"sudo chroot /mnt sudo mkinitfs -b / -f /etc/fstab -k {kv}", shell=True)
+                        break # Success
+                    except subprocess.CalledProcessError:
+                        print(f"F: Creating initfs with kernel {kv} failed!")
+                        continue
 
 #   1. Define variables
-is_format_btrfs = True ### REVIEW TEMPORARY
 APK = "2.12.11-r0" # https://git.alpinelinux.org/aports/plain/main/apk-tools/APKBUILD
 ARCH = "x86_64"
 RELEASE = "edge"
 KERNEL = "edge" ### lts
-packages = f"linux-{KERNEL} tzdata sudo python3 py3-anytree bash btrfs-progs networkmanager tmux mount umount mkinitfs blkid"
-            #linux-firmware nano doas os-prober musl-locales musl-locales-lang #### default mount from busybox gives errors. Do I also need umount?!
+packages = f"linux-{KERNEL} blkid curl coreutils sudo tzdata mount mkinitfs umount tmux python3 py3-anytree bash"
+            #linux-firmware-none networkmanager linux-firmware nano doas os-prober musl-locales musl-locales-lang dbus #### default mount from busybox gives errors. Do I also need umount?!
 if is_efi:
     packages += " grub-efi efibootmgr"
+#    if is_mutable: ### TODO still errors
+#        packages += " dosfstools" # Optional for fsck.vfat checks at boot up
 else:
     packages += " grub-bios"
+if is_format_btrfs:
+    packages += " btrfs-progs"
 if is_luks:
     packages += " cryptsetup" ### REVIEW_LATER
 super_group = "wheel"
@@ -61,12 +67,7 @@ os.system("tar zxf apk-tools-static-*.apk")
 excode1 = os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add alpine-base") ### REVIEW Is "/" needed after {URL} ?
 shutil.copy("./src/distros/alpine/repositories", "/mnt/etc/apk/") ### REVIEW MOVED from down at section 3 to here as installing 'bash' was giving error
 os.system("sudo cp --dereference /etc/resolv.conf /mnt/etc/") # --remove-destination ### not writing through dangling symlink! (TODO: try except)
-excode2 = os.system(f"sudo chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'") ### changed bash to sh ############## IMPORTANT: this is where I get following error:
-
-### EXecuting mkinitfs success
-### Executing grub-2.06-r7.trigger
-### /usr/sbin/grub-probe  error failed to get canonical path of /dev/sda2
-### ERROR grub-2.06-r7.trigger script exited with error 1
+excode2 = os.system(f"sudo chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'") ### changed bash to sh
 
 if excode1 or excode2:
     sys.exit("Failed to bootstrap!")
@@ -91,35 +92,40 @@ os.system("sudo chroot /mnt /sbin/hwclock --systohc")
 
 #   Post bootstrap
 post_bootstrap(super_group)
-if yes_no("Replace Busybox's ash with Ash? Be cautious!"):
+if yes_no("Replace Busybox's ash with Ash? (NOT recommended yet!)"):
     os.system(f"sudo mv /mnt/bin/ash /mnt/bin/busyash")
+    #os.system(f"sudo mv /mnt/bin/ash /mnt/usr/bin/ash")
+    #os.system(f"sudo mv /mnt/usr/bin/ash /mnt/bin/ash")
     print("Ash replaced Busybox's ash (which is now busyash)!")
 else:
     os.system(f"sudo mv /mnt/usr/bin/ash /mnt/usr/bin/asd")
-    print("Run asd instead of ash!")
+    print("Use asd instead of ash!")
 
 #   5. Services (init, network, etc.)
-os.system("sudo chroot /mnt /bin/bash -c '/sbin/rc-service networkmanager start'")
+os.system("sudo chroot /mnt /bin/bash -c '/sbin/setup-interfaces'")
 os.system(f"sudo chroot /mnt /bin/bash -c '/usr/sbin/adduser {username} plugdev'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add devfs sysinit'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add dmesg sysinit'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add mdev sysinit'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add hwdrivers sysinit'")
+os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add cgroups sysinit'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add hwclock boot'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add modules boot'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add sysctl boot'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add hostname boot'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add bootmisc boot'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add syslog boot'")
+os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add swap boot'")
+os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add networking boot'")
+os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add seedrng boot'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add mount-ro shutdown'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add killprocs shutdown'")
 os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add savecache shutdown'")
+#os.system("sudo chroot /mnt /bin/bash -c '/sbin/rc-service networkmanager start'")
 
 #   6. Boot and EFI
+os.system('echo GRUB_CMDLINE_LINUX_DEFAULT=\\"modules=sd-mod,usb-storage,btrfs quiet rootfstype=btrfs\\" | sudo tee -a /mnt/etc/default/grub') # should be before initram create otherwise canonical error in grub-probe
 initram_update()
-#os.system('grep -qxF GRUB_ENABLE_BLSCFG="false" /mnt/etc/default/grub || \
-#           echo GRUB_ENABLE_BLSCFG="false" | sudo tee -a /mnt/etc/default/grub')
-os.system('echo GRUB_CMDLINE_LINUX_DEFAULT=\\"modules=sd-mod,usb-storage,btrfs quiet rootfstype=btrfs\\" | sudo tee -a /mnt/etc/default/grub') ########## maybe moving this before bootstrapping packages would prevent canonical error
 grub_ash(v)
 
 #   BTRFS snapshots
@@ -135,10 +141,3 @@ clear()
 print("Installation complete!")
 print("You can reboot now :)")
 
-
-######33 /sbin/apk add py3
-###### export PATH=/bin:$PATH
-####### STILL NEED to actually add LUKS2 for alpine (right now just copied from archinst)
-
-#########ERRRRRRRRROR /mnt/dev target is busy
-#### sda2 already moutned on /mnt, is it because of deplot_to_common use inside cp ---xyz? is cp there from busybox?reO
