@@ -67,12 +67,7 @@ os.system("tar zxf apk-tools-static-*.apk")
 excode1 = os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add alpine-base") ### REVIEW Is "/" needed after {URL} ?
 shutil.copy("./src/distros/alpine/repositories", "/mnt/etc/apk/") ### REVIEW MOVED from down at section 3 to here as installing 'bash' was giving error
 os.system("sudo cp --dereference /etc/resolv.conf /mnt/etc/") # --remove-destination ### not writing through dangling symlink! (TODO: try except)
-excode2 = os.system(f"sudo chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'") ### changed bash to sh ############## IMPORTANT: this is where I get following error:
-
-### EXecuting mkinitfs success
-### Executing grub-2.06-r7.trigger
-### /usr/sbin/grub-probe  error failed to get canonical path of /dev/sda2
-### ERROR grub-2.06-r7.trigger script exited with error 1
+excode2 = os.system(f"sudo chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'") ### changed bash to sh
 
 if excode1 or excode2:
     sys.exit("Failed to bootstrap!")
@@ -129,8 +124,8 @@ os.system("sudo chroot /mnt /bin/bash -c 'sudo /sbin/rc-update add savecache shu
 #os.system("sudo chroot /mnt /bin/bash -c '/sbin/rc-service networkmanager start'")
 
 #   6. Boot and EFI
+os.system('echo GRUB_CMDLINE_LINUX_DEFAULT=\\"modules=sd-mod,usb-storage,btrfs quiet rootfstype=btrfs\\" | sudo tee -a /mnt/etc/default/grub') # should be before initram create otherwise canonical error in grub-probe
 initram_update()
-os.system('echo GRUB_CMDLINE_LINUX_DEFAULT=\\"modules=sd-mod,usb-storage,btrfs quiet rootfstype=btrfs\\" | sudo tee -a /mnt/etc/default/grub') ########## maybe moving this before bootstrapping packages would prevent canonical error
 grub_ash(v)
 
 #   BTRFS snapshots

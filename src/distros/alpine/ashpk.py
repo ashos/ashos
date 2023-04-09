@@ -64,7 +64,7 @@ def init_system_copy(snapshot, FROM):
 #   Install atomic-operation
 def install_package(snapshot, pkg):
     prepare(snapshot)
-    return os.system(f"chroot /.snapshots/rootfs/snapshot-{snapshot} apk add --force-overwrite -i {pkg}") # --sysroot ### REVIEW '/var/*'
+    return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} apk add --force-overwrite -i {pkg}") # --sysroot ### REVIEW '/var/*'
 
 #   Install atomic-operation in live snapshot
 def install_package_live(snapshot, tmp, pkg): ### TODO remove 'snapshot' as not used
