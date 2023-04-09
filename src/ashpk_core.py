@@ -504,7 +504,7 @@ def install_live(pkg, snapshot=get_current_snapshot()): ### IMPORTANT REVIEW 202
 #    os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp{DEBUG}") ###REDUNDANT
     ash_chroot_mounts(tmp) ### REVIEW Not having this was the culprit for live install to fail for Arch and derivative. Now, does having this here Ok or does it cause errors in NON-Arch distros? If so move it to ashpk.py
     print("Please wait as installation is finishing.")
-    excode = install_package_live(snapshot, tmp, pkg) ### IMPORTANT REVIEW 2023 --> reverse the order (pkg, snapshot=get_current_snapshot()) by default if no arg is sent use current snapshot
+    excode = install_package_live(pkg, tmp, snapshot) ### IMPORTANT REVIEW 2023 --> reverse the order (pkg, snapshot=get_current_snapshot()) by default if no arg is sent use current snapshot
 #####    excode = install_package_live(tmp, pkg)
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") ### REVIEW not safe
@@ -528,7 +528,7 @@ def install_profile(snapshot, profile):
         subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{profile}/packages{get_distro_suffix()}.txt", shell=True)
         prepare(snapshot)
         try: # Ignore empty lines or ones starting with # [ % &
-            pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\[|^%|^&|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
+            pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\\[|^%|^&|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
             install_package(snapshot, pkg)
             service_enable(snapshot, profile, tmp_prof)
         except subprocess.CalledProcessError:
@@ -542,7 +542,7 @@ def install_profile(snapshot, profile):
             deploy(snapshot)
 
 #   Install profile in live snapshot
-def install_profile_live(profile):
+def install_profile_live(profile, snapshot):
     tmp = get_tmp()
     ash_chroot_mounts(tmp)
     print(f"Updating the system before installing profile {profile}.")
@@ -550,9 +550,9 @@ def install_profile_live(profile):
     tmp_prof = subprocess.check_output("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX", shell=True, encoding='utf-8').strip()
     subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{profile}/packages{get_distro_suffix()}.txt", shell=True)
   # Ignore empty lines or ones starting with # [ % &
-    pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\[|^%|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
+    pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\\[|^%|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
 #####    excode1 = install_package_live(snapshot, tmp, pkg) ### REVIEW snapshot argument needed
-    excode1 = install_package_live(tmp, pkg) ### REVIEW snapshot argument needed
+    excode1 = install_package_live(pkg, tmp, snapshot) ### REVIEW snapshot argument needed
     excode2 = service_enable(tmp, profile, tmp_prof)
     if excode1 == 0 and excode2 == 0:
         print(f"Profile {profile} installed in current/live snapshot.") ### REVIEW
@@ -1388,7 +1388,7 @@ def install_triage(live, profile, pkg, not_live, snapshot=get_current_snapshot()
   # Perform the live install only if install above was successful
     if live and not excode:
         if profile:
-            install_profile_live(profile)
+            install_profile_live(profile, snapshot)
         elif pkg:
             install_live(" ".join(pkg), snapshot)
 
