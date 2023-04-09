@@ -308,7 +308,7 @@ def deploy(snapshot):
         tmp = get_tmp()
         os.system(f"btrfs sub set-default /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") # Set default volume
         tmp_delete()
-        if "deploy-aux" in tmp:
+        if tmp == "deploy-aux":
             tmp = "deploy"
         else:
             tmp = "deploy-aux"
@@ -357,9 +357,12 @@ def find_new():
     boots = os.listdir("/.snapshots/boot")
     etcs = os.listdir("/.snapshots/etc")
     snapshots = os.listdir("/.snapshots/rootfs")
-    snapshots.append(boots)
-    snapshots.append(etcs)
-    snapshots.append(vars) ### Can this be deleted?
+#    snapshots.append(boots)
+#    snapshots.append(etcs)
+#    snapshots.append(vars) ### Can this be deleted?
+    snapshots.append(str(boots))
+    snapshots.append(str(etcs))
+    snapshots.append(str(vars)) ### Can this be deleted?
     while True:
         i += 1
         if str(f"snapshot-{i}") not in snapshots and str(f"etc-{i}") not in snapshots and str(f"var-{i}") not in snapshots and str(f"boot-{i}") not in snapshots:
@@ -379,11 +382,10 @@ def get_distro_suffix():
 
 #   Get deployed snapshot
 def get_next_snapshot():
-    if "deploy-aux" in get_tmp():
+    if get_tmp() == "deploy-aux":
         d = "deploy"
     else:
         d = "deploy-aux"
-
     if os.path.exists("/.snapshots/rootfs/snapshot-{d}/usr/share/ash/snap"): # Make sure next snapshot exists
         with open(f"/.snapshots/rootfs/snapshot-{d}/usr/share/ash/snap", "r") as csnapshot:
             return csnapshot.read().rstrip()
@@ -492,7 +494,7 @@ def install(snapshot, pkg):
             return 1
 
 #   Install live
-def install_live(snapshot, pkg):
+def install_live(snapshot, pkg): ### IMPORTANT REVIEW 2023 --> reverse the order (pkg, snapshot=get_current_snapshot()) by default if no arg is sent use current snapshot
     tmp = get_tmp()
     #options = get_persnap_options(tmp) ### moved this to install_package_live
     os.system(f"mount --bind /.snapshots/rootfs/snapshot-{tmp} /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
@@ -502,8 +504,8 @@ def install_live(snapshot, pkg):
     os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp{DEBUG}")
     ash_chroot_mounts(tmp) ### REVIEW Not having this was the culprit for live install to fail for Arch and derivative. Now, does having this here Ok or does it cause errors in NON-Arch distros? If so move it to ashpk.py
     print("Please wait as installation is finishing.")
-#####    excode = install_package_live(snapshot, tmp, pkg)
-    excode = install_package_live(tmp, pkg)
+    excode = install_package_live(snapshot, tmp, pkg) ### IMPORTANT REVIEW 2023 --> reverse the order (pkg, snapshot=get_current_snapshot()) by default if no arg is sent use current snapshot
+#####    excode = install_package_live(tmp, pkg)
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") ### REVIEW not safe
     if not excode:
@@ -888,7 +890,7 @@ def switch_tmp():
     tmp_boot = subprocess.check_output("mktemp -d -p /.snapshots/tmp boot.XXXXXXXXXXXXXXXX", shell=True).decode('utf-8').strip()
     os.system(f"mount {part} -o subvol=@boot{distro_suffix} {tmp_boot}") # Mount boot partition for writing
   # Swap deployment subvolumes: deploy <-> deploy-aux
-    if "deploy-aux" in get_tmp():
+    if get_tmp() == "deploy-aux":
         source_dep = "deploy-aux"
         target_dep = "deploy"
     else:
@@ -918,7 +920,7 @@ def switch_tmp():
             else:
                 gconf = gconf.replace("snapshot-deploy", "snapshot-deploy-aux")
             if distro_name in gconf:
-                gconf = sub('snapshot \d', '', gconf)
+                gconf = sub('snapshot \\d', '', gconf) ### IMPORTANT REVIEW 2023
                 gconf = gconf.replace(f"{distro_name}", f"{distro_name} last booted deployment (snapshot {snap})")
         os.system(f"sed -i '$ d' {boot_location}/{GRUB}/grub.cfg")
         with open(f"{boot_location}/{GRUB}/grub.cfg", "a") as grubconf:
@@ -947,7 +949,7 @@ def temp_snapshots_clear():
 #   Clean tmp dirs
 def tmp_delete():
     tmp = get_tmp()
-    if "deploy-aux" in tmp:
+    if tmp == "deploy-aux":
         tmp = "deploy"
     else:
         tmp = "deploy-aux"
@@ -1101,11 +1103,12 @@ def update_boot(snapshot): ### TODO Other bootloaders
         part = get_part()
         prepare(snapshot)
         if os.path.exists(f"/boot/{GRUB}/BAK/"): # REVIEW
-            os.system(f"find /boot/{GRUB}/BAK/. -mtime +30 -exec rm -rf" + " {} \;") # Delete 30-day-old grub.cfg.DATE files
+            os.system(f"find /boot/{GRUB}/BAK/. -mtime +30 -exec rm -rf" + " {} \\;") # Delete 30-day-old grub.cfg.DATE files
         os.system(f"cp /boot/{GRUB}/grub.cfg /boot/{GRUB}/BAK/grub.cfg.`date '+%Y%m%d-%H%M%S'`")
         os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} {GRUB}-mkconfig {part} -o /boot/{GRUB}/grub.cfg")
         os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sed -i 's|snapshot-chr{snapshot}|snapshot-{tmp}|g' /boot/{GRUB}/grub.cfg")
-        os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sed -i '0,\|{distro_name}| s||{distro_name} snapshot {snapshot}|' /boot/{GRUB}/grub.cfg")
+####        os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sed -i '0,\|{distro_name}| s||{distro_name} snapshot {snapshot}|' /boot/{GRUB}/grub.cfg")
+        os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sed -i '0,\\|{distro_name}| s||{distro_name} snapshot {snapshot}|' /boot/{GRUB}/grub.cfg")
         post_transactions(snapshot)
 
 #   Saves changes made to /etc to snapshot
@@ -1358,6 +1361,7 @@ def main():
 #-------------------- Triage functions for argparse method --------------------#
 
 def install_triage(snapshot, live, profile, pkg, not_live):
+    excode = 1 ### REVIEW
     if profile:
         excode = install_profile(snapshot, profile)
     elif pkg:

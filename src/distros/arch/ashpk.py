@@ -162,6 +162,7 @@ def install_package(snapshot, pkg):
 
 #   Install atomic-operation in live snapshot
 def install_package_live(snapshot, tmp, pkg):
+    excode = 1 ### REVIEW
     try:
       # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
         subprocess.check_output(f"pacman -Si {pkg}", shell=True) # --sysroot
@@ -221,7 +222,7 @@ def snapshot_diff(snap1, snap2):
     elif not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap2}"):
         print(f"Snapshot {snap2} not found.")
     else:
-        os.system(f"bash -c \"diff <(ls /.snapshots/rootfs/snapshot-{snap1}/usr/share/ash/db/local) <(ls /.snapshots/rootfs/snapshot-{snap2}/usr/share/ash/db/local) | grep '^>\|^<' | sort\"")
+        os.system(f"bash -c \"diff <(ls /.snapshots/rootfs/snapshot-{snap1}/usr/share/ash/db/local) <(ls /.snapshots/rootfs/snapshot-{snap2}/usr/share/ash/db/local) | grep '^>\|^<' | sort\"") ### REVIEW
 
 #   Uninstall package(s) atomic-operation
 def uninstall_package_helper(snapshot, pkg):
