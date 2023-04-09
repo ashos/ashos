@@ -494,14 +494,14 @@ def install(snapshot, pkg):
             return 1
 
 #   Install live
-def install_live(snapshot, pkg): ### IMPORTANT REVIEW 2023 --> reverse the order (pkg, snapshot=get_current_snapshot()) by default if no arg is sent use current snapshot
+def install_live(pkg, snapshot=get_current_snapshot()): ### IMPORTANT REVIEW 2023 --> reverse the order (pkg, snapshot=get_current_snapshot()) by default if no arg is sent use current snapshot
     tmp = get_tmp()
     #options = get_persnap_options(tmp) ### moved this to install_package_live
-    os.system(f"mount --bind /.snapshots/rootfs/snapshot-{tmp} /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-    os.system(f"mount --bind /home /.snapshots/rootfs/snapshot-{tmp}/home{DEBUG}")
-    os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}")
-    os.system(f"mount --bind /etc /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
-    os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp{DEBUG}")
+#    os.system(f"mount --bind /.snapshots/rootfs/snapshot-{tmp} /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") ###REDUNDANT
+#    os.system(f"mount --bind /home /.snapshots/rootfs/snapshot-{tmp}/home{DEBUG}") ###REDUNDANT
+#    os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}") ###REDUNDANT
+#    os.system(f"mount --bind /etc /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}") ###REDUNDANT
+#    os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp{DEBUG}") ###REDUNDANT
     ash_chroot_mounts(tmp) ### REVIEW Not having this was the culprit for live install to fail for Arch and derivative. Now, does having this here Ok or does it cause errors in NON-Arch distros? If so move it to ashpk.py
     print("Please wait as installation is finishing.")
     excode = install_package_live(snapshot, tmp, pkg) ### IMPORTANT REVIEW 2023 --> reverse the order (pkg, snapshot=get_current_snapshot()) by default if no arg is sent use current snapshot
@@ -1155,6 +1155,22 @@ def write_tree(tree):
     with open(fstreepath, "w") as fsfile:
         fsfile.write(str(to_write))
 
+#   Generic yes no prompt
+def yes_no(msg):
+    while True:
+        print(f"{msg} (y/n)")
+        reply = input("> ")
+        if reply.casefold() in ('yes', 'y'):
+            e = True
+            break
+        elif reply.casefold() in ('no', 'n'):
+            e = False
+            break
+        else:
+            print("F: Invalid choice!")
+            continue
+    return e
+
 #   Main function
 def main():
     if os.geteuid() != 0: # TODO 2023 exception: Make 'ash tree' run without root permissions
@@ -1251,7 +1267,7 @@ def main():
         immen_par.set_defaults(func=immutability_enable)
       # Install
         inst_par = subparsers.add_parser("install", aliases=['in'], allow_abbrev=True, help='Install package(s) inside a snapshot')
-        inst_par.add_argument("snapshot", type=int, help="snapshot number")
+        inst_par.add_argument("snapshot", type=int, required=False, help="snapshot number")
         g1i = inst_par.add_mutually_exclusive_group(required=True)
         g1i.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='install package')
         g1i.add_argument('--profile', '-P', type=str, required=False, help='install profile')
@@ -1271,7 +1287,7 @@ def main():
         ref_par.set_defaults(func=refresh)
       # Remove package(s) from tree
         trem_par = subparsers.add_parser("tremove", aliases=["tree-rmpkg"], allow_abbrev=True, help='Uninstall package(s) or profile(s) from a tree recursively')
-        trem_par.add_argument("snapshot", type=int, help="snapshot number")
+        trem_par.add_argument("snapshot", type=int, required=False, help="snapshot number")
         g1tr = trem_par.add_mutually_exclusive_group(required=True)
         g1tr.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='package(s) to be uninstalled')
         g1tr.add_argument('--profile', '-P', type=str, required=False, help='profile(s) to be uninstalled') ### TODO nargs='+' for multiple profiles
@@ -1325,7 +1341,7 @@ def main():
         tupg_par.set_defaults(func=lambda snapshot: tree_upgrade(fstree, snapshot))
       # Uninstall package(s) from a snapshot
         uninst_par = subparsers.add_parser("uninstall", aliases=["unin", "uninst", "unins", "un"], allow_abbrev=True, help='Uninstall package(s) from a snapshot')
-        uninst_par.add_argument("snapshot", type=int, help="snapshot number")
+        uninst_par.add_argument("snapshot", type=int, required=False, help="snapshot number")
         g1u = uninst_par.add_mutually_exclusive_group(required=True)
         g1u.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='package(s) to be uninstalled')
         g1u.add_argument('--profile', '-P', type=str, required=False, help='profile(s) to be uninstalled')
@@ -1360,7 +1376,7 @@ def main():
 
 #-------------------- Triage functions for argparse method --------------------#
 
-def install_triage(snapshot, live, profile, pkg, not_live):
+def install_triage(live, profile, pkg, not_live, snapshot=get_current_snapshot()):
     excode = 1 ### REVIEW
     if profile:
         excode = install_profile(snapshot, profile)
@@ -1374,9 +1390,9 @@ def install_triage(snapshot, live, profile, pkg, not_live):
         if profile:
             install_profile_live(profile)
         elif pkg:
-            install_live(snapshot, " ".join(pkg))
+            install_live(" ".join(pkg), snapshot)
 
-def uninstall_triage(snapshot, profile, pkg, live, not_live): ### TODO add live, not_live
+def uninstall_triage(profile, pkg, live, not_live, snapshot=get_current_snapshot()): ### TODO add live, not_live
     if profile:
         #excode = install_profile(snapshot, profile)
         print("TODO")

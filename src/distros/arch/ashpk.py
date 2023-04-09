@@ -177,7 +177,7 @@ def install_package_live(snapshot, tmp, pkg):
             if excode:
                 os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
                 os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-                print("F: Live install failed!") # Before: Live install failed and changes discarded
+                print("F: Live installation failed!") # Before: Live install failed and changes discarded
                 return excode
         if snapshot_config_get(snapshot)["aur"] == "True":
             aur_in_destination_snapshot = True
@@ -197,7 +197,7 @@ def install_package_live(snapshot, tmp, pkg):
                     if excode:
                         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
                         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-                        print("F: Live install failed!") # Before: Live install failed and changes discarded
+                        print("F: Live installation failed!") # Before: Live install failed and changes discarded
                         return excode # i.e. aur = True
             else:
                 print("F: Not enabling AUR for live snapshot!")
