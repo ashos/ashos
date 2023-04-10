@@ -54,9 +54,13 @@ def ash_chroot_mounts(i, CHR=""):
     os.system(f"mount --bind --make-slave /etc /.snapshots/rootfs/snapshot-{CHR}{i}/etc{DEBUG}")
     os.system(f"mount --bind --make-slave /home /.snapshots/rootfs/snapshot-{CHR}{i}/home{DEBUG}")
     os.system(f"mount --types proc /proc /.snapshots/rootfs/snapshot-{CHR}{i}/proc{DEBUG}")
+    #os.system(f"mount --rbind --make-rslave /proc /.snapshots/rootfs/snapshot-{CHR}{i}/proc{DEBUG}") ### REVIEW 2023 USE THIS INSTEAD?
+    #os.system(f"mount --bind --make-slave /root /.snapshots/rootfs/snapshot-{CHR}{i}/root{DEBUG}") ### REVIEW 2023 ADD THIS TOO?
     os.system(f"mount --bind --make-slave /run /.snapshots/rootfs/snapshot-{CHR}{i}/run{DEBUG}")
+    #os.system(f"mount --rbind --make-rslave /run /.snapshots/rootfs/snapshot-chr{snapshot}/run{DEBUG}") ### REVIEW 2023 USE THIS INSTEAD?
     os.system(f"mount --rbind --make-rslave /sys /.snapshots/rootfs/snapshot-{CHR}{i}/sys{DEBUG}")
     os.system(f"mount --bind --make-slave /tmp /.snapshots/rootfs/snapshot-{CHR}{i}/tmp{DEBUG}")
+    #os.system(f"mount --rbind --make-rslave /tmp /.snapshots/rootfs/snapshot-{CHR}{i}/tmp{DEBUG}") ### REVIEW 2023 USE THIS INSTEAD?
     os.system(f"mount --bind --make-slave /var /.snapshots/rootfs/snapshot-{CHR}{i}/var{DEBUG}")
     if is_efi():
         os.system(f"mount --rbind --make-rslave /sys/firmware/efi/efivars /.snapshots/rootfs/snapshot-{CHR}{i}/sys/firmware/efi/efivars{DEBUG}")
@@ -141,7 +145,7 @@ def chr_delete(snapshot):
     except subprocess.CalledProcessError:
         print(f"F: Failed to delete chroot snapshot {snapshot}.")
 #    else:
-#        print(f"Snapshot chroot {snapshot} deleted.")
+#        print(f"Snapshot chroot {snapshot} deleted.") ### just when debugging
 
 #   Chroot into snapshot and optionally run command(s)
 def chroot(snapshot, cmd=""): ### make cmd to cmds (IMPORTANT for install_profile)
@@ -320,7 +324,7 @@ def deploy(snapshot):
         os.system(f"btrfs sub snap /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-{tmp}{DEBUG}")
         os.system(f"btrfs sub snap /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-{tmp}{DEBUG}")
         os.system(f"btrfs sub snap /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-#        os.system(f"btrfs sub create /.snapshots/var/var-{tmp} >/dev/null 2>&1") # REVIEW 2023 pretty sure not needed
+###2023        os.system(f"btrfs sub create /.snapshots/var/var-{tmp} >/dev/null 2>&1") # REVIEW pretty sure not needed
         os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/boot{DEBUG}")
         os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
         os.system(f"rm -rf /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}")
@@ -344,7 +348,7 @@ def deploy(snapshot):
                 os.system(f"mkdir -p /.snapshots/mutable_dirs/{mount_path}")
                 os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mount_path}")
                 os.system(f"echo '{source_path} /{mount_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
-        os.system(f"btrfs sub snap /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}") ### Is this needed?
+        os.system(f"btrfs sub snap /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}") ### REVIEW Is this needed? Can it be moved up?
         os.system(f"echo '{snapshot}' > /.snapshots/rootfs/snapshot-{tmp}/usr/share/ash/snap")
         switch_tmp()
         init_system_clean(tmp, "deploy")
@@ -594,7 +598,7 @@ def post_transactions(snapshot):
     tmp = get_tmp()
   # Some operations were moved below to fix hollow functionality ### IMPORTANT REVIEW 2023
   # File operations in snapshot-chr
-#    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}") ### REVIEW # Moved to a few lines below
+#    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}") ### REVIEW # Moved to a few lines below ### GOOD_TO_DELETE_2023
     os.system(f"rm -rf /.snapshots/boot/boot-chr{snapshot}/*{DEBUG}")
     os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/boot/. /.snapshots/boot/boot-chr{snapshot}{DEBUG}")
     os.system(f"rm -rf /.snapshots/etc/etc-chr{snapshot}/*{DEBUG}")
@@ -675,6 +679,7 @@ def prepare(snapshot):
     chr_delete(snapshot)
     os.system(f"btrfs sub snap /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-chr{snapshot}{DEBUG}")
   # Pacman gets weird when chroot directory is not a mountpoint, so the following mount is necessary ### REVIEW
+#    ash_chroot_mounts(snapshot, "chr") ### REVIEW 2023 REPLACE THESE WITH THIS (move etcresolve outside)
     os.system(f"mount --bind --make-slave /.snapshots/rootfs/snapshot-chr{snapshot} /.snapshots/rootfs/snapshot-chr{snapshot}{DEBUG}")
     os.system(f"mount --rbind --make-rslave /dev /.snapshots/rootfs/snapshot-chr{snapshot}/dev{DEBUG}")
     os.system(f"mount --bind --make-slave /home /.snapshots/rootfs/snapshot-chr{snapshot}/home{DEBUG}")
@@ -689,7 +694,6 @@ def prepare(snapshot):
     os.system(f"btrfs sub snap /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-chr{snapshot}{DEBUG}")
     os.system(f"cp -r --reflink=auto /.snapshots/boot/boot-chr{snapshot}/. /.snapshots/rootfs/snapshot-chr{snapshot}/boot{DEBUG}")
     os.system(f"cp -r --reflink=auto /.snapshots/etc/etc-chr{snapshot}/. /.snapshots/rootfs/snapshot-chr{snapshot}/etc{DEBUG}") ### btrfs sub snap etc-{snapshot} to etc-chr-{snapshot} not needed before this?
-#    os.system(f"rm -rf /.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/systemd/* >/dev/null 2>&1") # REVIEW 2023 I believe not needed
 #    os.system(f"cp -r --reflink=auto /.snapshots/var/var-{snapshot}/lib/systemd/* /.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/systemd/ >/dev/null 2>&1") # REVIEW 2023 I believe not needed
     init_system_clean(snapshot, "prepare")
     if os.path.exists("/etc/systemd"): # machine-id is a Systemd thing
@@ -1114,7 +1118,7 @@ def update_boot(snapshot): ### TODO Other bootloaders
         os.system(f"cp /boot/{GRUB}/grub.cfg /boot/{GRUB}/BAK/grub.cfg.`date '+%Y%m%d-%H%M%S'`")
         os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} {GRUB}-mkconfig {part} -o /boot/{GRUB}/grub.cfg")
         os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sed -i 's|snapshot-chr{snapshot}|snapshot-{tmp}|g' /boot/{GRUB}/grub.cfg")
-####        os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sed -i '0,\|{distro_name}| s||{distro_name} snapshot {snapshot}|' /boot/{GRUB}/grub.cfg")
+####    os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sed -i '0,\|{distro_name}| s||{distro_name} snapshot {snapshot}|' /boot/{GRUB}/grub.cfg")
         os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} sed -i '0,\\|{distro_name}| s||{distro_name} snapshot {snapshot}|' /boot/{GRUB}/grub.cfg")
         post_transactions(snapshot)
 
