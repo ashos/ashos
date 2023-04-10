@@ -689,7 +689,7 @@ def prepare(snapshot):
     os.system(f"mount --rbind --make-rslave /sys /.snapshots/rootfs/snapshot-chr{snapshot}/sys{DEBUG}")
     os.system(f"mount --rbind --make-rslave /tmp /.snapshots/rootfs/snapshot-chr{snapshot}/tmp{DEBUG}")
     os.system(f"mount --bind --make-slave /var /.snapshots/rootfs/snapshot-chr{snapshot}/var{DEBUG}")
-  # File operations for snapshot-chr
+  # File operations for snapshot-chr ### IMPORTANT REVIEW 2023 Previously this was placed before the mounts, make difference? (my guess: no)
     os.system(f"btrfs sub snap /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-chr{snapshot}{DEBUG}")
     os.system(f"btrfs sub snap /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-chr{snapshot}{DEBUG}")
     os.system(f"cp -r --reflink=auto /.snapshots/boot/boot-chr{snapshot}/. /.snapshots/rootfs/snapshot-chr{snapshot}/boot{DEBUG}")
@@ -713,7 +713,7 @@ def prepare(snapshot):
             os.system(f"mkdir -p /.snapshots/mutable_dirs/{mount_path}")
             os.system(f"mkdir -p /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path}")
             os.system(f"mount --bind /.snapshots/mutable_dirs/{mount_path} /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path}")
-  # Important: Do not move the following line above (otherwise error)
+  # Important: Do not move the following line above (otherwise error) ###UPDATE2023 REVIEW WHEN replaced with ash_chroot_mounts, this would be redundant
     os.system(f"mount --bind --make-slave /etc/resolv.conf /.snapshots/rootfs/snapshot-chr{snapshot}/etc/resolv.conf{DEBUG}")
 
 #   Return order to recurse tree
