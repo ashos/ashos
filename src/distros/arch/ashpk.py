@@ -161,7 +161,7 @@ def install_package(snapshot, pkg):
         return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --needed --overwrite '/var/*'")
 
 #   Install atomic-operation in live snapshot
-def install_package_live(snapshot, tmp, pkg):
+def install_package_live(pkg, tmp, snapshot):
     excode = 1 ### REVIEW
     try:
       # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
@@ -208,7 +208,7 @@ def install_package_live(snapshot, tmp, pkg):
     return excode
 
 #   Get list of packages installed in a snapshot
-def pkg_list(CHR, snap):
+def pkg_list(snap, CHR=""):
     return subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} pacman -Qq", encoding='utf-8', shell=True).strip().split("\n")
 
 #   Refresh snapshot atomic-operation

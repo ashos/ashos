@@ -8,6 +8,7 @@ from anytree.exporter import DictExporter
 from anytree.importer import DictImporter
 from argparse import ArgumentParser
 from ast import literal_eval
+from filecmp import cmp
 from re import sub
 
 # Directories
@@ -83,9 +84,10 @@ def ash_update():
     except subprocess.CalledProcessError:
         print(f"F: Failed to download ash.")
     else:
-        if os.system(f"diff {tmp_ash}/ash /.snapshots/ash/ash"):
+        if cmp(f"{tmp_ash}/ash", "/.snapshots/ash/ash", shallow=True):
+            os.system(f"cp -a /.snapshots/ash/ash {tmp_ash}/ash_old")
             os.system(f"cp -a {tmp_ash}/ash /.snapshots/ash/ash")
-            print("Ash updated succesfully.")
+            print(f"Ash updated succesfully. Old Ash moved to {tmp_ash}.")
         else:
             print("F: Ash already up to date.")
 
@@ -259,10 +261,8 @@ def clone_under(snapshot, branch):
 def delete_node(snapshots, quiet):
     for snapshot in snapshots:
         if not quiet: ### NEWLY ADDED
-            print(f"Are you sure you want to delete snapshot {snapshot}? (y/n)")
-            choice = input("> ")
             run = True
-            if choice.casefold() != "y":
+            if yes_no(f"Are you sure you want to delete snapshot {snapshot}?"):
                 print("Aborted")
                 run = False
         else: ### NEWLY ADDED
@@ -426,7 +426,7 @@ def hollow(s):
         ### AUR step might be needed and if so make a distro_specific function with steps similar to install_package(). Call it hollow_helper and change this accordingly().
         prepare(s)
         os.system(f"mount --rbind --make-rslave / /.snapshots/rootfs/snapshot-chr{s}")
-        print(f"Snapshot {s} is now hollow! When done, type YES (in capital):")
+        print(f"Snapshot {s} is now hollow! When done, type YES (in capital):") ### TODO use yes_no
         while True:
             reply = input("> ")
             if reply == "YES":
@@ -565,6 +565,13 @@ def install_profile_live(profile, snapshot):
 
 def is_efi():
     return os.path.exists("/sys/firmware/efi")
+
+#   Return snapshot that has a package
+def is_pkg_installed(pkg, snap):
+    if pkg in pkg_list(snap, ""):
+        return snap
+    else:
+        return None
 
 #   List sub-volumes for the booted distro only
 def list_subvolumes():
@@ -1043,8 +1050,8 @@ def tree_sync(tree, treename, force_offline, live):
 def tree_sync_helper(CHR, s_f, s_t):
     os.system("mkdir -p /.snapshots/tmp-db/local/") ### REVIEW Still resembling Arch pacman folder structure!
     os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW
-    pkg_list_to = pkg_list(CHR, s_t)
-    pkg_list_from = pkg_list("", s_f)
+    pkg_list_from = pkg_list(s_f, "")
+    pkg_list_to = pkg_list(s_t, CHR)
   # Get packages to be inherited
     pkg_list_from = [j for j in pkg_list_from if j not in pkg_list_to]
     os.system(f"cp -r /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/. /.snapshots/tmp-db/local/") ### REVIEW
@@ -1143,6 +1150,13 @@ def upgrade(snapshot, baseup=False):
             print("F: Upgrade failed and changes discarded!")
             return 1 # REVIEW 2023 not needed
 
+#   Print snapshots that has a package
+def which_snapshot_has(pkg):
+    snapshots = ("1", "2", "3", "4", "5", "6", "7")
+    for s in snapshots:
+        if is_pkg_installed(pkg, str(s)): ### REVIEW
+            print(s)
+
 #   Write new description (default) or append to an existing one (i.e. toggle immutability)
 def write_desc(snapshot, desc, mode='w'):
     with open(f"/.snapshots/ash/snapshots/{snapshot}-desc", mode) as descfile:
@@ -1195,11 +1209,12 @@ def main():
         ashv_par.set_defaults(func=ash_version)
       # Auto upgrade
         autou_par = subparsers.add_parser("auto-upgrade", aliases=['autoup', 'au'], allow_abbrev=True, help='Update a snapshot quietly')
-        autou_par.add_argument("snapshot", type=int, help="snapshot number") ### REVIEW any given snapshot or get_current_snapshot() ?
+###     autou_par.add_argument("snapshot", type=int, help="snapshot number") ### IMPORTANT REVIEW 2023 any given snapshot or get_current_snapshot() ?
+        autou_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number") ### REVIEW maybe for subparsers that only take snapshot as argument, leave it as old version (above)
         autou_par.set_defaults(func=auto_upgrade)
       # Branch create
         branch_par = subparsers.add_parser("branch", aliases=['add-branch'], allow_abbrev=True, help='Create a new branch from snapshot')
-        branch_par.add_argument("snapshot", type=int, help="snapshot number")
+        branch_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         branch_par.add_argument("--desc", "--description", "-d", nargs='+', required=False, help="description for the snapshot")
         branch_par.set_defaults(func=branch_create)
       # Check update
@@ -1207,29 +1222,29 @@ def main():
         cu_par.set_defaults(func=check_update)
       # Chroot
         chroot_par = subparsers.add_parser("chroot", aliases=['chr', 'ch'], allow_abbrev=True, help='Open a root shell inside a snapshot')
-        chroot_par.add_argument("snapshot", type=int, help="snapshot number")
+        chroot_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         chroot_par.set_defaults(func=chroot)
       # Chroot run
         run_par = subparsers.add_parser("run", help='Run command(s) inside another snapshot (chrooted)')
-        run_par.add_argument("snapshot", type=int, help="snapshot number")
+        run_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         run_par.add_argument("cmd", nargs='+', help="command")
         run_par.set_defaults(func=chroot)
       # Clone
         clone_par = subparsers.add_parser("clone", aliases=['cl'], allow_abbrev=True, help='Create a copy of a snapshot (as top-level tree node)')
-        clone_par.add_argument("snapshot", type=int, help="snapshot number")
+        clone_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         clone_par.add_argument("--desc", "--description", "-d", nargs='+', required=False, help="description for the snapshot")
         clone_par.set_defaults(func=clone_as_tree)
       # Clone a branch
         clonebr_par = subparsers.add_parser("clone-branch", aliases=['cb', 'cbranch'], allow_abbrev=True, help='Copy snapshot under same parent branch (clone as a branch)')
-        clonebr_par.add_argument("snapshot", type=int, help="snapshot number")
+        clonebr_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         clonebr_par.set_defaults(func=clone_branch)
       # Clone recursively
         clonerec_par = subparsers.add_parser("clone-tree", aliases=['ct'], allow_abbrev=True, help='Clone a whole tree recursively')
-        clonerec_par.add_argument("snapshot", type=int, help="snapshot number")
+        clonerec_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         clonerec_par.set_defaults(func=clone_recursive)
       # Clone under a branch
         cloneunder_par = subparsers.add_parser("clone-under", aliases=['cu', 'ubranch'], allow_abbrev=True, help='Copy snapshot under specified parent (clone under a branch)') # REVIEW 2023 confusing naming convention inside function: ubranch <parent> <snapshot>
-        cloneunder_par.add_argument("snapshot", type=int, help="snapshot number")
+        cloneunder_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         cloneunder_par.add_argument("branch", type=int, help="branch number")
         cloneunder_par.set_defaults(func=clone_under)
       # Del
@@ -1239,16 +1254,16 @@ def main():
         del_par.set_defaults(func=delete_node)
       # Deploy
         dep_par = subparsers.add_parser("deploy", aliases=['dep', 'd'], allow_abbrev=True, help='Deploy a snapshot for next boot')
-        dep_par.add_argument("snapshot", type=int, help="snapshot number")
+        dep_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         dep_par.set_defaults(func=deploy)
       # Description
         desc_par = subparsers.add_parser("desc", help='Set a description for a snapshot by number')
-        desc_par.add_argument("snapshot", type=int, help="snapshot number")
-        desc_par.add_argument("desc", nargs='+', help="description to be added")
+        desc_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
+        desc_par.add_argument("desc", nargs='+', help="description to be added") ### TODO Can have bad combinations if both required=False
         desc_par.set_defaults(func=lambda snapshot, desc: write_desc(snapshot, " ".join(desc)))
       # Fix db command ### MAYBE ash_unlock was needed?
         fixdb_par = subparsers.add_parser("fixdb", aliases=['fix'], allow_abbrev=True, help='Fix package database of a snapshot')
-        fixdb_par.add_argument("snapshot", type=int, help="snapshot number")
+        fixdb_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         fixdb_par.set_defaults(func=fix_package_db)
       # Get current snapshot
         cs_par = subparsers.add_parser("current", aliases=['c'], allow_abbrev=True, help='Return current snapshot number')
@@ -1259,15 +1274,16 @@ def main():
         hol_par.set_defaults(func=hollow)
       # Immutability disable
         immdis_par = subparsers.add_parser("immdis", aliases=["disimm", "immdisable", "disableimm"], allow_abbrev=True, help='Disable immutability of a snapshot')
-        immdis_par.add_argument("snapshot", type=int, help="snapshot number")
+        immdis_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         immdis_par.set_defaults(func=immutability_disable)
       # Immutability enable
         immen_par = subparsers.add_parser("immen", aliases=["enimm", "immenable", "enableimm"], allow_abbrev=True, help='Enable immutability of a snapshot')
-        immen_par.add_argument("snapshot", type=int, help="snapshot number")
+        immen_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         immen_par.set_defaults(func=immutability_enable)
       # Install
         inst_par = subparsers.add_parser("install", aliases=['in'], allow_abbrev=True, help='Install package(s) inside a snapshot')
-        inst_par.add_argument("snapshot", type=int, required=False, help="snapshot number")
+###        inst_par.add_argument("snapshot", type=int, required=False, help="snapshot number")
+        inst_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         g1i = inst_par.add_mutually_exclusive_group(required=True)
         g1i.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='install package')
         g1i.add_argument('--profile', '-P', type=str, required=False, help='install profile')
@@ -1281,13 +1297,17 @@ def main():
       # Live chroot
         lc_par = subparsers.add_parser("live-chroot", aliases=['lchroot', 'lc'], allow_abbrev=True, help='Open a shell inside currently booted snapshot with read-write access. Changes are discarded on new deployment.')
         lc_par.set_defaults(func=live_unlock)
+      # Package list
+        pl_par = subparsers.add_parser("list", aliases=["ls"], allow_abbrev=True, help='Get list of installed packages in a snapshot')
+        pl_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
+        pl_par.set_defaults(func=pkg_list)
       # Refresh
         ref_par = subparsers.add_parser("refresh", aliases=["ref"], allow_abbrev=True, help='Refresh package manager db of a snapshot')
-        ref_par.add_argument("snapshot", type=int, help="snapshot number")
+        ref_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         ref_par.set_defaults(func=refresh)
       # Remove package(s) from tree
         trem_par = subparsers.add_parser("tremove", aliases=["tree-rmpkg"], allow_abbrev=True, help='Uninstall package(s) or profile(s) from a tree recursively')
-        trem_par.add_argument("snapshot", type=int, required=False, help="snapshot number")
+        trem_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         g1tr = trem_par.add_mutually_exclusive_group(required=True)
         g1tr.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='package(s) to be uninstalled')
         g1tr.add_argument('--profile', '-P', type=str, required=False, help='profile(s) to be uninstalled') ### TODO nargs='+' for multiple profiles
@@ -1301,7 +1321,7 @@ def main():
         new_par.set_defaults(func=snapshot_base_new)
       # Snapshot configuration edit
         editconf_par = subparsers.add_parser("edit", aliases=['edit-conf'], allow_abbrev=True, help='Edit configuration for a snapshot')
-        editconf_par.add_argument("snapshot", type=int, help="snapshot number")
+        editconf_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         editconf_par.set_defaults(func=snapshot_config_edit)
       # Snapshot diff
         diff_par = subparsers.add_parser("diff", aliases=['dif'], allow_abbrev=True, help='Show package diff between snapshots')
@@ -1326,7 +1346,7 @@ def main():
         tree_par.set_defaults(func=tree_show)
       # Tree run
         trun_par = subparsers.add_parser("trun", aliases=["tree-run"], allow_abbrev=True, help='Run command(s) inside another snapshot and all snapshots below it')
-        trun_par.add_argument("snapshot", type=int, help="snapshot number")
+        trun_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         trun_par.add_argument('--cmd', '--command', '-c', nargs='+', required=False, help='command(s) to run')
         trun_par.set_defaults(func=lambda snapshot, cmd: tree_run(fstree, snapshot, ' '.join(cmd)))
       # Tree sync
@@ -1337,11 +1357,11 @@ def main():
         tsync_par.set_defaults(func=lambda treename, force_offline, not_live: tree_sync(fstree, treename, force_offline, not not_live))
       # Tree upgrade
         tupg_par = subparsers.add_parser("tupgrade", aliases=["tree-upgrade", "tup"], allow_abbrev=True, help='Update all packages in a snapshot recursively')
-        tupg_par.add_argument("snapshot", type=int, help="snapshot number")
+        tupg_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         tupg_par.set_defaults(func=lambda snapshot: tree_upgrade(fstree, snapshot))
       # Uninstall package(s) from a snapshot
         uninst_par = subparsers.add_parser("uninstall", aliases=["unin", "uninst", "unins", "un"], allow_abbrev=True, help='Uninstall package(s) from a snapshot')
-        uninst_par.add_argument("snapshot", type=int, required=False, help="snapshot number")
+        uninst_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         g1u = uninst_par.add_mutually_exclusive_group(required=True)
         g1u.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='package(s) to be uninstalled')
         g1u.add_argument('--profile', '-P', type=str, required=False, help='profile(s) to be uninstalled')
@@ -1351,14 +1371,14 @@ def main():
         uninst_par.set_defaults(func=uninstall_triage)
       # Update boot
         boot_par = subparsers.add_parser("boot", aliases=['boot-update', 'update-boot'], allow_abbrev=True, help='Update boot of a snapshot')
-        boot_par.add_argument("snapshot", type=int, help="snapshot number")
+        boot_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         boot_par.set_defaults(func=update_boot)
       # Update etc
         etc_par = subparsers.add_parser("etc-update", aliases=['etc', 'etc-up', 'up-etc'], allow_abbrev=True, help='Update /etc')
         etc_par.set_defaults(func=update_etc)
       # Upgrade a snapshot
         upg_par = subparsers.add_parser("upgrade", aliases=["up"], allow_abbrev=True, help='Update all packages in a snapshot')
-        upg_par.add_argument("snapshot", type=int, help="snapshot number")
+        upg_par.add_argument("--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         upg_par.set_defaults(func=upgrade)
       # Upgrade base snapshot
         bu_par = subparsers.add_parser("base-update", aliases=['bu', 'ub'], allow_abbrev=True, help='Update the base snapshot')
@@ -1366,6 +1386,10 @@ def main():
       # Which deployment is active
         whichtmp_par = subparsers.add_parser("whichtmp", aliases=["whichdep", "which"], allow_abbrev=True, help="Show which deployment snapshot is in use")
         whichtmp_par.set_defaults(func=lambda: get_tmp(console=True)) # print to console REVIEW 2023 NEWER: test print(get_tmp)
+      # Which snapshots have a package
+        which_snap_par = subparsers.add_parser("whichsnap", aliases=["ws"], allow_abbrev=True, help='Get list of installed packages in a snapshot')
+        which_snap_par.add_argument('pkg', nargs='+', help='a package')
+        which_snap_par.set_defaults(func=which_snapshot_has)
       # Call relevant functions
         #args_1 = parser.parse_args()
         args_1 = parser.parse_args(args=None if sys.argv[1:] else ['--help']) # Show help if no command used
@@ -1376,7 +1400,7 @@ def main():
 
 #-------------------- Triage functions for argparse method --------------------#
 
-def install_triage(live, profile, pkg, not_live, snapshot=get_current_snapshot()):
+def install_triage(live, not_live, pkg, profile, snapshot):
     excode = 1 ### REVIEW
     if profile:
         excode = install_profile(snapshot, profile)
@@ -1392,10 +1416,10 @@ def install_triage(live, profile, pkg, not_live, snapshot=get_current_snapshot()
         elif pkg:
             install_live(" ".join(pkg), snapshot)
 
-def uninstall_triage(profile, pkg, live, not_live, snapshot=get_current_snapshot()): ### TODO add live, not_live
+def uninstall_triage(live, not_live, pkg, profile, snapshot): ### TODO add live, not_live
     if profile:
-        #excode = install_profile(snapshot, profile)
-        print("TODO")
+        #excode = uninstall_profile(snapshot, profile)
+        print("TODO: uninstall profile")
     elif pkg:
         uninstall_package(snapshot, " ".join(pkg))
 
