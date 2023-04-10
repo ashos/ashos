@@ -161,7 +161,8 @@ def install_package(snapshot, pkg):
         return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --needed --overwrite '/var/*'")
 
 #   Install atomic-operation in live snapshot
-def install_package_live(snapshot, tmp, pkg):
+def install_package_live(pkg, tmp, snapshot):
+    excode = 1 ### REVIEW
     try:
       # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
         subprocess.check_output(f"pacman -Si {pkg}", shell=True) # --sysroot
@@ -176,7 +177,7 @@ def install_package_live(snapshot, tmp, pkg):
             if excode:
                 os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
                 os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-                print("F: Live install failed!") # Before: Live install failed and changes discarded
+                print("F: Live installation failed!") # Before: Live install failed and changes discarded
                 return excode
         if snapshot_config_get(snapshot)["aur"] == "True":
             aur_in_destination_snapshot = True
@@ -196,7 +197,7 @@ def install_package_live(snapshot, tmp, pkg):
                     if excode:
                         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
                         os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-                        print("F: Live install failed!") # Before: Live install failed and changes discarded
+                        print("F: Live installation failed!") # Before: Live install failed and changes discarded
                         return excode # i.e. aur = True
             else:
                 print("F: Not enabling AUR for live snapshot!")
@@ -207,7 +208,7 @@ def install_package_live(snapshot, tmp, pkg):
     return excode
 
 #   Get list of packages installed in a snapshot
-def pkg_list(CHR, snap):
+def pkg_list(snap, CHR=""):
     return subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} pacman -Qq", encoding='utf-8', shell=True).strip().split("\n")
 
 #   Refresh snapshot atomic-operation
@@ -221,7 +222,7 @@ def snapshot_diff(snap1, snap2):
     elif not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap2}"):
         print(f"Snapshot {snap2} not found.")
     else:
-        os.system(f"bash -c \"diff <(ls /.snapshots/rootfs/snapshot-{snap1}/usr/share/ash/db/local) <(ls /.snapshots/rootfs/snapshot-{snap2}/usr/share/ash/db/local) | grep '^>\|^<' | sort\"")
+        os.system(f"bash -c \"diff <(ls /.snapshots/rootfs/snapshot-{snap1}/usr/share/ash/db/local) <(ls /.snapshots/rootfs/snapshot-{snap2}/usr/share/ash/db/local) | grep '^>\|^<' | sort\"") ### REVIEW
 
 #   Uninstall package(s) atomic-operation
 def uninstall_package_helper(snapshot, pkg):
