@@ -88,9 +88,9 @@ def ash_update():
     except subprocess.CalledProcessError:
         print(f"F: Failed to download ash.")
     else:
-        if cmp(f"{tmp_ash}/ash", "/.snapshots/ash/ash", shallow=True):
-            os.system(f"cp -a /.snapshots/ash/ash {tmp_ash}/ash_old")
-            os.system(f"cp -a {tmp_ash}/ash /.snapshots/ash/ash")
+        if cmp(f"{tmp_ash}/ash", __file__, shallow=True):
+            os.system(f"cp -a {__file__} {tmp_ash}/ash_old")
+            os.system(f"cp -a {tmp_ash}/ash {__file__}")
             print(f"Ash updated succesfully. Old Ash moved to {tmp_ash}.")
         else:
             print("F: Ash already up to date.")
