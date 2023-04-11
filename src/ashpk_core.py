@@ -264,13 +264,9 @@ def clone_under(snapshot, branch):
 #   Delete tree or branch
 def delete_node(snapshots, quiet):
     for snapshot in snapshots:
-        if not quiet: ### NEWLY ADDED
-            run = True
-            if yes_no(f"Are you sure you want to delete snapshot {snapshot}?"):
-                print("Aborted")
-                run = False
-        else: ### NEWLY ADDED
-            run = True ### NEWLY ADDED
+        if not quiet:
+            if not yes_no(f"Are you sure you want to delete snapshot {snapshot}?"):
+                sys.exit("Aborted")
         if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
             print(f"F: Cannot delete as snapshot {snapshot} doesn't exist.")
         elif snapshot == "0":
@@ -279,7 +275,7 @@ def delete_node(snapshots, quiet):
             print("F: Cannot delete booted snapshot.")
         elif snapshot == get_next_snapshot():
             print("F: Cannot delete deployed snapshot.")
-        elif run == True:
+        else:
             children = return_children(fstree, snapshot)
             write_desc(snapshot, "") # Clear description # Why have this? REVIEW 2023
             os.system(f"btrfs sub del /.snapshots/boot/boot-{snapshot}{DEBUG}")
