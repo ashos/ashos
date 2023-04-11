@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import os
-import shutil
+from shutil import copy
 import subprocess
 import sys ### REMOVE WHEN TRY EXCEPT ELSE IS IMPLEMENTED
 from src.installer_core import * # NOQA
@@ -65,7 +65,7 @@ pre_bootstrap()
 os.system(f"curl -LO {URL}/{ARCH}/apk-tools-static-{APK}.apk")
 os.system("tar zxf apk-tools-static-*.apk")
 excode1 = os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add alpine-base") ### REVIEW Is "/" needed after {URL} ?
-shutil.copy("./src/distros/alpine/repositories", "/mnt/etc/apk/") ### REVIEW MOVED from down at section 3 to here as installing 'bash' was giving error
+copy("./src/distros/alpine/repositories", "/mnt/etc/apk/") ### REVIEW MOVED from down at section 3 to here as installing 'bash' was giving error
 os.system("sudo cp --dereference /etc/resolv.conf /mnt/etc/") # --remove-destination ### not writing through dangling symlink! (TODO: try except)
 excode2 = os.system(f"sudo chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'") ### changed bash to sh
 

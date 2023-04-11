@@ -45,11 +45,12 @@
   * [Arch](https://github.com/ashos/ashos#arch-linux)
     * [AUR](https://github.com/ashos/ashos#aur)
     * [Fixing pacman corrupt packages or key issues](https://github.com/ashos/ashos#fixing-pacman-corrupt-packages-or-key-issues)
+  * [Alpine](https://github.com/ashos/ashos#proxmox)
   * [CachyOS](https://github.com/ashos/ashos#cachyos)
   * [Debian](https://github.com/ashos/ashos#debian)
   * [EndeavourOS](https://github.com/ashos/ashos#endeavouros)
-  * [Ubuntu](https://github.com/ashos/ashos#ubuntu)
   * [Proxmox](https://github.com/ashos/ashos#proxmox)
+  * [Ubuntu](https://github.com/ashos/ashos#ubuntu)
 
 ---
 
@@ -279,7 +280,7 @@ ash tree-run <tree> <command>
 ash clone <snapshot>
 ```
 
-#### Clone a tree recursively  
+#### Clone a tree recursively
 * This clones an entire tree recursively
 
 ```
@@ -590,9 +591,17 @@ and as a last resort, run: (CAUTION: This might have undesired effects)
 ash fixdb <snapshots>
 ```
 
+## Alpine
+* Currently, there is an erratic behaviour with package grub (NOT grub-efi which, even though latter depends on former) which results in having a damaged apk database on a fresh install / new snapshot! This as a result, makes `ash in` operations fail too as we are checking for errors. To fix this, run:
+
+```
+ash un -p grub-efi grub -s <snapshot-number>
+ash in -p grub-efi -s <snapshot-number>
+```
+
 ## CachyOS
 * You can use either Arch iso or CachyOS iso for installation. Pass extra arguments if using former (look at examples above)
-* [CLI installer](https://sourceforge.net/projects/cachyos-arch/files/cli-installer/cli/) suffices, no need to download GUI installer. 
+* [CLI installer](https://sourceforge.net/projects/cachyos-arch/files/cli-installer/cli/) suffices, no need to download GUI installer.
 
 ## Debian
 * When issuing `sudo python3 setup.py /dev/sdXY /dev/sdX /dev/sdXZ`, it might seem installer has frozen but it is actually doing its thing! Please be patient and you will get a prompt to initiate install in about 30 seconds! For some reason, it was not showing what is going on in a nice way, so I put a `set echo off` command.
@@ -605,17 +614,18 @@ ash fixdb <snapshots>
 * if internet access is not be available, run `sudo dhclient`
 * Otherwise if installing from within desktop environment, comment out "su" in endevouros_live.sh as it will ask for a password. Instead run the script as sudo.
 
+## Proxmox
+* Use Debian live iso-hybrid
+* Find latest version of pve-kernel_*-pve from http://download.proxmox.com/debian/dists/{RELEASE}/pve-no-subscription/binary-amd64/ and update KERNEL_VERSION.
+* `sudo python3 setup.py /dev/sdXY /dev/sdX /dev/sdXZ proxmox "Proxmox VE"`
+* Note for the package `postfix`: Configure packages which require user input on installation according to your needs. If you have a mail server in your network, you should configure postfix as a satellite system. Your existing mail server will then be the relay host which will route the emails sent by Proxmox VE to their final recipient. If you don't know what to enter here, choose local only and leave the system name as is.
+
 ## Ubuntu
 * Download links: [Link 1](https://releases.ubuntu.com), [Link 2](https://launchpad.net/ubuntu/+cdmirrors)
 * In GRUB, you can pass `single` as an argument to linux kernel to boot in single mode and press Enter for maintenance (As no GUI is required for this installer, it is much faster to boot)
 * As of July 2022, Debian iso can't be used to bootstrap 'jammy' (zstd bug: https://bugs.debian.org/892664)
 ---
 
-## Proxmox
-* Use Debian live iso-hybrid
-* Find latest version of pve-kernel_*-pve from http://download.proxmox.com/debian/dists/{RELEASE}/pve-no-subscription/binary-amd64/ and update KERNEL_VERSION.
-* `sudo python3 setup.py /dev/sdXY /dev/sdX /dev/sdXZ proxmox "Proxmox VE"`
-* Note for the package `postfix`: Configure packages which require user input on installation according to your needs. If you have a mail server in your network, you should configure postfix as a satellite system. Your existing mail server will then be the relay host which will route the emails sent by Proxmox VE to their final recipient. If you don't know what to enter here, choose local only and leave the system name as is.
 
 **This project is licensed under the AGPLv3.**
 

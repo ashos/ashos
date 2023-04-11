@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import os
+from shutil import copy
 import subprocess
 import sys
 from anytree import AsciiStyle, find, Node, PreOrderIter, RenderTree
@@ -9,6 +10,7 @@ from anytree.importer import DictImporter
 from argparse import ArgumentParser
 from ast import literal_eval
 from filecmp import cmp
+from os.path import expanduser
 from re import sub
 
 # Directories
@@ -75,7 +77,7 @@ def ash_chroot_mounts(i, CHR=""):
 ###    os.system("rm -rf /.snapshots/ash/lock")
 
 #   Update ash itself
-def ash_update():
+def ash_update(dbg):
     try:
         d = distro.split("_")[0] # Remove '_ashos"
         tmp_ash = subprocess.check_output("mktemp -d -p /.snapshots/tmp ashpk.XXXXXXXXXXXXXXXX", shell=True, encoding='utf-8').strip()
@@ -88,9 +90,12 @@ def ash_update():
     except subprocess.CalledProcessError:
         print(f"F: Failed to download ash.")
     else:
-        if cmp(f"{tmp_ash}/ash", __file__, shallow=True):
-            os.system(f"cp -a {__file__} {tmp_ash}/ash_old")
-            os.system(f"cp -a {tmp_ash}/ash {__file__}")
+        if dbg: # Just for testing
+            copy(f"{tmp_ash}/ash", f'{expanduser("~")}/ash-latest')
+            print(f"Latest ash downloaded to $HOME.")
+        elif cmp(f"{tmp_ash}/ash", __file__, shallow=True):
+            copy(__file__, f"{tmp_ash}/ash_old")
+            copy(f"{tmp_ash}/ash", __file__)
             print(f"Ash updated succesfully. Old Ash moved to {tmp_ash}.")
         else:
             print("F: Ash already up to date.")

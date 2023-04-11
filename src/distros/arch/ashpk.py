@@ -113,7 +113,7 @@ def fix_package_db(snapshot = "0"):
             immutability_disable(snapshot)
             flip = True
         prepare(snapshot)
-        os.system(f"{P}rm -rf /etc/pacman.d/gnupg /home/me/.gnupg") ### $HOME vs /root NEEDS fixing # If folder not present and subprocess.run is used, throws error and stops
+        os.system(f"{P}rm -rf /etc/pacman.d/gnupg $HOME/.gnupg") ### $HOME vs /root NEEDS fixing # If folder not present and subprocess.run is used, throws error and stops
         os.system(f"{P}rm -r /var/lib/pacman/db.lck")
         os.system(f"{P}pacman -Syy")
         os.system(f"{P}gpg --refresh-keys")
