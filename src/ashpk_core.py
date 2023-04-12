@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 
 import os
-from shutil import copy
 import subprocess
 import sys
 from anytree import AsciiStyle, find, Node, PreOrderIter, RenderTree
@@ -12,6 +11,7 @@ from ast import literal_eval
 from filecmp import cmp
 from os.path import expanduser
 from re import sub
+from shutil import copy
 
 # Directories
 # All snapshots share one /var
@@ -428,16 +428,15 @@ def hollow(snap):
         ### AUR step might be needed and if so make a distro_specific function with steps similar to install_package(). Call it hollow_helper and change this accordingly().
         prepare(snap)
         os.system(f"mount --rbind --make-rslave / /.snapshots/rootfs/snapshot-chr{snap}")
-        print(f"Snapshot {snap} is now hollow! When done, type YES (in capital):") ### TODO use yes_no
-        while True:
-            reply = input("> ")
-            if reply == "YES":
-                post_transactions(snap)
-                #os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{s}") OR os.system(f"umount -R /") ### REVIEW NEED to unmount this a second time?! (I BELIEVE NOT NEEDED)
-                immutability_enable(snap)
-                deploy(snap)
-                print(f"Snapshot {snap} hollow operation succeeded. Please reboot!")
-                break
+        if yes_no(f"Snapshot {snap} is now hollow! Whenever done, type yes to deploy and no to discard"):
+            post_transactions(snap)
+            #os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{s}") OR os.system(f"umount -R /") ### REVIEW NEED to unmount this a second time?! (I BELIEVE NOT NEEDED)
+            immutability_enable(snap)
+            deploy(snap)
+            print(f"Snapshot {snap} hollow operation succeeded. Please reboot!")
+        else:
+            chr_delete(snap)
+            print(f"No changes applied on snapshot {snap}.")
 
 #   Make a node mutable
 def immutability_disable(snap):
@@ -628,12 +627,10 @@ def post_transactions(snap):
     options = snapshot_config_get(snap)
     mtbl_dirs = options["mutable_dirs"].split(',').remove('')
     mtbl_dirs_shared = options["mutable_dirs_shared"].split(',').remove('')
-    if mtbl_dirs:
-        for mnt_path in mtbl_dirs:
-            os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}{DEBUG}")
-    if mtbl_dirs_shared:
-        for mnt_path in mtbl_dirs_shared:
-            os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}{DEBUG}")
+    for mnt_path in mtbl_dirs:
+        os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}{DEBUG}")
+    for mnt_path in mtbl_dirs_shared:
+        os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}{DEBUG}")
   # ---------------------- fix for hollow functionality ---------------------- #
     chr_delete(snap)
 
