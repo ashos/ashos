@@ -95,24 +95,24 @@ def cache_copy(snapshot, FROM):
     #    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/aur/. /var/cache/pacman/aur/{DEBUG}")
 
 #   Fix signature invalid error
-def fix_package_db(snapshot = "0"):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
-        print(f"F: Cannot fix package manager database as snapshot {snapshot} doesn't exist.")
+def fix_package_db(snap = "0"):
+    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
+        print(f"F: Cannot fix package manager database as snapshot {snap} doesn't exist.")
         return
-    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
-        print(f"F: Snapshot {snapshot} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snapshot}'.")
+    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"):
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
         return
-    elif snapshot == "0":
+    elif snap == "0":
         P = "" ### I think this is wrong. It should be check if snapshot = current-deployed-snapshot, then this.
     else:
-        P = f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} "
+        P = f"chroot /.snapshots/rootfs/snapshot-chr{snap} "
     try:
-        if check_mutability(snapshot):
+        if check_mutability(snap):
             flip = False # Snapshot is mutable so do not make it immutable after fixdb is done
         else:
-            immutability_disable(snapshot)
+            immutability_disable(snap)
             flip = True
-        prepare(snapshot)
+        prepare(snap)
         os.system(f"{P}rm -rf /etc/pacman.d/gnupg $HOME/.gnupg") ### $HOME vs /root NEEDS fixing # If folder not present and subprocess.run is used, throws error and stops
         os.system(f"{P}rm -r /var/lib/pacman/db.lck")
         os.system(f"{P}pacman -Syy")
@@ -121,27 +121,27 @@ def fix_package_db(snapshot = "0"):
         os.system(f"{P}pacman-key --init")
         os.system(f"{P}pacman-key --populate archlinux")
         os.system(f"{P}pacman -Syvv --noconfirm archlinux-keyring") ### REVIEW NEEDED? (maybe)
-        post_transactions(snapshot)
+        post_transactions(snap)
         if flip:
-            immutability_enable(snapshot)
-        print(f"Snapshot {snapshot}'s package manager database fixed successfully.")
+            immutability_enable(snap)
+        print(f"Snapshot {snap}'s package manager database fixed successfully.")
     except subprocess.CalledProcessError:
-        chr_delete(snapshot)
+        chr_delete(snap)
         print("F: Fixing package manager database failed.")
 
 #   Delete init system files (Systemd, OpenRC, etc.)
-def init_system_clean(snapshot, FROM):
+def init_system_clean(snap, FROM):
     if FROM == "prepare":
-        os.system(f"rm -rf /.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/systemd/*{DEBUG}")
+        os.system(f"rm -rf /.snapshots/rootfs/snapshot-chr{snap}/var/lib/systemd/*{DEBUG}")
     elif FROM == "deploy":
         os.system(f"rm -rf /var/lib/systemd/*{DEBUG}")
-        os.system(f"rm -rf /.snapshots/rootfs/snapshot-{snapshot}/var/lib/systemd/*{DEBUG}")
+        os.system(f"rm -rf /.snapshots/rootfs/snapshot-{snap}/var/lib/systemd/*{DEBUG}")
 
 #   Copy init system files (Systemd, OpenRC, etc.) to shared
-def init_system_copy(snapshot, FROM):
+def init_system_copy(snap, FROM):
     if FROM == "post_transactions":
         os.system(f"rm -rf /var/lib/systemd/*{DEBUG}")
-        os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{snapshot}/var/lib/systemd/. /var/lib/systemd/{DEBUG}")
+        os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{snap}/var/lib/systemd/. /var/lib/systemd/{DEBUG}")
 
 #   Install atomic-operation
 def install_package(snapshot, pkg):
@@ -161,7 +161,7 @@ def install_package(snapshot, pkg):
         return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --needed --overwrite '/var/*'")
 
 #   Install atomic-operation in live snapshot
-def install_package_live(pkg, tmp, snapshot):
+def install_package_live(pkg, tmp, snap):
     excode = 1 ### REVIEW
     try:
       # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
@@ -179,7 +179,7 @@ def install_package_live(pkg, tmp, snapshot):
                 os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
                 print("F: Live installation failed!") # Before: Live install failed and changes discarded
                 return excode
-        if snapshot_config_get(snapshot)["aur"] == "True":
+        if snapshot_config_get(snap)["aur"] == "True":
             aur_in_destination_snapshot = True
         else:
             aur_in_destination_snapshot = False
@@ -212,8 +212,8 @@ def pkg_list(snap, CHR=""):
     return subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} pacman -Qq", encoding='utf-8', shell=True).strip().split("\n")
 
 #   Refresh snapshot atomic-operation
-def refresh_helper(snapshot):
-    return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syy")
+def refresh_helper(snap):
+    return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} pacman -Syy")
 
 #   Show diff of packages between two snapshots TODO: make this function not depend on bash
 def snapshot_diff(snap1, snap2):
@@ -225,17 +225,17 @@ def snapshot_diff(snap1, snap2):
         os.system(f"bash -c \"diff <(ls /.snapshots/rootfs/snapshot-{snap1}/usr/share/ash/db/local) <(ls /.snapshots/rootfs/snapshot-{snap2}/usr/share/ash/db/local) | grep '^>\|^<' | sort\"") ### REVIEW
 
 #   Uninstall package(s) atomic-operation
-def uninstall_package_helper(snapshot, pkg):
-    return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman --noconfirm -Rns {pkg}")
+def uninstall_package_helper(snap, pkg):
+    return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} pacman --noconfirm -Rns {pkg}")
 
 #   Upgrade snapshot atomic-operation
-def upgrade_helper(snapshot):
-    aur = aur_install(snapshot)
-    prepare(snapshot) ### REVIEW tried it outside of this function in ashpk_core before aur_install and it works fine!
+def upgrade_helper(snap):
+    aur = aur_install(snap)
+    prepare(snap) ### REVIEW tried it outside of this function in ashpk_core before aur_install and it works fine!
     if not aur:
-        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -Syyu")
+        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} pacman -Syyu")
     else:
-        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c 'paru -Syyu'")
+        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'paru -Syyu'")
     return excode
 
 # ---------------------------------------------------------------------------- #
