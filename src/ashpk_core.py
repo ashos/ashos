@@ -392,7 +392,7 @@ def get_next_snapshot():
     if os.path.exists("/.snapshots/rootfs/snapshot-{d}/usr/share/ash/snap"): # Make sure next snapshot exists
         with open(f"/.snapshots/rootfs/snapshot-{d}/usr/share/ash/snap", "r") as csnap:
             return int(csnap.read().rstrip())
-    return "" # Return empty string in case no snapshot is deployed
+    return "" # Return empty string in case no snapshot is deployed ### REVIEW
 
 #   Get parent
 def get_parent(tree, id):
