@@ -59,7 +59,7 @@ def ash_chroot_mounts(i, CHR=""):
     #os.system(f"mount --rbind --make-rslave /proc /.snapshots/rootfs/snapshot-{CHR}{i}/proc{DEBUG}") ### REVIEW 2023 USE THIS INSTEAD?
     #os.system(f"mount --bind --make-slave /root /.snapshots/rootfs/snapshot-{CHR}{i}/root{DEBUG}") ### REVIEW 2023 ADD THIS TOO?
     os.system(f"mount --bind --make-slave /run /.snapshots/rootfs/snapshot-{CHR}{i}/run{DEBUG}")
-    #os.system(f"mount --rbind --make-rslave /run /.snapshots/rootfs/snapshot-chr{snapshot}/run{DEBUG}") ### REVIEW 2023 USE THIS INSTEAD?
+    #os.system(f"mount --rbind --make-rslave /run /.snapshots/rootfs/snapshot-chr{i}/run{DEBUG}") ### REVIEW 2023 USE THIS INSTEAD?
     os.system(f"mount --rbind --make-rslave /sys /.snapshots/rootfs/snapshot-{CHR}{i}/sys{DEBUG}")
     os.system(f"mount --bind --make-slave /tmp /.snapshots/rootfs/snapshot-{CHR}{i}/tmp{DEBUG}")
     #os.system(f"mount --rbind --make-rslave /tmp /.snapshots/rootfs/snapshot-{CHR}{i}/tmp{DEBUG}") ### REVIEW 2023 USE THIS INSTEAD?
@@ -158,18 +158,18 @@ def chroot(snap, cmd=""): ### make cmd to cmds (IMPORTANT for install_profile)
         print(f"F: Cannot chroot as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
         print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.") ### REMOVE_ALL_THESE_LINES
-    elif snap == "0":
+    elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
         prepare(snap)
         excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {' '.join(cmd)}") ### TODO if you chroot, then run 'dua' and exit, it makes excode non-zero!
-        if excode == 0:
-            post_transactions(snap)
-            return 0
-        else:
+        if excode:
             chr_delete(snap)
             print("F: Chroot failed and changes discarded!")
             return 1
+        else:
+            post_transactions(snap)
+            return 0
 
 #   Check if inside chroot
 def chroot_check():
@@ -269,17 +269,17 @@ def clone_under(snap, branch):
 #   Delete tree or branch
 def delete_node(snaps, quiet):
     for snap in snaps:
-        if not quiet:
-            if not yes_no(f"Are you sure you want to delete snapshot {snap}?"):
-                sys.exit("Aborted")
         if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
             print(f"F: Cannot delete as snapshot {snap} doesn't exist.")
-        elif snap == "0":
+        elif snap == 0:
             print("F: Changing base snapshot is not allowed.")
         elif snap == get_current_snapshot():
             print("F: Cannot delete booted snapshot.")
         elif snap == get_next_snapshot():
             print("F: Cannot delete deployed snapshot.")
+        elif not quiet:
+            if not yes_no(f"Are you sure you want to delete snapshot {snap}?"):
+                sys.exit("Aborted")
         else:
             children = return_children(fstree, snap)
             write_desc("", snap) # Clear description # Why have this? REVIEW 2023
@@ -376,7 +376,7 @@ def find_new():
 #   Get current snapshot
 def get_current_snapshot():
     with open("/usr/share/ash/snap", "r") as csnap:
-        return csnap.read().rstrip()
+        return int(csnap.read().rstrip())
 
 #   This function returns either empty string or underscore plus name of distro if it was appended to sub-volume names to distinguish
 def get_distro_suffix():
@@ -393,7 +393,7 @@ def get_next_snapshot():
         d = "deploy-aux"
     if os.path.exists("/.snapshots/rootfs/snapshot-{d}/usr/share/ash/snap"): # Make sure next snapshot exists
         with open(f"/.snapshots/rootfs/snapshot-{d}/usr/share/ash/snap", "r") as csnap:
-            return csnap.read().rstrip()
+            return int(csnap.read().rstrip())
     return "" # Return empty string in case no snapshot is deployed
 
 #   Get parent
@@ -407,9 +407,8 @@ def get_part():
         return subprocess.check_output(f"blkid | grep '{cpart.read().rstrip()}' | awk -F: '{{print $1}}'", shell=True).decode('utf-8').strip()
 
 #   Get tmp partition state
-def get_tmp(console=False): # By default just return which deployment is running
+def get_tmp(console=False): # By default just "return" which deployment is running
     mount = str(subprocess.check_output("cat /proc/mounts | grep ' / btrfs'", shell=True))
-#    if "deploy-aux" in mount: return("tmp0") else: return("tmp") # REVIEW 2023 NEWER
     if "deploy-aux" in mount:
         r = "deploy-aux"
     else:
@@ -425,7 +424,7 @@ def hollow(snap):
         print(f"F: Cannot make hollow as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
         print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
-    elif snap == "0":
+    elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
         ### AUR step might be needed and if so make a distro_specific function with steps similar to install_package(). Call it hollow_helper and change this accordingly().
@@ -485,21 +484,22 @@ def install(pkg, snap):
         print(f"F: Cannot install as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
         print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
-    elif snap == "0":
+    elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
         excode = install_package(pkg, snap)
-        if excode == 0:
-            post_transactions(snap)
-            print(f"Package(s) {pkg} installed in snapshot {snap} successfully.")
-            return 0
-        else:
+        if excode:
             chr_delete(snap)
             print("F: Install failed and changes discarded!")
             return 1
 
+        else:
+            post_transactions(snap)
+            print(f"Package(s) {pkg} installed in snapshot {snap} successfully.")
+            return 0
+
 #   Install live
-def install_live(pkg, snap=get_current_snapshot()): ### IMPORTANT REVIEW 2023 --> reverse the order (pkg, snapshot=get_current_snapshot()) by default if no arg is sent use current snapshot
+def install_live(pkg, snap=get_current_snapshot()):
     tmp = get_tmp()
     #options = get_persnap_options(tmp) ### moved this to install_package_live
 #    os.system(f"mount --bind /.snapshots/rootfs/snapshot-{tmp} /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") ###REDUNDANT
@@ -509,7 +509,7 @@ def install_live(pkg, snap=get_current_snapshot()): ### IMPORTANT REVIEW 2023 --
 #    os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp{DEBUG}") ###REDUNDANT
     ash_chroot_mounts(tmp) ### REVIEW Not having this was the culprit for live install to fail for Arch and derivative. Now, does having this here Ok or does it cause errors in NON-Arch distros? If so move it to ashpk.py
     print("Please wait as installation is finishing.")
-    excode = install_package_live(pkg, tmp, snap) ### IMPORTANT REVIEW 2023 --> reverse the order (pkg, snap=get_current_snapshot()) by default if no arg is sent use current snapshot
+    excode = install_package_live(pkg, snap, tmp)
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") ### REVIEW not safe
     if not excode:
@@ -523,7 +523,7 @@ def install_profile(prof, snap):
         print(f"F: Cannot install as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
         print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
-    elif snap == "0":
+    elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
         print(f"Updating the system before installing profile {prof}.")
@@ -534,7 +534,7 @@ def install_profile(prof, snap):
         try: # Ignore empty lines or ones starting with # [ % &
             pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\\[|^%|^&|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
             install_package(pkg, snap)
-            service_enable(snap, prof, tmp_prof)
+            service_enable(prof, tmp_prof, snap)
         except subprocess.CalledProcessError:
             chr_delete(snap)
             print("F: Install failed and changes discarded!")
@@ -555,14 +555,14 @@ def install_profile_live(prof, snap):
     subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{prof}/packages{get_distro_suffix()}.txt", shell=True)
   # Ignore empty lines or ones starting with # [ % &
     pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\\[|^%|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
-    excode1 = install_package_live(pkg, tmp, snap) ### REVIEW snapshot argument needed
-    excode2 = service_enable(tmp, prof, tmp_prof)
-    if excode1 == 0 and excode2 == 0:
-        print(f"Profile {prof} installed in current/live snapshot.") ### REVIEW
-        return 0
-    else:
+    excode1 = install_package_live(pkg, snap, tmp) ### REVIEW snapshot argument needed
+    excode2 = service_enable(prof, tmp_prof, tmp) ### IMPORTANT: tmp or snap?!
+    if excode1 or excode2:
         print("F: Install failed!") # Before: Install failed and changes discarded (rephrased as there is no chr_delete here)
         return 1
+    else:
+        print(f"Profile {prof} installed in current/live snapshot.") ### REVIEW
+        return 0
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
 
@@ -731,18 +731,18 @@ def refresh(snap):
         print(f"F: Cannot refresh as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"):
         print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
-    elif snap == "0":
+    elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
         #sync_time() ### REVIEW At least required in virtualbox, otherwise error in package db update
         prepare(snap)
         excode = refresh_helper(snap)
-        if excode == 0:
-            post_transactions(snap)
-            print(f"Snapshot {snap} refreshed successfully.")
-        else:
+        if excode:
             chr_delete(snap)
             print("F: Refresh failed and changes discarded!")
+        else:
+            post_transactions(snap)
+            print(f"Snapshot {snap} refreshed successfully.")
 
 #   Recursively remove package in tree
 def remove_from_tree(tree, tname, pkg, prof):
@@ -792,7 +792,7 @@ def rollback():
     deploy(i)
 
 #   Enable service(s) (Systemd, OpenRC, etc.)
-def service_enable(snap, prof, tmp_prof):
+def service_enable(prof, tmp_prof, snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot enable services as snapshot {snap} doesn't exist.")
     else: ### No need for other checks as this function is not exposed to user
@@ -826,7 +826,7 @@ def snapshot_base_new(desc="clone of base"): # immutability toggle not used as b
 def snapshot_config_edit(snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot chroot as snapshot {snap} doesn't exist.")
-    elif snap == "0":
+    elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
         prepare(snap)
@@ -968,16 +968,16 @@ def tmp_delete():
 
 #   Print out tree with descriptions
 def tree_print(tree):
-    snap = get_current_snapshot()
+    csnap = get_current_snapshot()
     for pre, fill, node in RenderTree(tree, style=AsciiStyle()): # simpler tree style
         if os.path.isfile(f"/.snapshots/ash/snapshots/{node.name}-desc"):
             with open(f"/.snapshots/ash/snapshots/{node.name}-desc", "r") as descfile:
                 desc = descfile.readline()
         else:
             desc = ""
-        if str(node.name) == "0":
+        if node.name == 0:
             desc = "base snapshot"
-        if snap != str(node.name):
+        if csnap != node.name:
             print("%s%s - %s" % (pre, node.name, desc))
         else:
             print("%s%s*- %s" % (pre, node.name, desc))
@@ -1042,7 +1042,7 @@ def tree_sync(tree, tname, force_offline, live):
             else:
                 prepare(snap_to)
                 tree_sync_helper("chr", snap_from, snap_to) # Pre-sync
-                if live and int(snap_to) == int(get_current_snapshot()): # Live sync
+                if live and snap_to == get_current_snapshot(): # Live sync
                     tree_sync_helper("", snap_from, get_tmp()) # Post-sync
                 post_transactions(snap_to) ### IMPORTANT REVIEW 2023 - Moved here from the line immediately after first tree_sync_helper
         print(f"Tree {tname} synced.")
@@ -1090,17 +1090,17 @@ def uninstall_package(pkg, snap):
         print(f"F: Cannot remove as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"):
         print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
-    elif snap == "0":
+    elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
         prepare(snap)
         excode = uninstall_package_helper(pkg, snap)
-        if excode == 0:
-            post_transactions(snap)
-            print(f"Package {pkg} removed from snapshot {snap} successfully.")
-        else:
+        if excode:
             chr_delete(snap)
             print("F: Remove failed and changes discarded!")
+        else:
+            post_transactions(snap)
+            print(f"Package {pkg} removed from snapshot {snap} successfully.")
 
 #   Update boot
 def update_boot(snap): ### TODO Other bootloaders
@@ -1122,13 +1122,13 @@ def update_boot(snap): ### TODO Other bootloaders
 #   Saves changes made to /etc to snapshot
 def update_etc():
     tmp = get_tmp()
-    snap = get_current_snapshot()
-    os.system(f"btrfs sub del /.snapshots/etc/etc-{snap}{DEBUG}")
-    if check_mutability(snap):
+    csnap = get_current_snapshot()
+    os.system(f"btrfs sub del /.snapshots/etc/etc-{csnap}{DEBUG}")
+    if check_mutability(csnap):
         immutability = ""
     else:
         immutability = "-r"
-    os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-{tmp} /.snapshots/etc/etc-{snap}{DEBUG}")
+    os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-{tmp} /.snapshots/etc/etc-{csnap}{DEBUG}")
 
 #   Upgrade snapshot
 def upgrade(snap, baseup=False):
@@ -1136,20 +1136,20 @@ def upgrade(snap, baseup=False):
         print(f"F: Cannot upgrade as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"):
         print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
-    elif snap == "0" and not baseup:
+    elif snap == 0 and not baseup:
         print("F: Changing base snapshot is not allowed.")
     else:
 #        prepare(snap) ### REVIEW Moved to a distro-specific function as it needs to go after setup_aur_if_enabled()
       # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
         excode = upgrade_helper(snap)
-        if excode == 0:
-            post_transactions(snap)
-            print(f"Snapshot {snap} upgraded successfully.")
-            return 0 # REVIEW 2023 not needed
-        else:
+        if excode:
             chr_delete(snap)
             print("F: Upgrade failed and changes discarded!")
             return 1 # REVIEW 2023 not needed
+        else:
+            post_transactions(snap)
+            print(f"Snapshot {snap} upgraded successfully.")
+            return 0 # REVIEW 2023 not needed
 
 #   Print snaps that has a package
 def which_snapshot_has(pkg):
@@ -1251,7 +1251,7 @@ def main():
         cloneunder_par.set_defaults(func=clone_under)
       # Del
         del_par = subparsers.add_parser("del", aliases=["delete", "rm", "rem", "remove", "rm-snapshot"], allow_abbrev=True, help="Remove snapshot(s)/tree(s) and any branches recursively")
-        del_par.add_argument("snaps", nargs='+', help="snapshot number(s)")
+        del_par.add_argument("snaps", nargs='+', type=int, help="snapshot number(s)")
         del_par.add_argument('--quiet', '-q', action='store_true', required=False, help='Force delete snapshot(s)')
         del_par.set_defaults(func=delete_node)
       # Deploy
@@ -1409,11 +1409,11 @@ def install_triage(live, not_live, pkg, prof, snap):
     elif pkg:
         excode = install(" ".join(pkg), snap)
   # If installing into current snapshot and no not_live flag, automatically use live install
-    if snap == int(get_current_snapshot()) and not not_live:
+    if snap == get_current_snapshot() and not not_live:
         live = True
   # Perform the live install only if install above was successful
     if live and not excode:
-        if profile:
+        if prof:
             install_profile_live(prof, snap)
         elif pkg:
             install_live(" ".join(pkg), snap)

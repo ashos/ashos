@@ -95,14 +95,14 @@ def cache_copy(snap, FROM):
     #    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snap}/var/cache/pacman/aur/. /var/cache/pacman/aur/{DEBUG}")
 
 #   Fix signature invalid error
-def fix_package_db(snap = "0"):
+def fix_package_db(snap = 0):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot fix package manager database as snapshot {snap} doesn't exist.")
         return
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"):
         print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
         return
-    elif snap == "0":
+    elif snap == 0:
         P = "" ### I think this is wrong. It should be check if snapshot = current-deployed-snapshot, then this.
     else:
         P = f"chroot /.snapshots/rootfs/snapshot-chr{snap} "
@@ -161,7 +161,7 @@ def install_package(pkg, snap):
         return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} pacman -S {pkg} --needed --overwrite '/var/*'")
 
 #   Install atomic-operation in live snapshot
-def install_package_live(pkg, tmp, snap):
+def install_package_live(pkg, snap, tmp):
     excode = 1 ### REVIEW
     try:
       # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
@@ -185,7 +185,7 @@ def install_package_live(pkg, tmp, snap):
             aur_in_target_snap = False
             print("F: AUR not enabled in target snapshot!") ### REVIEW
         ### REVIEW - error checking, handle the situation better altogether
-        if aur_in_target_snap and not aur_in_tmp:
+        if aur_in_target_snap and not aur_in_tmp: ####### Use yes_no()
             print("F: AUR is not enabled in current live snapshot, but is enabled in target.\nEnable AUR for live snapshot? (y/n)")
             reply = input("> ")
             while reply.casefold() != "y" and reply.casefold() != "n":
