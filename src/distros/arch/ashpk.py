@@ -185,20 +185,14 @@ def install_package_live(pkg, snap, tmp):
             aur_in_target_snap = False
             print("F: AUR not enabled in target snapshot!") ### REVIEW
         ### REVIEW - error checking, handle the situation better altogether
-        if aur_in_target_snap and not aur_in_tmp: ####### Use yes_no()
-            print("F: AUR is not enabled in current live snapshot, but is enabled in target.\nEnable AUR for live snapshot? (y/n)")
-            reply = input("> ")
-            while reply.casefold() != "y" and reply.casefold() != "n":
-                print("Please enter 'y' or 'n':")
-                reply = input("> ")
-            if reply == "y":
-                if not aur_check(tmp):
-                    excode = aur_install_live_helper(tmp)
-                    if excode:
-                        os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
-                        os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-                        print("F: Live installation failed!") # Before: Live install failed and changes discarded
-                        return excode # i.e. aur = True
+        if aur_in_target_snap and not aur_in_tmp:
+            print("F: AUR is not enabled in current live snapshot, but is enabled in target.")
+            if yes_no("Enable AUR for live snapshot?"):
+                if aur_install_live_helper(tmp) and not aur_check(tmp):
+                    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
+                    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
+                    print("F: Live installation failed!") # Before: Live install failed and changes discarded
+                    return excode # i.e. aur = True
             else:
                 print("F: Not enabling AUR for live snapshot!")
                 excode = 1 # i.e. aur = False
@@ -222,7 +216,7 @@ def snapshot_diff(snap1, snap2):
     elif not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap2}"):
         print(f"Snapshot {snap2} not found.")
     else:
-        os.system(f"bash -c \"diff <(ls /.snapshots/rootfs/snapshot-{snap1}/usr/share/ash/db/local) <(ls /.snapshots/rootfs/snapshot-{snap2}/usr/share/ash/db/local) | grep '^>\|^<' | sort\"") ### REVIEW
+        os.system(f"bash -c \"diff <(ls /.snapshots/rootfs/snapshot-{snap1}/usr/share/ash/db/local) <(ls /.snapshots/rootfs/snapshot-{snap2}/usr/share/ash/db/local) | grep '^>\\|^<' | sort\"") ### REVIEW
 
 #   Uninstall package(s) atomic-operation
 def uninstall_package_helper(pkg, snap):
