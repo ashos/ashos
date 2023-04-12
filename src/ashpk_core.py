@@ -336,19 +336,17 @@ def deploy(snap):
         if check_mutability(snap):
             os.system(f"sed -i '0,/snapshot-{tmp}/ s|,ro||' /.snapshots/rootfs/snapshot-{tmp}/etc/fstab") ### ,rw
       # Add special user-defined mutable directories as bind-mounts into fstab
-        if mtbl_dirs:
-            for mnt_path in mtbl_dirs:
-                src_path = f"/.snapshots/mutable_dirs/snapshot-{snap}/{mnt_path}"
-                os.system(f"mkdir -p /.snapshots/mutable_dirs/snapshot-{snap}/{mnt_path}")
-                os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mnt_path}")
-                os.system(f"echo '{src_path} /{mnt_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
+        for mnt_path in mtbl_dirs:
+            src_path = f"/.snapshots/mutable_dirs/snapshot-{snap}/{mnt_path}"
+            os.system(f"mkdir -p /.snapshots/mutable_dirs/snapshot-{snap}/{mnt_path}")
+            os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mnt_path}")
+            os.system(f"echo '{src_path} /{mnt_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
       # Same thing but for shared directories
-        if mtbl_dirs_shared:
-            for mnt_path in mtbl_dirs_shared:
-                src_path = f"/.snapshots/mutable_dirs/{mnt_path}"
-                os.system(f"mkdir -p /.snapshots/mutable_dirs/{mnt_path}")
-                os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mnt_path}")
-                os.system(f"echo '{src_path} /{mnt_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
+        for mnt_path in mtbl_dirs_shared:
+            src_path = f"/.snapshots/mutable_dirs/{mnt_path}"
+            os.system(f"mkdir -p /.snapshots/mutable_dirs/{mnt_path}")
+            os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mnt_path}")
+            os.system(f"echo '{src_path} /{mnt_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
         os.system(f"btrfs sub snap /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}") ### REVIEW Is this needed? Can it be moved up?
         os.system(f"echo '{snap}' > /.snapshots/rootfs/snapshot-{tmp}/usr/share/ash/snap")
         switch_tmp()
