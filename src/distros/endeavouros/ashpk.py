@@ -180,12 +180,12 @@ def install_package_live(snapshot, tmp, pkg):
                 print("F: Live install failed!") # Before: Live install failed and changes discarded
                 return excode
         if snapshot_config_get(snapshot)["aur"] == "True":
-            aur_in_destination_snapshot = True
+            aur_in_target_snap = True
         else:
-            aur_in_destination_snapshot = False
+            aur_in_target_snap = False
             print("F: AUR not enabled in target snapshot!") ### REVIEW
         ### REVIEW - error checking, handle the situation better altogether
-        if aur_in_destination_snapshot and not aur_in_tmp:
+        if aur_in_target_snap and not aur_in_tmp:
             print("F: AUR is not enabled in current live snapshot, but is enabled in target.\nEnable AUR for live snapshot? (y/n)")
             reply = input("> ")
             while reply.casefold() != "y" and reply.casefold() != "n":

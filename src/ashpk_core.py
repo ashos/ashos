@@ -121,7 +121,7 @@ def branch_create(snap, desc=""): # blank description if nothing is passed
         add_node_to_parent(fstree, snap, i)
         write_tree(fstree)
         if desc:
-            write_desc(i, " ".join(desc))
+            write_desc(" ".join(desc), i)
         print(f"Branch {i} added under snapshot {snap}.")
 
 
@@ -182,7 +182,7 @@ def chroot_check():
     return(chroot)
 
 #   Clone tree
-def clone_as_tree(snap, desc):
+def clone_as_tree(desc, snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot clone as snapshot {snap} doesn't exist.")
     else:
@@ -202,7 +202,7 @@ def clone_as_tree(snap, desc):
             description = f"clone of {snap}"
         else:
             description = " ".join(desc)
-        write_desc(i, description)
+        write_desc(description, i)
         print(f"Tree {i} cloned from {snap}.")
 
 #   Clone branch under same parent
@@ -223,7 +223,7 @@ def clone_branch(snap):
         add_node_to_level(fstree, snap, i)
         write_tree(fstree)
         desc = str(f"clone of {snap}")
-        write_desc(i, desc)
+        write_desc(desc, i)
         print(f"Branch {i} added to parent of {snap}.")
         return i
 
@@ -262,7 +262,7 @@ def clone_under(snap, branch):
         add_node_to_parent(fstree, snap, i)
         write_tree(fstree)
         desc = str(f"clone of {branch}")
-        write_desc(i, desc)
+        write_desc(desc, i)
         print(f"Branch {i} added under snapshot {snap}.")
         return i
 
@@ -282,7 +282,7 @@ def delete_node(snaps, quiet):
             print("F: Cannot delete deployed snapshot.")
         else:
             children = return_children(fstree, snap)
-            write_desc(snap, "") # Clear description # Why have this? REVIEW 2023
+            write_desc("", snap) # Clear description # Why have this? REVIEW 2023
             os.system(f"btrfs sub del /.snapshots/boot/boot-{snap}{DEBUG}")
             os.system(f"btrfs sub del /.snapshots/etc/etc-{snap}{DEBUG}")
             os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snap}{DEBUG}")
@@ -292,7 +292,7 @@ def delete_node(snaps, quiet):
                 os.system(f"btrfs sub del /.snapshots/etc/etc-chr{snap}{DEBUG}")
                 os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snap}{DEBUG}")
             for child in children: # This deletes the node itself along with its children
-                write_desc(snap, "") # Why have this? REVIEW 2023
+                write_desc("", snap) # Why have this? REVIEW 2023
                 os.system(f"btrfs sub del /.snapshots/boot/boot-{child}{DEBUG}")
                 os.system(f"btrfs sub del /.snapshots/etc/etc-{child}{DEBUG}")
                 os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{child}{DEBUG}")
@@ -454,7 +454,7 @@ def immutability_disable(snap):
                 os.system(f"btrfs property set -ts /.snapshots/rootfs/snapshot-{snap} ro false")
                 os.system(f"touch /.snapshots/rootfs/snapshot-{snap}/usr/share/ash/mutable")
                 print(f"Snapshot {snap} successfully made mutable.")
-                write_desc(snap, " MUTABLE ", 'a+')
+                write_desc(" MUTABLE ", snap, 'a+')
     else:
         print("F: Snapshot 0 (base) should not be modified.")
 
@@ -480,7 +480,7 @@ def import_tree_file(tname):
         return literal_eval(tfile.readline())
 
 #   Install packages
-def install(snap, pkg):
+def install(pkg, snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot install as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
@@ -488,7 +488,7 @@ def install(snap, pkg):
     elif snap == "0":
         print("F: Changing base snapshot is not allowed.")
     else:
-        excode = install_package(snap, pkg)
+        excode = install_package(pkg, snap)
         if excode == 0:
             post_transactions(snap)
             print(f"Package(s) {pkg} installed in snapshot {snap} successfully.")
@@ -510,7 +510,6 @@ def install_live(pkg, snap=get_current_snapshot()): ### IMPORTANT REVIEW 2023 --
     ash_chroot_mounts(tmp) ### REVIEW Not having this was the culprit for live install to fail for Arch and derivative. Now, does having this here Ok or does it cause errors in NON-Arch distros? If so move it to ashpk.py
     print("Please wait as installation is finishing.")
     excode = install_package_live(pkg, tmp, snap) ### IMPORTANT REVIEW 2023 --> reverse the order (pkg, snap=get_current_snapshot()) by default if no arg is sent use current snapshot
-#####    excode = install_package_live(tmp, pkg)
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") ### REVIEW not safe
     if not excode:
@@ -519,7 +518,7 @@ def install_live(pkg, snap=get_current_snapshot()): ### IMPORTANT REVIEW 2023 --
         print("F: Live installation failed!")
 
 #   Install a profile from a text file
-def install_profile(snap, prof):
+def install_profile(prof, snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot install as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
@@ -534,7 +533,7 @@ def install_profile(snap, prof):
         prepare(snap)
         try: # Ignore empty lines or ones starting with # [ % &
             pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\\[|^%|^&|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
-            install_package(snap, pkg)
+            install_package(pkg, snap)
             service_enable(snap, prof, tmp_prof)
         except subprocess.CalledProcessError:
             chr_delete(snap)
@@ -556,7 +555,6 @@ def install_profile_live(prof, snap):
     subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{prof}/packages{get_distro_suffix()}.txt", shell=True)
   # Ignore empty lines or ones starting with # [ % &
     pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\\[|^%|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
-#####    excode1 = install_package_live(snapshot, tmp, pkg) ### REVIEW snapshot argument needed
     excode1 = install_package_live(pkg, tmp, snap) ### REVIEW snapshot argument needed
     excode2 = service_enable(tmp, prof, tmp_prof)
     if excode1 == 0 and excode2 == 0:
@@ -752,7 +750,7 @@ def remove_from_tree(tree, tname, pkg, prof):
         print(f"F: Cannot update as tree {tname} doesn't exist.")
     else:
         if pkg: ### NEW
-            uninstall_package(tname, pkg)
+            uninstall_package(pkg, tname)
             order = recurse_tree(tree, tname)
             if len(order) > 2:
                 order.remove(order[0])
@@ -765,7 +763,7 @@ def remove_from_tree(tree, tname, pkg, prof):
                 print(arg, sarg)
                 order.remove(order[0])
                 order.remove(order[0])
-                uninstall_package(sarg, pkg)
+                uninstall_package(pkg, sarg)
             print(f"Tree {tname} updated.")
         elif prof:
             print("TODO") ### REVIEW
@@ -789,9 +787,8 @@ def return_children(tree, id):
 def rollback():
     tmp = get_tmp()
     i = find_new()
-###    clone_as_tree(tmp)
-    clone_as_tree(tmp, "") ### REVIEW clone_as_tree(tmp, "rollback") will do.
-    write_desc(i, "rollback")
+    clone_as_tree("", tmp) ### REVIEW clone_as_tree("rollback", tmp) will do.
+    write_desc("rollback", i)
     deploy(i)
 
 #   Enable service(s) (Systemd, OpenRC, etc.)
@@ -822,7 +819,7 @@ def snapshot_base_new(desc="clone of base"): # immutability toggle not used as b
     append_base_tree(fstree, i)
     write_tree(fstree)
     if desc:
-        write_desc(i, desc)
+        write_desc(desc, i)
     print(f"New tree {i} created.")
 
 #   Edit per-snapshot configuration
@@ -1088,7 +1085,7 @@ def tree_upgrade(tree, tname):
         print(f"Tree {tname} updated.")
 
 #   Uninstall package(s)
-def uninstall_package(snap, pkg):
+def uninstall_package(pkg, snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot remove as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"):
@@ -1097,7 +1094,7 @@ def uninstall_package(snap, pkg):
         print("F: Changing base snapshot is not allowed.")
     else:
         prepare(snap)
-        excode = uninstall_package_helper(snap, pkg)
+        excode = uninstall_package_helper(pkg, snap)
         if excode == 0:
             post_transactions(snap)
             print(f"Package {pkg} removed from snapshot {snap} successfully.")
@@ -1162,7 +1159,7 @@ def which_snapshot_has(pkg):
             print(s)
 
 #   Write new description (default) or append to an existing one (i.e. toggle immutability)
-def write_desc(snap, desc, mode='w'):
+def write_desc(desc, snap, mode='w'):
     with open(f"/.snapshots/ash/snapshots/{snap}-desc", mode) as descfile:
         descfile.write(desc)
 
@@ -1254,7 +1251,7 @@ def main():
         cloneunder_par.set_defaults(func=clone_under)
       # Del
         del_par = subparsers.add_parser("del", aliases=["delete", "rm", "rem", "remove", "rm-snapshot"], allow_abbrev=True, help="Remove snapshot(s)/tree(s) and any branches recursively")
-        del_par.add_argument("snapshots", nargs='+', help="snapshot number")
+        del_par.add_argument("snaps", nargs='+', help="snapshot number(s)")
         del_par.add_argument('--quiet', '-q', action='store_true', required=False, help='Force delete snapshot(s)')
         del_par.set_defaults(func=delete_node)
       # Deploy
@@ -1263,9 +1260,9 @@ def main():
         dep_par.set_defaults(func=deploy)
       # Description
         desc_par = subparsers.add_parser("desc", help='Set a description for a snapshot by number')
-        desc_par.add_argument("--snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         desc_par.add_argument("desc", nargs='+', help="description to be added") ### TODO Can have bad combinations if both required=False
-        desc_par.set_defaults(func=lambda snapshot, desc: write_desc(snapshot, " ".join(desc)))
+        desc_par.add_argument("--snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
+        desc_par.set_defaults(func=lambda desc, snap: write_desc(" ".join(desc), snap))
       # Fix db command ### MAYBE ash_unlock was needed?
         fixdb_par = subparsers.add_parser("fixdb", aliases=['fix'], allow_abbrev=True, help='Fix package database of a snapshot')
         fixdb_par.add_argument("--snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
@@ -1290,14 +1287,14 @@ def main():
 ###        inst_par.add_argument("snapshot", type=int, required=False, help="snapshot number")
         inst_par.add_argument("--snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         g1i = inst_par.add_mutually_exclusive_group(required=True)
-        g1i.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='install package')
-        g1i.add_argument('--prof', '--profile', '-P', type=str, required=False, help='install profile')
+        g1i.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='package(s)')
+        g1i.add_argument('--prof', '--profile', '-P', type=str, required=False, help='profile')
         g2i = inst_par.add_mutually_exclusive_group(required=False)
         g2i.add_argument('--live', '-l', action='store_true', required=False, help='Enable live install for snapshot')
         g2i.add_argument('--not-live', '-nl', action='store_true', required=False, help='Disable live install for snapshot')
         inst_par.set_defaults(func=install_triage)
       # List subvolumes
-        sub_par = subparsers.add_parser("subs", aliases=["sub", "subvol", "subvols", "subvolumes"], allow_abbrev=True, help="List subvolumes of active snapshot (currently booted)")
+        sub_par = subparsers.add_parser("sub", aliases=["subs", "subvol", "subvols", "subvolumes"], allow_abbrev=True, help="List subvolumes of active snapshot (currently booted)")
         sub_par.set_defaults(func=list_subvolumes)
       # Live chroot
         lc_par = subparsers.add_parser("live-chroot", aliases=['lchroot', 'lc'], allow_abbrev=True, help='Open a shell inside currently booted snapshot with read-write access. Changes are discarded on new deployment.')
@@ -1314,9 +1311,9 @@ def main():
         trem_par = subparsers.add_parser("tremove", aliases=["tree-rmpkg"], allow_abbrev=True, help='Uninstall package(s) or profile(s) from a tree recursively')
         trem_par.add_argument("--snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         g1tr = trem_par.add_mutually_exclusive_group(required=True)
-        g1tr.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='package(s) to be uninstalled')
-        g1tr.add_argument('--prof', '--profile', '-P', type=str, required=False, help='profile(s) to be uninstalled') ### TODO nargs='+' for multiple profiles
-        trem_par.set_defaults(func=lambda snapshot, pkg, profile: remove_from_tree(fstree, snapshot, pkg, profile)) # REVIEW 2023 is it needed to run uninstall_package(tname, pkg) and then again remove_from_tree ? I believe not as it is redundant!
+        g1tr.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='package(s)')
+        g1tr.add_argument('--prof', '--profile', '-P', type=str, required=False, help='profile') ### TODO nargs='+' for multiple profiles
+        trem_par.set_defaults(func=lambda snap, pkg, prof: remove_from_tree(fstree, snap, pkg, prof)) # REVIEW 2023 is it needed to run uninstall_package(pkg, tname) and then again remove_from_tree ? I believe not as it is redundant!
       # Rollback
         roll_par = subparsers.add_parser("rollback", help="Rollback the deployment to the last booted snapshot")
         roll_par.set_defaults(func=rollback)
@@ -1353,7 +1350,7 @@ def main():
         trun_par = subparsers.add_parser("trun", aliases=["tree-run"], allow_abbrev=True, help='Run command(s) inside another snapshot and all snapshots below it')
         trun_par.add_argument("--snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         trun_par.add_argument('--cmd', '--command', '-c', nargs='+', required=False, help='command(s) to run')
-        trun_par.set_defaults(func=lambda snapshot, cmd: tree_run(fstree, snapshot, ' '.join(cmd)))
+        trun_par.set_defaults(func=lambda snap, cmd: tree_run(fstree, snap, ' '.join(cmd)))
       # Tree sync
         tsync_par = subparsers.add_parser("sync", aliases=["tree-sync", "tsync"], allow_abbrev=True, help='Sync packages and configuration changes recursively (requires an internet connection)')
         tsync_par.add_argument("tname", type=int, help="snapshot number")
@@ -1363,13 +1360,13 @@ def main():
       # Tree upgrade
         tupg_par = subparsers.add_parser("tupgrade", aliases=["tree-upgrade", "tup"], allow_abbrev=True, help='Update all packages in a snapshot recursively')
         tupg_par.add_argument("--snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
-        tupg_par.set_defaults(func=lambda snapshot: tree_upgrade(fstree, snapshot))
+        tupg_par.set_defaults(func=lambda snap: tree_upgrade(fstree, snap))
       # Uninstall package(s) from a snapshot
         uninst_par = subparsers.add_parser("uninstall", aliases=["unin", "uninst", "unins", "un"], allow_abbrev=True, help='Uninstall package(s) from a snapshot')
         uninst_par.add_argument("-snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         g1u = uninst_par.add_mutually_exclusive_group(required=True)
-        g1u.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='package(s) to be uninstalled')
-        g1u.add_argument('--prof', '--profile', '-P', type=str, required=False, help='profile(s) to be uninstalled')
+        g1u.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='package(s)')
+        g1u.add_argument('--prof', '--profile', '-P', type=str, required=False, help='profile')
         g2u = uninst_par.add_mutually_exclusive_group(required=False)
         g2u.add_argument('--live', '-l', action='store_true', required=False, help='make snapshot install live')
         g2u.add_argument('--not-live', '-nl', action='store_false', required=False, help='make snapshot install not live')
@@ -1405,26 +1402,26 @@ def main():
 
 #-------------------- Triage functions for argparse method --------------------#
 
-def install_triage(live, not_live, pkg, profile, snap):
+def install_triage(live, not_live, pkg, prof, snap):
     excode = 1 ### REVIEW
-    if profile:
-        excode = install_profile(snap, profile)
+    if prof:
+        excode = install_profile(prof, snap)
     elif pkg:
-        excode = install(snap, " ".join(pkg))
+        excode = install(" ".join(pkg), snap)
   # If installing into current snapshot and no not_live flag, automatically use live install
     if snap == int(get_current_snapshot()) and not not_live:
         live = True
   # Perform the live install only if install above was successful
     if live and not excode:
         if profile:
-            install_profile_live(profile, snap)
+            install_profile_live(prof, snap)
         elif pkg:
             install_live(" ".join(pkg), snap)
 
-def uninstall_triage(live, not_live, pkg, profile, snap): ### TODO add live, not_live
-    if profile:
-        #excode = uninstall_profile(snapshot, profile)
+def uninstall_triage(live, not_live, pkg, prof, snap): ### TODO add live, not_live
+    if prof:
+        #excode = uninstall_profile(prof, snap)
         print("TODO: uninstall profile")
     elif pkg:
-        uninstall_package(snap, " ".join(pkg))
+        uninstall_package(" ".join(pkg), snap)
 

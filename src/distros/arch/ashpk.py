@@ -5,19 +5,19 @@ def aur_check(snap):
     return os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}/usr/bin/paru")
 
 #   Set up AUR in snapshot (if enabled, return true)
-def aur_install(snapshot):
-    options = snapshot_config_get(snapshot)
+def aur_install(snap):
+    options = snapshot_config_get(snap)
     aur = False
     if options["aur"] == 'True':
         aur = True
-        if aur and not aur_check(snapshot):
-            prepare(snapshot) ### REVIEW NEEDED? Being called twice!
-            excode = aur_install_helper(snapshot)
+        if aur and not aur_check(snap):
+            prepare(snap) ### REVIEW NEEDED? Being called twice!
+            excode = aur_install_helper(snap)
             if excode:
-                chr_delete(snapshot)
+                chr_delete(snap)
                 print("F: Setting up AUR failed!")
                 sys.exit(1) ### REVIEW changed from sys.exit()
-            post_transactions(snapshot)
+            post_transactions(snap)
     return aur
 
 #   Set up AUR in snapshot
@@ -71,28 +71,28 @@ def aur_install_live_helper(snap):
     return 0
 
 #   Noninteractive update
-def auto_upgrade(snapshot):
+def auto_upgrade(snap):
     sync_time() # Required in virtualbox, otherwise error in package db update
-    aur = aur_install(snapshot)
-    prepare(snapshot)
+    aur = aur_install(snap)
+    prepare(snap)
     if not aur:
-        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman --noconfirm -Syyu")
+        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} pacman --noconfirm -Syyu")
     else:
-        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c 'paru --noconfirm -Syy'")
+        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c 'paru --noconfirm -Syy'")
     if excode == 0:
-        post_transactions(snapshot)
+        post_transactions(snap)
         os.system("echo 0 > /.snapshots/ash/upstate")
         os.system("echo $(date) >> /.snapshots/ash/upstate")
     else:
-        chr_delete(snapshot)
+        chr_delete(snap)
         os.system("echo 1 > /.snapshots/ash/upstate")
         os.system("echo $(date) >> /.snapshots/ash/upstate")
 
 #   Copy cache of downloaded packages to shared
-def cache_copy(snapshot, FROM):
-    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/pkg/. /var/cache/pacman/pkg/{DEBUG}")
+def cache_copy(snap, FROM):
+    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snap}/var/cache/pacman/pkg/. /var/cache/pacman/pkg/{DEBUG}")
     #if aur_enabled:
-    #    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/var/cache/pacman/aur/. /var/cache/pacman/aur/{DEBUG}")
+    #    os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snap}/var/cache/pacman/aur/. /var/cache/pacman/aur/{DEBUG}")
 
 #   Fix signature invalid error
 def fix_package_db(snap = "0"):
@@ -144,21 +144,21 @@ def init_system_copy(snap, FROM):
         os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{snap}/var/lib/systemd/. /var/lib/systemd/{DEBUG}")
 
 #   Install atomic-operation
-def install_package(snapshot, pkg):
+def install_package(pkg, snap):
     try:
       # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
         subprocess.check_output(f"pacman -Si {pkg}", shell=True) # --sysroot
     except subprocess.CalledProcessError:
-        aur = aur_install(snapshot) ### TODO: do a paru -Si {pkg} check to avoid setup_aur if package already installed!
-        prepare(snapshot)
+        aur = aur_install(snap) ### TODO: do a paru -Si {pkg} check to avoid setup_aur if package already installed!
+        prepare(snap)
         if aur:
-            return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} su aur -c \"paru -S {pkg} --needed --overwrite '/var/*'\"")
+            return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c \"paru -S {pkg} --needed --overwrite '/var/*'\"")
         else:
             print("F: AUR is not enabled!")
             return 1
     else:
-        prepare(snapshot)
-        return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} pacman -S {pkg} --needed --overwrite '/var/*'")
+        prepare(snap)
+        return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} pacman -S {pkg} --needed --overwrite '/var/*'")
 
 #   Install atomic-operation in live snapshot
 def install_package_live(pkg, tmp, snap):
@@ -180,12 +180,12 @@ def install_package_live(pkg, tmp, snap):
                 print("F: Live installation failed!") # Before: Live install failed and changes discarded
                 return excode
         if snapshot_config_get(snap)["aur"] == "True":
-            aur_in_destination_snapshot = True
+            aur_in_target_snap = True
         else:
-            aur_in_destination_snapshot = False
+            aur_in_target_snap = False
             print("F: AUR not enabled in target snapshot!") ### REVIEW
         ### REVIEW - error checking, handle the situation better altogether
-        if aur_in_destination_snapshot and not aur_in_tmp:
+        if aur_in_target_snap and not aur_in_tmp:
             print("F: AUR is not enabled in current live snapshot, but is enabled in target.\nEnable AUR for live snapshot? (y/n)")
             reply = input("> ")
             while reply.casefold() != "y" and reply.casefold() != "n":
@@ -225,7 +225,7 @@ def snapshot_diff(snap1, snap2):
         os.system(f"bash -c \"diff <(ls /.snapshots/rootfs/snapshot-{snap1}/usr/share/ash/db/local) <(ls /.snapshots/rootfs/snapshot-{snap2}/usr/share/ash/db/local) | grep '^>\|^<' | sort\"") ### REVIEW
 
 #   Uninstall package(s) atomic-operation
-def uninstall_package_helper(snap, pkg):
+def uninstall_package_helper(pkg, snap):
     return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} pacman --noconfirm -Rns {pkg}")
 
 #   Upgrade snapshot atomic-operation
