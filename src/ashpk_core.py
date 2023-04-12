@@ -1401,16 +1401,14 @@ def main():
 #-------------------- Triage functions for argparse method --------------------#
 
 def install_triage(live, not_live, pkg, prof, snap):
-    excode = 1 ### REVIEW
+    excode = 1 ### REVIEW Use try except
     if prof:
         excode = install_profile(prof, snap)
     elif pkg:
         excode = install(" ".join(pkg), snap)
-  # If installing into current snapshot and no not_live flag, automatically use live install
-    if snap == get_current_snapshot() and not not_live:
-        live = True
-  # Perform the live install only if install above was successful
-    if live and not excode:
+  # Do live install only if: live flag is used OR target snapshot is current and
+  # not_live flag is not used. And anyway only run if install above succeeded!
+    if not excode and (live or (snap == get_current_snapshot() and not not_live)):
         if prof:
             install_profile_live(prof, snap)
         elif pkg:
