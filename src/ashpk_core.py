@@ -553,7 +553,7 @@ def install_profile(prof, snap, force=False):
 #                resp = get(f"{URL}/profiles/{prof}/{dist}.conf", allow_redirects=True) ### REVIEW
 #                with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
 #                    cfile.write(resp.text) # Save for later use
-                profconf.read_string(resp.text)
+                profconf.read_string(resp)
                 for p in profconf['packages']:
                     pkgs += f"{p} "
                 install_package(pkgs.strip(), snap) # remove last space
@@ -617,7 +617,7 @@ def install_profile_live(prof, snap, force):
 #            resp = get(f"{URL}/profiles/{prof}/{dist}.conf", allow_redirects=True) ### REVIEW
 #            with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
 #                cfile.write(resp.text) # Save for later use
-            profconf.read_string(resp.text)
+            profconf.read_string(resp)
             for p in profconf['packages']:
                 pkgs += f"{p} "
             install_package_live(pkgs.strip(), snap, tmp) ### REVIEW snapshot argument needed
