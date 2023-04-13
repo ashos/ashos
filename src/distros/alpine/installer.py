@@ -13,7 +13,7 @@ APK = "2.12.11-r0" # https://git.alpinelinux.org/aports/plain/main/apk-tools/APK
 ARCH = "x86_64"
 RELEASE = "edge"
 KERNEL = "edge" ### lts
-packages = f"linux-{KERNEL} blkid curl coreutils sudo tzdata mount mkinitfs umount tmux python3 py3-anytree bash"
+packages = f"linux-{KERNEL} curl coreutils sudo tzdata mount mkinitfs umount tmux python3 py3-anytree bash"
             #linux-firmware-none networkmanager linux-firmware nano doas os-prober musl-locales musl-locales-lang dbus #### default mount from busybox gives errors. Do I also need umount?!
 if is_efi:
     packages += " grub-efi efibootmgr"
