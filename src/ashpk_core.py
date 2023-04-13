@@ -348,17 +348,19 @@ def deploy(snap):
         if check_mutability(snap):
             os.system(f"sed -i '0,/snapshot-{tmp}/ s|,ro||' /.snapshots/rootfs/snapshot-{tmp}/etc/fstab") ### ,rw
       # Add special user-defined mutable directories as bind-mounts into fstab
-        for mnt_path in mtbl_dirs:
-            src_path = f"/.snapshots/mutable_dirs/snapshot-{snap}/{mnt_path}"
-            os.system(f"mkdir -p /.snapshots/mutable_dirs/snapshot-{snap}/{mnt_path}")
-            os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mnt_path}")
-            os.system(f"echo '{src_path} /{mnt_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
+        if mtbl_dirs:
+            for mnt_path in mtbl_dirs: # type: ignore
+                src_path = f"/.snapshots/mutable_dirs/snapshot-{snap}/{mnt_path}"
+                os.system(f"mkdir -p /.snapshots/mutable_dirs/snapshot-{snap}/{mnt_path}")
+                os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mnt_path}")
+                os.system(f"echo '{src_path} /{mnt_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
       # Same thing but for shared directories
-        for mnt_path in mtbl_dirs_shared:
-            src_path = f"/.snapshots/mutable_dirs/{mnt_path}"
-            os.system(f"mkdir -p /.snapshots/mutable_dirs/{mnt_path}")
-            os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mnt_path}")
-            os.system(f"echo '{src_path} /{mnt_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
+        if mtbl_dirs_shared:
+            for mnt_path in mtbl_dirs_shared: # type: ignore
+                src_path = f"/.snapshots/mutable_dirs/{mnt_path}"
+                os.system(f"mkdir -p /.snapshots/mutable_dirs/{mnt_path}")
+                os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mnt_path}")
+                os.system(f"echo '{src_path} /{mnt_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
         os.system(f"btrfs sub snap /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}") ### REVIEW Is this needed? Can it be moved up?
         os.system(f"echo '{snap}' > /.snapshots/rootfs/snapshot-{tmp}/usr/share/ash/snap")
         switch_tmp()
@@ -597,7 +599,7 @@ def install_profile_OLD(prof, snap):
             deploy(snap)
 
 #   Install profile in live snapshot
-def install_profile_live(prof, snap):
+def install_profile_live(prof, snap, force):
     dist = distro.split("_")[0] # Remove '_ashos"
     tmp = get_tmp()
     ash_chroot_mounts(tmp)
@@ -717,10 +719,12 @@ def post_transactions(snap):
     options = snapshot_config_get(snap)
     mtbl_dirs = options["mutable_dirs"].split(',').remove('')
     mtbl_dirs_shared = options["mutable_dirs_shared"].split(',').remove('')
-    for mnt_path in mtbl_dirs:
-        os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}{DEBUG}")
-    for mnt_path in mtbl_dirs_shared:
-        os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}{DEBUG}")
+    if mtbl_dirs:
+        for mnt_path in mtbl_dirs: # type: ignore
+            os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}{DEBUG}")
+    if mtbl_dirs_shared:
+        for mnt_path in mtbl_dirs_shared: # type: ignore
+            os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}{DEBUG}")
   # ---------------------- fix for hollow functionality ---------------------- #
     chr_delete(snap)
 
@@ -788,12 +792,12 @@ def prepare(snap):
     mtbl_dirs = options["mutable_dirs"].split(',').remove('')
     mtbl_dirs_shared = options["mutable_dirs_shared"].split(',').remove('')
     if mtbl_dirs:
-        for mnt_path in mtbl_dirs:
+        for mnt_path in mtbl_dirs: # type: ignore
             os.system(f"mkdir -p /.snapshots/mutable_dirs/snapshot-{snap}/{mnt_path}")
             os.system(f"mkdir -p /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}")
             os.system(f"mount --bind /.snapshots/mutable_dirs/snapshot-{snap}/{mnt_path} /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}")
     if mtbl_dirs_shared:
-        for mnt_path in mtbl_dirs_shared:
+        for mnt_path in mtbl_dirs_shared: # type: ignore
             os.system(f"mkdir -p /.snapshots/mutable_dirs/{mnt_path}")
             os.system(f"mkdir -p /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}")
             os.system(f"mount --bind /.snapshots/mutable_dirs/{mnt_path} /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}")
@@ -1448,7 +1452,7 @@ def main():
         tupg_par.set_defaults(func=lambda snap: tree_upgrade(fstree, snap))
       # Uninstall package(s) from a snapshot
         uninst_par = subparsers.add_parser("uninstall", aliases=["unin", "uninst", "unins", "un"], allow_abbrev=True, help='Uninstall package(s) from a snapshot')
-        uninst_par.add_argument("-snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
+        uninst_par.add_argument("--snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         g1u = uninst_par.add_mutually_exclusive_group(required=True)
         g1u.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='package(s)')
         g1u.add_argument('--prof', '--profile', '-P', type=str, required=False, help='profile')
@@ -1487,17 +1491,17 @@ def main():
 
 #-------------------- Triage functions for argparse method --------------------#
 
-def install_triage(live, not_live, pkg, prof, snap):
+def install_triage(live, not_live, pkg, prof, snap, force):
     excode = 1 ### REVIEW Use try except
     if prof:
-        excode = install_profile(prof, snap)
+        excode = install_profile(prof, snap, force)
     elif pkg:
         excode = install(" ".join(pkg), snap)
   # Do live install only if: live flag is used OR target snapshot is current and
   # not_live flag is not used. And anyway only run if install above succeeded!
     if not excode and (live or (snap == get_current_snapshot() and not not_live)):
         if prof:
-            install_profile_live(prof, snap)
+            install_profile_live(prof, snap, force)
         elif pkg:
             install_live(" ".join(pkg), snap)
 
