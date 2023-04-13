@@ -38,7 +38,7 @@ distro = subprocess.check_output(['/usr/bin/detect_os.sh', 'id']).decode('utf-8'
 distro_name = subprocess.check_output(['/usr/bin/detect_os.sh', 'name']).decode('utf-8').strip()
 GRUB = subprocess.check_output("ls /boot | grep grub", encoding='utf-8', shell=True).strip()
 DEBUG = " >/dev/null 2>&1" # options: "", " >/dev/null 2>&1"
-URL = "https://raw.githubusercontent.com/ashos/ashos/main/src/"
+URL = "https://raw.githubusercontent.com/ashos/ashos/main/src"
 USERNAME = os.getenv("SUDO_USER") or os.getenv("USER")
 HOME = os.path.expanduser('~'+ USERNAME) # type: ignore
 
@@ -91,10 +91,10 @@ def ash_update(dbg):
     mode = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
     with TemporaryDirectory(dir="/.snapshots/tmp", prefix="ashpk.") as tmpdir:
         try:
-            #f1 = get(f"{URL}/src/ashpk_core.py", allow_redirects=True)
+            #f1 = get(f"{URL}/ashpk_core.py", allow_redirects=True)
             #f2 = get(f"{URL}/distros/{dist}/ashpk.py", allow_redirects=True) ### REVIEW
             #open(f"{tmpdir}/ash", 'w').write(f1.text + f2.text)
-            f1 = urlopen(f"{URL}/src/ashpk_core.py").read().decode('utf-8')
+            f1 = urlopen(f"{URL}/ashpk_core.py").read().decode('utf-8')
             f2 = urlopen(f"{URL}/distros/{dist}/ashpk.py").read().decode('utf-8')
             open(f"{tmpdir}/ash", 'w').write(f1 + f2)
         except (HTTPError, URLError):
@@ -639,7 +639,7 @@ def install_profile_live_OLD(prof, snap): ### DELETE
     print(f"Updating the system before installing profile {prof}.")
     auto_upgrade(tmp)
     tmp_prof = subprocess.check_output("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX", shell=True, encoding='utf-8').strip()
-    subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.conf -LO {URL}profiles/{prof}/packages{get_distro_suffix()}.conf", shell=True)
+    subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.conf -LO {URL}/profiles/{prof}/packages{get_distro_suffix()}.conf", shell=True)
   # Ignore empty lines or ones starting with # [ % &
     pkg = subprocess.check_output(f"cat {tmp_prof}/packages.conf | grep -E -v '^#|^\\[|^%|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
     excode1 = install_package_live(pkg, snap, tmp) ### REVIEW snapshot argument needed
@@ -1336,7 +1336,7 @@ def main():
         cloneunder_par.set_defaults(func=clone_under)
       # Del
         del_par = subparsers.add_parser("del", aliases=["delete", "rm", "rem", "remove", "rm-snapshot"], allow_abbrev=True, help="Remove snapshot(s)/tree(s) and any branches recursively")
-        del_par.add_argument("snaps", nargs='+', type=int, help="snapshot number(s)")
+        del_par.add_argument("--snaps", "--snapshots", "-s", nargs='+', type=int, required=True, help="snapshot number")
         del_par.add_argument('--quiet', '-q', action='store_true', required=False, help='Force delete snapshot(s)')
         del_par.set_defaults(func=delete_node)
       # Deploy
@@ -1357,7 +1357,7 @@ def main():
         cs_par.set_defaults(func=lambda: print(get_current_snapshot()))
       # Hollow a node
         hol_par = subparsers.add_parser("hollow", help='Make a snapshot hollow (vulnerable)')
-        hol_par.add_argument("snap", type=int, help="snapshot number") ### REVIEW make it a "--snap"
+        hol_par.add_argument("--snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         hol_par.set_defaults(func=hollow)
       # Immutability disable
         immdis_par = subparsers.add_parser("immdis", aliases=["disimm", "immdisable", "disableimm"], allow_abbrev=True, help='Disable immutability of a snapshot')
@@ -1369,7 +1369,6 @@ def main():
         immen_par.set_defaults(func=immutability_enable)
       # Install
         inst_par = subparsers.add_parser("install", aliases=['in'], allow_abbrev=True, help='Install package(s) inside a snapshot')
-###        inst_par.add_argument("snapshot", type=int, required=False, help="snapshot number")
         inst_par.add_argument("--snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         g1i = inst_par.add_mutually_exclusive_group(required=True)
         g1i.add_argument('--pkg', '--package', '-p', nargs='+', required=False, help='package(s)')
@@ -1418,7 +1417,7 @@ def main():
         diff_par.set_defaults(func=snapshot_diff)
       # Snapshot unlock
         unl_par = subparsers.add_parser("unlock", aliases=["ul"], allow_abbrev=True, help='Unlock a snapshot')
-        unl_par.add_argument("snap", type=int, help="snapshot number")
+        unl_par.add_argument("--snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         unl_par.set_defaults(func=snapshot_unlock)
       # Switch distros
         switch_par = subparsers.add_parser("dist", aliases=["distro", "distros"], allow_abbrev=True, help="Switch to another distro")
