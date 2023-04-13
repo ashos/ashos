@@ -16,11 +16,12 @@ KERNEL = "edge" ### lts
 packages = f"linux-{KERNEL} curl coreutils sudo tzdata mount mkinitfs umount tmux python3 py3-anytree bash"
             #linux-firmware-none networkmanager linux-firmware nano doas os-prober musl-locales musl-locales-lang dbus #### default mount from busybox gives errors. Do I also need umount?!
 if is_efi:
-    packages += " grub-efi efibootmgr"
+    packages += " efibootmgr"
+    packages_no_trigger = "grub-efi" # https://gitlab.alpinelinux.org/alpine/aports/-/issues/11673
 #    if is_mutable: ### TODO still errors
 #        packages += " dosfstools" # Optional for fsck.vfat checks at boot up
 else:
-    packages += " grub-bios"
+    packages_no_trigger = "grub-bios"
 if is_format_btrfs:
     packages += " btrfs-progs"
 if is_luks:
@@ -67,10 +68,19 @@ os.system("tar zxf apk-tools-static-*.apk")
 excode1 = os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add alpine-base") ### REVIEW Is "/" needed after {URL} ?
 copy("./src/distros/alpine/repositories", "/mnt/etc/apk/") ### REVIEW MOVED from down at section 3 to here as installing 'bash' was giving error
 os.system("sudo cp --dereference /etc/resolv.conf /mnt/etc/") # --remove-destination ### not writing through dangling symlink! (TODO: try except)
-excode2 = os.system(f"sudo chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'") ### changed bash to sh
 
-if excode1 or excode2:
-    sys.exit("Failed to bootstrap!")
+while True:
+    try:
+        subprocess.check_output(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'", shell=True)
+        subprocess.check_output(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add --no-scripts {packages_no_trigger}'", shell=True)
+    except subprocess.CalledProcessError:
+        print("F: Bootstrap failed!")
+        if yes_no("Would you like to try again?"):
+            continue
+        else:
+            break
+    else:
+        print("Bootstrap finished!")
 
 #   Mount-points for chrooting
 ash_chroot()
