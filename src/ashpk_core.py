@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import os
+import stat
 import subprocess
 import sys
 from anytree import AsciiStyle, find, Node, PreOrderIter, RenderTree
@@ -8,10 +9,13 @@ from anytree.exporter import DictExporter
 from anytree.importer import DictImporter
 from argparse import ArgumentParser
 from ast import literal_eval
+from configparser import ConfigParser, NoOptionError, NoSectionError
 from filecmp import cmp
 from os.path import expanduser
 from re import sub
+from requests import get, exceptions
 from shutil import copy
+from tempfile import TemporaryDirectory
 
 # Directories
 # All snapshots share one /var
@@ -32,6 +36,9 @@ distro = subprocess.check_output(['/usr/bin/detect_os.sh', 'id']).decode('utf-8'
 distro_name = subprocess.check_output(['/usr/bin/detect_os.sh', 'name']).decode('utf-8').strip()
 GRUB = subprocess.check_output("ls /boot | grep grub", encoding='utf-8', shell=True).strip()
 DEBUG = " >/dev/null 2>&1" # options: "", " >/dev/null 2>&1"
+URL = "https://raw.githubusercontent.com/ashos/ashos/main/src/"
+USERNAME = os.getenv("SUDO_USER") or os.getenv("USER")
+HOME = os.path.expanduser('~'+ USERNAME) # type: ignore
 
 # ------------------------------ CORE FUNCTIONS ------------------------------ #
 
@@ -78,27 +85,27 @@ def ash_chroot_mounts(i, CHR=""):
 
 #   Update ash itself
 def ash_update(dbg):
-    try:
-        d = distro.split("_")[0] # Remove '_ashos"
-        tmp_ash = subprocess.check_output("mktemp -d -p /.snapshots/tmp ashpk.XXXXXXXXXXXXXXXX", shell=True, encoding='utf-8').strip()
-        subprocess.check_output(f"curl --fail -H 'pragma:no-cache' -H 'cache-control:no-cache,no-store' -s -o {tmp_ash}/ashpk_core.py -O \
-                                'https://raw.githubusercontent.com/ashos/ashos/main/src/ashpk_core.py'", shell=True) # GitHub still caches
-        subprocess.check_output(f"curl --fail -H 'pragma:no-cache' -H 'cache-control:no-cache,no-store' -s -o {tmp_ash}/ashpk.py -O \
-                                'https://raw.githubusercontent.com/ashos/ashos/main/src/distros/{d}/ashpk.py'", shell=True)
-        os.system(f"cat {tmp_ash}/ashpk_core.py {tmp_ash}/ashpk.py > {tmp_ash}/ash")
-        os.system(f"chmod +x {tmp_ash}/ash")
-    except subprocess.CalledProcessError:
-        print(f"F: Failed to download ash.")
-    else:
-        if dbg: # Just for testing
-            copy(f"{tmp_ash}/ash", f'{expanduser("~")}/ash-latest')
-            print(f"Latest ash downloaded to $HOME.")
-        elif cmp(f"{tmp_ash}/ash", __file__, shallow=True):
-            copy(__file__, f"{tmp_ash}/ash_old")
-            copy(f"{tmp_ash}/ash", __file__)
-            print(f"Ash updated succesfully. Old Ash moved to {tmp_ash}.")
+    dist = distro.split("_")[0] # Remove '_ashos"
+    mode = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+    with TemporaryDirectory(dir="/.snapshots/tmp", prefix="ashpk.") as tmpdir:
+        try:
+            f1 = get(f"{URL}/src/ashpk_core.py", allow_redirects=True)
+            f2 = get(f"{URL}/distros/{dist}/ashpk.py", allow_redirects=True) ### REVIEW
+            open(f"{tmpdir}/ash", 'w').write(f1.text + f2.text)
+        except exceptions.RequestException:
+            print(f"F: Failed to download ash.")
         else:
-            print("F: Ash already up to date.")
+            if dbg: # Just for testing
+                copy(f"{tmpdir}/ash", f'{HOME}/ash-latest')
+                os.chmod(f'{HOME}/ash-latest', mode)
+                print(f"Latest ash downloaded to {HOME}.")
+            elif cmp(f"{tmpdir}/ash", __file__, shallow=False):
+                print("F: Ash already up to date.")
+            else:
+                copy(__file__, f"{dir}/ash_old")
+                copy(f"{tmpdir}/ash", __file__)
+                os.chmod(__file__, mode)
+                print(f"Ash updated succesfully. Old Ash moved to {tmpdir}.")
 
 def ash_version():
     os.system('date -r /usr/bin/ash "+%Y%m%d-%H%M%S"')
@@ -515,7 +522,46 @@ def install_live(pkg, snap=get_current_snapshot()):
         print("F: Live installation failed!")
 
 #   Install a profile from a text file
-def install_profile(prof, snap):
+def install_profile(prof, snap, force=False):
+    dist = distro.split("_")[0] # Remove '_ashos"
+    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
+        print(f"F: Cannot install as snapshot {snap} doesn't exist.")
+    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
+    elif snap == 0:
+        print("F: Changing base snapshot is not allowed.")
+    else:
+        print(f"Updating the system before installing profile {prof}.")
+        auto_upgrade(snap) # include these in try except too!
+        prepare(snap)
+        pkgs = ""
+        profconf = ConfigParser(allow_no_value=True)
+        try:
+            if os.path.exists(f"/.snapshots/tmp/{prof}.conf") and not force:
+                profconf.read(f"/.snapshots/tmp/{prof}.conf")
+            else:
+                print(f"Downloading profile {prof} from AshOS...")
+                resp = get(f"{URL}/profiles/{prof}/{dist}.conf", allow_redirects=True) ### REVIEW
+                with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
+                    cfile.write(resp.text) # Save for later use
+                profconf.read_string(resp.text)
+                for p in profconf['packages']:
+                    pkgs += f"{p} "
+                install_package(pkgs.strip(), snap) # remove last space
+                for cmd in profconf['commands']:
+                    print(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}")
+        except (NoOptionError, NoSectionError, exceptions.RequestException): ### REVIEW 2023
+            chr_delete(snap)
+            print("F: Install failed and changes discarded!")
+            sys.exit(1) ### REVIEW 2023
+        else:
+            post_transactions(snap)
+            print(f"Profile {prof} installed in snapshot {snap} successfully.")
+            print(f"Deploying snapshot {snap}.")
+            deploy(snap)
+
+#   Install a profile from a text file
+def install_profile_OLD(prof, snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot install as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
@@ -544,14 +590,47 @@ def install_profile(prof, snap):
 
 #   Install profile in live snapshot
 def install_profile_live(prof, snap):
+    dist = distro.split("_")[0] # Remove '_ashos"
+    tmp = get_tmp()
+    ash_chroot_mounts(tmp)
+    print(f"Updating the system before installing profile {prof}.")
+    auto_upgrade(tmp)
+    pkgs = ""
+    profconf = ConfigParser(allow_no_value=True)
+    try:
+        if os.path.exists(f"/.snapshots/tmp/{prof}.conf") and not force:
+            profconf.read(f"/.snapshots/tmp/{prof}.conf")
+        else:
+            print(f"Downloading profile {prof} from AshOS...")
+            resp = get(f"{URL}/profiles/{prof}/{dist}.conf", allow_redirects=True) ### REVIEW
+            with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
+                cfile.write(resp.text) # Save for later use
+            profconf.read_string(resp.text)
+            for p in profconf['packages']:
+                pkgs += f"{p} "
+            install_package_live(pkgs.strip(), snap, tmp) ### REVIEW snapshot argument needed
+            for cmd in profconf['commands']:
+                print(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}")
+            excode2 = service_enable(prof, tmp_prof, tmp) ### IMPORTANT: tmp or snap?!
+    except (NoOptionError, NoSectionError, exceptions.RequestException): ### REVIEW 2023
+        print("F: Install failed!") # Before: Install failed and changes discarded (rephrased as there is no chr_delete here)
+        return 1
+    else:
+        print(f"Profile {prof} installed in current/live snapshot.") ### REVIEW
+        return 0
+    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}") ### REVIEW
+    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") ### REVIEW
+
+
+def install_profile_live_OLD(prof, snap): ### DELETE
     tmp = get_tmp()
     ash_chroot_mounts(tmp)
     print(f"Updating the system before installing profile {prof}.")
     auto_upgrade(tmp)
     tmp_prof = subprocess.check_output("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX", shell=True, encoding='utf-8').strip()
-    subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{prof}/packages{get_distro_suffix()}.txt", shell=True)
+    subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.conf -LO {URL}profiles/{prof}/packages{get_distro_suffix()}.conf", shell=True)
   # Ignore empty lines or ones starting with # [ % &
-    pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\\[|^%|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
+    pkg = subprocess.check_output(f"cat {tmp_prof}/packages.conf | grep -E -v '^#|^\\[|^%|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
     excode1 = install_package_live(pkg, snap, tmp) ### REVIEW snapshot argument needed
     excode2 = service_enable(prof, tmp_prof, tmp) ### IMPORTANT: tmp or snap?!
     if excode1 or excode2:
@@ -786,16 +865,16 @@ def rollback():
     write_desc("rollback", i)
     deploy(i)
 
-#   Enable service(s) (Systemd, OpenRC, etc.)
+#   Enable service(s) (Systemd, OpenRC, etc.) # DELETE
 def service_enable(prof, tmp_prof, snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot enable services as snapshot {snap} doesn't exist.")
     else: ### No need for other checks as this function is not exposed to user
         try:
-            postinst = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -w '^&' | sed 's|& ||'", shell=True).decode('utf-8').strip().split('\n')
+            postinst = subprocess.check_output(f"cat {tmp_prof}/packages.conf | grep -E -w '^&' | sed 's|& ||'", shell=True).decode('utf-8').strip().split('\n')
             for cmd in list(filter(None, postinst)): # remove '' from [''] if no postinstalls
                 subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}", shell=True)
-            services = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -w '^%' | sed 's|% ||'", shell=True).decode('utf-8').strip().split('\n')
+            services = subprocess.check_output(f"cat {tmp_prof}/packages.conf | grep -E -w '^%' | sed 's|% ||'", shell=True).decode('utf-8').strip().split('\n')
             for cmd in list(filter(None, services)): # remove '' from [''] if no services
                 subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}", shell=True)
         except subprocess.CalledProcessError:
@@ -1287,6 +1366,7 @@ def main():
         g2i = inst_par.add_mutually_exclusive_group(required=False)
         g2i.add_argument('--live', '-l', action='store_true', required=False, help='Enable live install for snapshot')
         g2i.add_argument('--not-live', '-nl', action='store_true', required=False, help='Disable live install for snapshot')
+        g2i.add_argument('--force', '-f', '-u', action='store_true', required=False, help='Force download profile (Ignore cache)')
         inst_par.set_defaults(func=install_triage)
       # List subvolumes
         sub_par = subparsers.add_parser("sub", aliases=["subs", "subvol", "subvols", "subvolumes"], allow_abbrev=True, help="List subvolumes of active snapshot (currently booted)")
@@ -1350,7 +1430,7 @@ def main():
         tsync_par = subparsers.add_parser("sync", aliases=["tree-sync", "tsync"], allow_abbrev=True, help='Sync packages and configuration changes recursively (requires an internet connection)')
         tsync_par.add_argument("tname", type=int, help="snapshot number")
         tsync_par.add_argument('-f', '--force', '--force-offline', action='store_true', required=False, help='Snapshots would not get updated (potentially riskier)')
-        tsync_par.add_argument('--not-live', '-nl', action='store_true', required=False, help='Disable live sync')
+        tsync_par.add_argument('--not-live', '-nl', action='store_true', required=False, help='Disable live sync') ### REVIEW store_false
         tsync_par.set_defaults(func=lambda tname, force_offline, not_live: tree_sync(fstree, tname, force_offline, not not_live))
       # Tree upgrade
         tupg_par = subparsers.add_parser("tupgrade", aliases=["tree-upgrade", "tup"], allow_abbrev=True, help='Update all packages in a snapshot recursively')
