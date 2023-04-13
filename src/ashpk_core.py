@@ -289,9 +289,8 @@ def delete_node(snaps, quiet):
             print("F: Cannot delete booted snapshot.")
         elif snap == get_next_snapshot():
             print("F: Cannot delete deployed snapshot.")
-        elif not quiet:
-            if not yes_no(f"Are you sure you want to delete snapshot {snap}?"):
-                sys.exit("Aborted")
+        elif not quiet and not yes_no(f"Are you sure you want to delete snapshot {snap}?"):
+            sys.exit("Aborted")
         else:
             children = return_children(fstree, snap)
             write_desc("", snap) # Clear description # Why have this? REVIEW 2023

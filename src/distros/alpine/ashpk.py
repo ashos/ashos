@@ -37,6 +37,8 @@ def fix_package_db(snap = 0):
             immutability_disable(snap)
             flip = True
         prepare(snap)
+        os.system(f"{P}apk del --purge grub-efi grub") ### REVIEW NEEDED
+        os.system(f"{P}apk add grub-efi") ### REVIEW NEEDED
         os.system(f"{P}apk -sv fix") ### REVIEW NEEDED
         post_transactions(snap)
         if flip:
