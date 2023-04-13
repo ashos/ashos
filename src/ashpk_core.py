@@ -13,9 +13,11 @@ from configparser import ConfigParser, NoOptionError, NoSectionError
 from filecmp import cmp
 from os.path import expanduser
 from re import sub
-from requests import get, exceptions
 from shutil import copy
 from tempfile import TemporaryDirectory
+from urllib.request import urlopen
+from urllib.error import URLError, HTTPError
+
 
 # Directories
 # All snapshots share one /var
@@ -89,10 +91,13 @@ def ash_update(dbg):
     mode = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
     with TemporaryDirectory(dir="/.snapshots/tmp", prefix="ashpk.") as tmpdir:
         try:
-            f1 = get(f"{URL}/src/ashpk_core.py", allow_redirects=True)
-            f2 = get(f"{URL}/distros/{dist}/ashpk.py", allow_redirects=True) ### REVIEW
-            open(f"{tmpdir}/ash", 'w').write(f1.text + f2.text)
-        except exceptions.RequestException:
+            #f1 = get(f"{URL}/src/ashpk_core.py", allow_redirects=True)
+            #f2 = get(f"{URL}/distros/{dist}/ashpk.py", allow_redirects=True) ### REVIEW
+            #open(f"{tmpdir}/ash", 'w').write(f1.text + f2.text)
+            f1 = urlopen(f"{URL}/src/ashpk_core.py").read().decode('utf-8')
+            f2 = urlopen(f"{URL}/distros/{dist}/ashpk.py").read().decode('utf-8')
+            open(f"{tmpdir}/ash", 'w').write(f1 + f2)
+        except (HTTPError, URLError):
             print(f"F: Failed to download ash.")
         else:
             if dbg: # Just for testing
@@ -541,16 +546,19 @@ def install_profile(prof, snap, force=False):
                 profconf.read(f"/.snapshots/tmp/{prof}.conf")
             else:
                 print(f"Downloading profile {prof} from AshOS...")
-                resp = get(f"{URL}/profiles/{prof}/{dist}.conf", allow_redirects=True) ### REVIEW
+                resp = urlopen(f"{URL}/profiles/{prof}/{dist}.conf").read().decode('utf-8') ### REVIEW
                 with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
-                    cfile.write(resp.text) # Save for later use
+                    cfile.write(resp) # Save for later use
+#                resp = get(f"{URL}/profiles/{prof}/{dist}.conf", allow_redirects=True) ### REVIEW
+#                with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
+#                    cfile.write(resp.text) # Save for later use
                 profconf.read_string(resp.text)
                 for p in profconf['packages']:
                     pkgs += f"{p} "
                 install_package(pkgs.strip(), snap) # remove last space
                 for cmd in profconf['commands']:
                     print(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}")
-        except (NoOptionError, NoSectionError, exceptions.RequestException): ### REVIEW 2023
+        except (NoOptionError, NoSectionError, HTTPError, URLError): ### REVIEW 2023
             chr_delete(snap)
             print("F: Install failed and changes discarded!")
             sys.exit(1) ### REVIEW 2023
@@ -602,17 +610,20 @@ def install_profile_live(prof, snap):
             profconf.read(f"/.snapshots/tmp/{prof}.conf")
         else:
             print(f"Downloading profile {prof} from AshOS...")
-            resp = get(f"{URL}/profiles/{prof}/{dist}.conf", allow_redirects=True) ### REVIEW
+            resp = urlopen(f"{URL}/profiles/{prof}/{dist}.conf").read().decode('utf-8') ### REVIEW
             with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
-                cfile.write(resp.text) # Save for later use
+                cfile.write(resp) # Save for later use
+#            resp = get(f"{URL}/profiles/{prof}/{dist}.conf", allow_redirects=True) ### REVIEW
+#            with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
+#                cfile.write(resp.text) # Save for later use
             profconf.read_string(resp.text)
             for p in profconf['packages']:
                 pkgs += f"{p} "
             install_package_live(pkgs.strip(), snap, tmp) ### REVIEW snapshot argument needed
             for cmd in profconf['commands']:
                 print(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}")
-            excode2 = service_enable(prof, tmp_prof, tmp) ### IMPORTANT: tmp or snap?!
-    except (NoOptionError, NoSectionError, exceptions.RequestException): ### REVIEW 2023
+            #excode2 = service_enable(prof, tmp_prof, tmp) ### IMPORTANT: tmp or snap?!
+    except (NoOptionError, NoSectionError, HTTPError, URLError): ### REVIEW 2023
         print("F: Install failed!") # Before: Install failed and changes discarded (rephrased as there is no chr_delete here)
         return 1
     else:
