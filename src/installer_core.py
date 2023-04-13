@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+from re import search
 from setup import args, distro, distro_name
 
 # ------------------------------ CORE FUNCTIONS ------------------------------ #
@@ -273,7 +274,14 @@ def set_password(u, s="sudo"): ### REVIEW Use super_group?
             continue
 
 def to_uuid(part):
-    return subprocess.check_output(f"sudo blkid -s UUID -o value {part}", shell=True).decode('utf-8').strip()
+    try: # util-linx
+        u = subprocess.check_output(f"sudo blkid -s UUID -o value {part}", shell=True).decode('utf-8').strip()
+    except subprocess.CalledProcessError: # BusyBox
+        u = subprocess.check_output(f"sudo blkid {part}", shell=True).decode('utf-8').strip()
+        return search('UUID="(.+?)"' , u).group(1)
+#        return u.partition('UUID="')[2].partition('"')[0]
+    else:
+        return u
 
 #   Unmount everything and finish
 def unmounts():
