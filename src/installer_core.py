@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import os
-from subprocess import check_output
+import subprocess
 from re import search
 from setup import args, distro, distro_name
 from shutil import which

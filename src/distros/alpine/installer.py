@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
-from os import listdir, system
+import subprocess
+import os
 from setup import args, distro
 from shutil import copy
-from subprocess import check_output, CalledProcessError
 from src.installer_core import * # NOQA
 #from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 
