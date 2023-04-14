@@ -276,10 +276,10 @@ def set_password(u, s="sudo"): ### REVIEW Use super_group?
 
 def to_uuid(part):
     if 'busybox' in os.readlink(which("blkid")): # type: ignore
-        u = check_output(f"sudo blkid {part}", shell=True).decode('utf-8').strip()
+        u = subprocess.check_output(f"sudo blkid {part}", shell=True).decode('utf-8').strip()
         return search('UUID="(.+?)"' , u).group(1)
     else: # util-linx (non-Alpine)
-        u = check_output(f"sudo blkid -s UUID -o value {part}", shell=True).decode('utf-8').strip()
+        u = subprocess.check_output(f"sudo blkid -s UUID -o value {part}", shell=True).decode('utf-8').strip()
 
 
 #   Unmount everything and finish

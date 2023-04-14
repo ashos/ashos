@@ -68,16 +68,13 @@ excode1 = os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X {URL} -U --allow-u
 copy("./src/distros/alpine/repositories", "/mnt/etc/apk/") ### REVIEW MOVED from down at section 3 to here as installing 'bash' was giving error
 os.system("sudo cp --dereference /etc/resolv.conf /mnt/etc/") # --remove-destination ### not writing through dangling symlink! (TODO: try except)
 
-while True:
-    try:
-        subprocess.check_output(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'", shell=True)
-        subprocess.check_output(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add --no-scripts {packages_no_trigger}'", shell=True)
-    except subprocess.CalledProcessError:
-        print("F: Bootstrap failed!")
-        if yes_no("Would you like to try again?"):
-            continue
-        else:
-            break
+try:
+    subprocess.check_output(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'", shell=True)
+    subprocess.check_output(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add --no-scripts {packages_no_trigger}'", shell=True)
+except subprocess.CalledProcessError:
+    print("F: Bootstrap failed!")
+#        if yes_no("Would you like to try again?"):
+#            continue
 
 #   Mount-points for chrooting
 ash_chroot()
