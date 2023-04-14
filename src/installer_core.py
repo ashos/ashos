@@ -1,9 +1,10 @@
 #!/usr/bin/python3
 
 import os
-import subprocess
+from subprocess import check_output
 from re import search
 from setup import args, distro, distro_name
+from shutil import which
 
 # ------------------------------ CORE FUNCTIONS ------------------------------ #
 
@@ -28,7 +29,7 @@ def create_user(u, g):
     else:
         os.system(f"sudo chroot /mnt sudo useradd -m -G {g} -s /bin/sh {u}")
     os.system(f"echo '%{g} ALL=(ALL:ALL) ALL' | sudo tee -a /mnt/etc/sudoers")
-    os.system(f"echo 'export XDG_RUNTIME_DIR=\"/run/user/1000\"' | sudo tee -a /mnt/home/{u}/.bashrc")
+    os.system(f"echo 'export XDG_RUNTIME_DIR=\"/run/user/1000\"' | sudo tee -a /mnt/home/{u}/.$(echo $0)rc")
 
 #   BTRFS snapshots
 def deploy_base_snapshot():
@@ -274,14 +275,12 @@ def set_password(u, s="sudo"): ### REVIEW Use super_group?
             continue
 
 def to_uuid(part):
-    try: # util-linx
-        u = subprocess.check_output(f"sudo blkid -s UUID -o value {part}", shell=True).decode('utf-8').strip()
-    except subprocess.CalledProcessError: # BusyBox
-        u = subprocess.check_output(f"sudo blkid {part}", shell=True).decode('utf-8').strip()
+    if 'busybox' in os.readlink(which("blkid")): # type: ignore
+        u = check_output(f"sudo blkid {part}", shell=True).decode('utf-8').strip()
         return search('UUID="(.+?)"' , u).group(1)
-#        return u.partition('UUID="')[2].partition('"')[0]
-    else:
-        return u
+    else: # util-linx (non-Alpine)
+        u = check_output(f"sudo blkid -s UUID -o value {part}", shell=True).decode('utf-8').strip()
+
 
 #   Unmount everything and finish
 def unmounts():

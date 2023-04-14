@@ -1,12 +1,11 @@
 #!/usr/bin/python3
 
-import os
+from os import listdir, system
+from setup import args, distro
 from shutil import copy
-import subprocess
-import sys ### REMOVE WHEN TRY EXCEPT ELSE IS IMPLEMENTED
+from subprocess import check_output, CalledProcessError
 from src.installer_core import * # NOQA
 #from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
-from setup import args, distro
 
 #   1. Define variables
 APK = "2.12.11-r0" # https://git.alpinelinux.org/aports/plain/main/apk-tools/APKBUILD
@@ -79,8 +78,6 @@ while True:
             continue
         else:
             break
-    else:
-        print("Bootstrap finished!")
 
 #   Mount-points for chrooting
 ash_chroot()
