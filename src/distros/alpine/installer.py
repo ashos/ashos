@@ -69,8 +69,8 @@ copy("./src/distros/alpine/repositories", "/mnt/etc/apk/") ### REVIEW MOVED from
 os.system("sudo cp --dereference /etc/resolv.conf /mnt/etc/") # --remove-destination ### not writing through dangling symlink! (TODO: try except)
 
 try:
-    subprocess.check_output(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'", shell=True)
-    subprocess.check_output(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add --no-scripts {packages_no_trigger}'", shell=True)
+    os.system(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'")
+    os.system(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add --no-scripts {packages_no_trigger}'")
 except subprocess.CalledProcessError:
     print("F: Bootstrap failed!")
 #        if yes_no("Would you like to try again?"):
