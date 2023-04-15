@@ -232,7 +232,7 @@ def pre_bootstrap():
         os.system(f"{SUDO} cryptsetup --allow-discards --persistent --type luks2 open {args[1]} luks_root")
   # Mount and create necessary sub-volumes and directories
     if is_format_btrfs:
-        if not os.path.isfile("/dev/btrfs-control"): # Recommended for Alpine for instance (optional)
+        if not os.path.exists("/dev/btrfs-control"): # Recommended for Alpine for instance (optional)
             os.system(f"{SUDO} btrfs rescue create-control-device")
         if choice == "1":
             os.system(f"{SUDO} mkfs.btrfs -L LINUX -f {os_root}")
