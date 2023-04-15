@@ -554,43 +554,15 @@ def install_profile(prof, snap, force=False):
 #                with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
 #                    cfile.write(resp.text) # Save for later use
                 profconf.read_string(resp)
-                for p in profconf['packages']:
-                    pkgs += f"{p} "
-                install_package(pkgs.strip(), snap) # remove last space
-                for cmd in profconf['commands']:
-                    print(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}")
+            for p in profconf['packages']:
+                pkgs += f"{p} "
+            install_package(pkgs.strip(), snap) # remove last space
+            for cmd in profconf['commands']:
+                os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}")
         except (NoOptionError, NoSectionError, HTTPError, URLError): ### REVIEW 2023
             chr_delete(snap)
             print("F: Install failed and changes discarded!")
             sys.exit(1) ### REVIEW 2023
-        else:
-            post_transactions(snap)
-            print(f"Profile {prof} installed in snapshot {snap} successfully.")
-            print(f"Deploying snapshot {snap}.")
-            deploy(snap)
-
-#   Install a profile from a text file
-def install_profile_OLD(prof, snap):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
-        print(f"F: Cannot install as snapshot {snap} doesn't exist.")
-    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
-    elif snap == 0:
-        print("F: Changing base snapshot is not allowed.")
-    else:
-        print(f"Updating the system before installing profile {prof}.")
-        auto_upgrade(snap)
-        tmp_prof = subprocess.check_output("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX", shell=True, encoding='utf-8').strip()
-        subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{prof}/packages{get_distro_suffix()}.txt", shell=True)
-        prepare(snap)
-        try: # Ignore empty lines or ones starting with # [ % &
-            pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\\[|^%|^&|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
-            install_package(pkg, snap)
-            service_enable(prof, tmp_prof, snap)
-        except subprocess.CalledProcessError:
-            chr_delete(snap)
-            print("F: Install failed and changes discarded!")
-            sys.exit(1)
         else:
             post_transactions(snap)
             print(f"Profile {prof} installed in snapshot {snap} successfully.")
@@ -618,11 +590,11 @@ def install_profile_live(prof, snap, force):
 #            with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
 #                cfile.write(resp.text) # Save for later use
             profconf.read_string(resp)
-            for p in profconf['packages']:
-                pkgs += f"{p} "
-            install_package_live(pkgs.strip(), snap, tmp) ### REVIEW snapshot argument needed
-            for cmd in profconf['commands']:
-                print(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}")
+        for p in profconf['packages']:
+            pkgs += f"{p} "
+        install_package_live(pkgs.strip(), snap, tmp) ### REVIEW snapshot argument needed
+        for cmd in profconf['commands']:
+            os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}")
             #excode2 = service_enable(prof, tmp_prof, tmp) ### IMPORTANT: tmp or snap?!
     except (NoOptionError, NoSectionError, HTTPError, URLError): ### REVIEW 2023
         print("F: Install failed!") # Before: Install failed and changes discarded (rephrased as there is no chr_delete here)
@@ -632,27 +604,6 @@ def install_profile_live(prof, snap, force):
         return 0
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}") ### REVIEW
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") ### REVIEW
-
-
-def install_profile_live_OLD(prof, snap): ### DELETE
-    tmp = get_tmp()
-    ash_chroot_mounts(tmp)
-    print(f"Updating the system before installing profile {prof}.")
-    auto_upgrade(tmp)
-    tmp_prof = subprocess.check_output("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX", shell=True, encoding='utf-8').strip()
-    subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.conf -LO {URL}/profiles/{prof}/packages{get_distro_suffix()}.conf", shell=True)
-  # Ignore empty lines or ones starting with # [ % &
-    pkg = subprocess.check_output(f"cat {tmp_prof}/packages.conf | grep -E -v '^#|^\\[|^%|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
-    excode1 = install_package_live(pkg, snap, tmp) ### REVIEW snapshot argument needed
-    excode2 = service_enable(prof, tmp_prof, tmp) ### IMPORTANT: tmp or snap?!
-    if excode1 or excode2:
-        print("F: Install failed!") # Before: Install failed and changes discarded (rephrased as there is no chr_delete here)
-        return 1
-    else:
-        print(f"Profile {prof} installed in current/live snapshot.") ### REVIEW
-        return 0
-    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
-    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
 
 def is_efi():
     return os.path.exists("/sys/firmware/efi")
