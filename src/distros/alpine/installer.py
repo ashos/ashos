@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
-import subprocess
 import os
+import subprocess
 from setup import args, distro
 from shutil import copy
 from src.installer_core import * # NOQA
