@@ -4,7 +4,7 @@ import os
 import subprocess
 from re import search
 from setup import args, distro, distro_name
-from shutil import which
+from shutil import copy, which
 
 # ------------------------------ CORE FUNCTIONS ------------------------------ #
 
@@ -37,6 +37,7 @@ def deploy_base_snapshot():
     os.system("sudo btrfs sub create /mnt/.snapshots/boot/boot-deploy")
     os.system("sudo btrfs sub create /mnt/.snapshots/etc/etc-deploy")
     os.system("sudo cp -r --reflink=auto /mnt/boot/. /mnt/.snapshots/boot/boot-deploy")
+    #shutil.copy("/mnt/boot", "/mnt/.snapshots/boot/boot-deploy", *, follow_symlinks=True)
     os.system("sudo cp -r --reflink=auto /mnt/etc/. /mnt/.snapshots/etc/etc-deploy")
     os.system(f"sudo btrfs sub snap {'' if is_mutable else '-r'} /mnt/.snapshots/boot/boot-deploy /mnt/.snapshots/boot/boot-0")
     os.system(f"sudo btrfs sub snap {'' if is_mutable else '-r'} /mnt/.snapshots/etc/etc-deploy /mnt/.snapshots/etc/etc-0")
@@ -275,7 +276,7 @@ def set_password(u, s="sudo"): ### REVIEW Use super_group?
             continue
 
 def to_uuid(part):
-    if 'busybox' in os.readlink(which("blkid")): # type: ignore
+    if 'busybox' in os.path.realpath(which('blkid')): # type: ignore
         u = subprocess.check_output(f"sudo blkid {part}", shell=True).decode('utf-8').strip()
         return search('UUID="(.+?)"' , u).group(1)
     else: # util-linx (non-Alpine)
