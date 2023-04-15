@@ -541,7 +541,7 @@ def install_profile(prof, snap, force=False):
         auto_upgrade(snap) # include these in try except too!
         prepare(snap)
         pkgs = ""
-        profconf = ConfigParser(allow_no_value=True)
+        profconf = ConfigParser(allow_no_value=True, delimiters=("پ"), strict=False)
         try:
             if os.path.exists(f"/.snapshots/tmp/{prof}.conf") and not force:
                 profconf.read(f"/.snapshots/tmp/{prof}.conf")
@@ -577,7 +577,7 @@ def install_profile_live(prof, snap, force):
     print(f"Updating the system before installing profile {prof}.")
     auto_upgrade(tmp)
     pkgs = ""
-    profconf = ConfigParser(allow_no_value=True)
+    profconf = ConfigParser(allow_no_value=True, delimiters=("پ"), strict=False)
     try:
         if os.path.exists(f"/.snapshots/tmp/{prof}.conf") and not force:
             profconf.read(f"/.snapshots/tmp/{prof}.conf")
