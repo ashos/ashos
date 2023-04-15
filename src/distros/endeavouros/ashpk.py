@@ -100,7 +100,7 @@ def fix_package_db(snapshot = "0"):
         print(f"F: Cannot fix package manager database as snapshot {snapshot} doesn't exist.")
         return
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
-        print(f"F: Snapshot {snapshot} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snapshot}'.")
+        print(f"F: Snapshot {snapshot} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snapshot}'.")
         return
     elif snapshot == "0":
         P = "" ### I think this is wrong. It should be check if snapshot = current-deployed-snapshot, then this.

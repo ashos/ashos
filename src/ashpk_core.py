@@ -107,7 +107,7 @@ def ash_update(dbg):
             elif cmp(f"{tmpdir}/ash", __file__, shallow=False):
                 print("F: Ash already up to date.")
             else:
-                copy(__file__, f"{dir}/ash_old")
+                copy(__file__, f"{tmpdir}/ash_old")
                 copy(f"{tmpdir}/ash", __file__)
                 os.chmod(__file__, mode)
                 print(f"Ash updated succesfully. Old Ash moved to {tmpdir}.")
@@ -169,7 +169,7 @@ def chroot(snap, cmd=""): ### make cmd to cmds (IMPORTANT for install_profile)
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot chroot as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.") ### REMOVE_ALL_THESE_LINES
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.") ### REMOVE_ALL_THESE_LINES
     elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
@@ -434,7 +434,7 @@ def hollow(snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot make hollow as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.")
     elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
@@ -493,7 +493,7 @@ def install(pkg, snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot install as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.")
     elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
@@ -533,7 +533,7 @@ def install_profile(prof, snap, force=False):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot install as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.")
     elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
@@ -769,7 +769,7 @@ def refresh(snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot refresh as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"):
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.")
     elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
@@ -1042,7 +1042,7 @@ def tree_run(tree, tname, cmd):
             order.remove(order[0])
             order.remove(order[0])
             if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{sarg}"):
-                print(f"F: Snapshot {sarg} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {sarg}'.")
+                print(f"F: Snapshot {sarg} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {sarg}'.")
                 print("Tree command canceled.")
                 return
             else:
@@ -1075,7 +1075,7 @@ def tree_sync(tree, tname, force_offline, live):
             order.remove(order[0])
             order.remove(order[0])
             if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap_to}"):
-                print(f"F: Snapshot {snap_to} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap_to}'.")
+                print(f"F: Snapshot {snap_to} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap_to}'.")
                 print("Tree sync canceled.")
                 return
             else:
@@ -1128,7 +1128,7 @@ def uninstall_package(pkg, snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot remove as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"):
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.")
     elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
@@ -1174,7 +1174,7 @@ def upgrade(snap, baseup=False):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot upgrade as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"):
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.")
     elif snap == 0 and not baseup:
         print("F: Changing base snapshot is not allowed.")
     else:
