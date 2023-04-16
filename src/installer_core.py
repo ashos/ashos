@@ -156,11 +156,13 @@ def grub_ash(v):
     os.system(f"{SUDO} sed -i 's|subvol=@{distro_suffix}|subvol=@.snapshots{distro_suffix}/rootfs/snapshot-deploy|g' /mnt/boot/grub{v}/grub.cfg")
     # Create a mapping of "distro" <=> "BootOrder number". Ash reads from this file to switch between distros.
     if is_efi:
-        if is_boot_external: ### REVIEW_LATER TODO NEW this and next line are for "separate boot partition" functionality
+        if is_boot_external: ### REVIEW_LATER TODO NEW
             os.system(f"efibootmgr -c -d {bp} -p 1 -L {distro_name} -l '\\EFI\\{distro}\\grubx64.efi'")
-        if not os.path.exists("/mnt/boot/efi/EFI/map.txt"):
-            os.system(f"echo DISTRO,BootOrder | {SUDO} tee /mnt/boot/efi/EFI/map.txt")
-        os.system(f"echo '{distro},'$(efibootmgr -v | grep -i {distro} | awk '"'{print $1}'"' | sed '"'s|[^0-9]*||g'"') | sudo tee -a /mnt/boot/efi/EFI/map.txt") ### TODO replace with {SUDO}
+        ex = os.path.exists("/mnt/boot/efi/EFI/map.txt")
+        boot_num = subprocess.check_output(f'$(efibootmgr -v | grep -i {distro} | awk "{{print $1}}" | sed "s|[^0-9]*||g")', encoding='UTF-8', shell=True)
+        with open("/mnt/boot/efi/EFI/map.txt", "a") as m:
+            if not ex: m.write("DISTRO,BootOrder\n")
+        if boot_num: m.write(distro + ',' + boot_num)
 
 def check_efi():
     return os.path.exists("/sys/firmware/efi")
@@ -283,7 +285,6 @@ def to_uuid(part):
         return search('UUID="(.+?)"' , u).group(1)
     else: # util-linx (non-Alpine)
         return subprocess.check_output(f"blkid -s UUID -o value {part}", shell=True).decode('utf-8').strip()
-
 
 #   Unmount everything and finish
 def unmounts():

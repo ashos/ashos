@@ -550,9 +550,6 @@ def install_profile(prof, snap, force=False):
                 resp = urlopen(f"{URL}/profiles/{prof}/{dist}.conf").read().decode('utf-8') ### REVIEW
                 with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
                     cfile.write(resp) # Save for later use
-#                resp = get(f"{URL}/profiles/{prof}/{dist}.conf", allow_redirects=True) ### REVIEW
-#                with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
-#                    cfile.write(resp.text) # Save for later use
                 profconf.read_string(resp)
             for p in profconf['packages']:
                 pkgs += f"{p} "
@@ -586,9 +583,6 @@ def install_profile_live(prof, snap, force):
             resp = urlopen(f"{URL}/profiles/{prof}/{dist}.conf").read().decode('utf-8') ### REVIEW
             with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
                 cfile.write(resp) # Save for later use
-#            resp = get(f"{URL}/profiles/{prof}/{dist}.conf", allow_redirects=True) ### REVIEW
-#            with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
-#                cfile.write(resp.text) # Save for later use
             profconf.read_string(resp)
         for p in profconf['packages']:
             pkgs += f"{p} "
