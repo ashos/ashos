@@ -161,7 +161,7 @@ def grub_ash(v):
         boot_num = subprocess.check_output(f'efibootmgr -v | grep -i {distro} | awk "{{print $1}}" | sed "s|[^0-9]*||g"', encoding='UTF-8', shell=True)
         with open("/mnt/boot/efi/EFI/map.txt", "a") as m:
             if not ex: m.write("DISTRO,BootOrder\n")
-        if boot_num: m.write(distro + ',' + boot_num)
+            if boot_num: m.write(distro + ',' + boot_num)
 
 def check_efi():
     return os.path.exists("/sys/firmware/efi")
