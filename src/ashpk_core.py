@@ -22,17 +22,17 @@ from urllib.error import URLError, HTTPError
 # Directories
 # All snapshots share one /var
 # global boot is always at @boot
-# *-deploy and *-deploy-aux         : temporary directories used to boot deployed snapshot
-# *-deploy-secondary and *-deploy-aux-secondary : temporary directories used to boot secondary deployed snapshot
-# *-chr                             : temporary directories used to chroot into snapshot or copy snapshots around
-# /.snapshots/ash/ash               : symlinked to /usr/bin/ash
-# /.snapshots/etc/etc-*             : individual /etc for each snapshot
-# /.snapshots/boot/boot-*           : individual /boot for each snapshot
-# /.snapshots/rootfs/snapshot-*     : snapshots
-# /.snapshots/ash/snapshots/*-desc  : descriptions
-# /usr/share/ash                    : files that store current snapshot info
-# /usr/share/ash/db                 : package database
-# /var/lib/ash(/fstree)             : ash files, stores fstree, symlink to /.snapshots/ash
+# *-deploy and *-deploy-aux        : temporary directories used to boot deployed snapshot
+# *-deploy[-aux]-secondary         : temporary directories used to boot secondary deployed snapshot
+# *-chr                            : temporary directories used to chroot into snapshots or copy them around
+# /.snapshots/ash/ash              : symlinked to /usr/bin/ash
+# /.snapshots/etc/etc-*            : individual /etc for each snapshot
+# /.snapshots/boot/boot-*          : individual /boot for each snapshot
+# /.snapshots/rootfs/snapshot-*    : snapshots
+# /.snapshots/ash/snapshots/*-desc : descriptions
+# /usr/share/ash                   : files that store current snapshot info
+# /usr/share/ash/db                : package database
+# /var/lib/ash(/fstree)            : ash files, stores fstree, symlink to /.snapshots/ash
 # Failed prompts start with "F: "
 
 distro = subprocess.check_output(['/usr/bin/detect_os.sh', 'id']).decode('utf-8').replace('"', "").strip()
