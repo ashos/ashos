@@ -27,9 +27,9 @@
 
 ## Co je astOS?
 
-astOS je moderní distribuce založená na [Arch Linuxu](https://archlinux.org).  
-Na rozdíl od Archu používá neměnný (pouze pro čtení) kořenový souborový systém.  
-Software je instalován a konfigurován do jednotlivých stromů snímků, které lze následně nasadit a zavést do systému.  
+astOS je moderní distribuce založená na [Arch Linuxu](https://archlinux.org).
+Na rozdíl od Archu používá neměnný (pouze pro čtení) kořenový souborový systém.
+Software je instalován a konfigurován do jednotlivých stromů snímků, které lze následně nasadit a zavést do systému.
 Nepoužívá vlastní formát balíčků ani správce balíčků, místo toho se spoléhá na [pacman](https://wiki.archlinux.org/title/pacman) z Archu.
 
 **To má několik výhod:**
