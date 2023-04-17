@@ -97,16 +97,15 @@ def get_name(thing):
 #   2. Underscore plus name of distro if it should be appended to sub-volume names
 def get_multiboot(dist):
     clear()
-    while True:
-        print("Please choose one of the following options:\n1. Initiate a new AshOS install (wipes root partition)\n2. Add to an already installed AshOS.")
-        i = input("> ")
-        if i in ("1", "2"):
-            return i, f"_{dist}"
-            break
-        else:
-            print("Invalid choice!")
-            continue
+    msg = "Initiate a new AshOS install?\n \
+        Y: Wipes root partition\n \
+        N: Add to an already installed AshOS (advanced multi-booting)"
+    if yes_no(msg):
+        return "1", f"_{dist}"
+    else:
+        return "2", f"_{dist}"
 
+#   Generic function to choose something from a directory
 def get_item_from_path(thing, apath):
     clear()
     while True:
@@ -159,7 +158,7 @@ def grub_ash(v):
         if is_boot_external: ### REVIEW_LATER TODO NEW
             os.system(f"efibootmgr -c -d {bp} -p 1 -L {distro_name} -l '\\EFI\\{distro}\\grubx64.efi'")
         ex = os.path.exists("/mnt/boot/efi/EFI/map.txt")
-        boot_num = subprocess.check_output(f'$(efibootmgr -v | grep -i {distro} | awk "{{print $1}}" | sed "s|[^0-9]*||g")', encoding='UTF-8', shell=True)
+        boot_num = subprocess.check_output(f'efibootmgr -v | grep -i {distro} | awk "{{print $1}}" | sed "s|[^0-9]*||g"', encoding='UTF-8', shell=True)
         with open("/mnt/boot/efi/EFI/map.txt", "a") as m:
             if not ex: m.write("DISTRO,BootOrder\n")
         if boot_num: m.write(distro + ',' + boot_num)
@@ -353,7 +352,6 @@ else:
     os_root = args[1]
     luks_grub_args = ""
 hostname = get_name('hostname')
-#hostname = subprocess.check_output("git rev-parse --short HEAD", shell=True).decode('utf-8').strip() # Just for debugging
 username = get_name('username') ### REVIEW 2023 made it global variable for Alpine installer
 tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
 

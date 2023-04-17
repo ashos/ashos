@@ -37,7 +37,7 @@ configs() {
 # Remove man pages (fixes slow man-db trigger)
 fixdb() {
 ###    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 63C46DF0140D738961429F4E204DD8AEC33A7AFF ### Needed when using PopOs iso?
-  # uncomment next 2 lines if using Debian/Ubuntu iso instead of PopOS iso 
+  # uncomment next 2 lines if using Debian/Ubuntu iso instead of PopOS iso
     #cp -afr ./src/distros/pop/sources.list* /etc/apt/
     #sed -i s/RELEASE/$RELEASE/g /etc/pop/sources.list /etc/pop/sources.list.d/*
     #apt-get -y install chrony
