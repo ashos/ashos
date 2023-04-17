@@ -158,7 +158,7 @@ def grub_ash(v):
         if is_boot_external: ### REVIEW_LATER TODO NEW
             os.system(f"efibootmgr -c -d {bp} -p 1 -L {distro_name} -l '\\EFI\\{distro}\\grubx64.efi'")
         ex = os.path.exists("/mnt/boot/efi/EFI/map.txt")
-        boot_num = subprocess.check_output(f'$(efibootmgr -v | grep -i {distro} | awk "{{print $1}}" | sed "s|[^0-9]*||g")', encoding='UTF-8', shell=True)
+        boot_num = subprocess.check_output(f'efibootmgr -v | grep -i {distro} | awk "{{print $1}}" | sed "s|[^0-9]*||g"', encoding='UTF-8', shell=True)
         with open("/mnt/boot/efi/EFI/map.txt", "a") as m:
             if not ex: m.write("DISTRO,BootOrder\n")
         if boot_num: m.write(distro + ',' + boot_num)
