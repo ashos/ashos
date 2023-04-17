@@ -385,12 +385,12 @@ def find_new():
 #   Get aux tmp
 def get_aux_tmp(tmp, secondary=False):
     if secondary:
-        if "secondary" in tmp:
+        if tmp == "secondary":
             tmp = tmp.replace("-secondary", "")
         else:
             tmp = f'{tmp}-secondary'
     else:
-        if "deploy-aux" in tmp:
+        if tmp == "deploy-aux":
             tmp = tmp.replace("deploy-aux", "deploy")
         else:
             tmp = tmp.replace("deploy", "deploy-aux")
@@ -1148,7 +1148,7 @@ def update_boot(snap, secondary = False): ### TODO Other bootloaders
     else:
         tmp = get_tmp()
         if secondary:
-            if "secondary" in tmp:
+            if tmp == "secondary":
                 tmp = tmp.replace("-secondary", "")
             else:
                 tmp = f'{tmp}-secondary'
