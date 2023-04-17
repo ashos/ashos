@@ -18,7 +18,6 @@ from tempfile import TemporaryDirectory
 from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
 
-
 # Directories
 # All snapshots share one /var
 # global boot is always at @boot
@@ -541,7 +540,7 @@ def install_live(pkg, snap=get_current_snapshot()):
         print("F: Live installation failed!")
 
 #   Install a profile from a text file
-def install_profile(prof, snap, force=False, secondary=False):
+def install_profile(prof, snap, force=False, secondary=False, section_only=None):
     dist = distro.split("_")[0] # Remove '_ashos"
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot install as snapshot {snap} doesn't exist.")
@@ -554,7 +553,9 @@ def install_profile(prof, snap, force=False, secondary=False):
         auto_upgrade(snap) # include these in try except too!
         prepare(snap)
         pkgs = ""
-        profconf = ConfigParser(allow_no_value=True, delimiters=("پ"), strict=False)
+        profconf = ConfigParser(allow_no_value=True, delimiters=("==="), strict=False)
+#        profconf.optionxform = lambda option: option # preserve case for letters
+        profconf.optionxform = str # type: ignore
         try:
             if os.path.exists(f"/.snapshots/tmp/{prof}.conf") and not force:
                 profconf.read(f"/.snapshots/tmp/{prof}.conf")
@@ -564,11 +565,13 @@ def install_profile(prof, snap, force=False, secondary=False):
                 with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
                     cfile.write(resp) # Save for later use
                 profconf.read_string(resp)
+            if profconf.has_section('presets'):
+                presets_helper(profconf, snap) ### BEFORE: profconf['presets'] IMPORTANT BAD PRACTICE
             for p in profconf['packages']:
                 pkgs += f"{p} "
             install_package(pkgs.strip(), snap) # remove last space
             for cmd in profconf['commands']:
-                os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}")
+                os.system(f'chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}')
         except (NoOptionError, NoSectionError, HTTPError, URLError): ### REVIEW 2023
             chr_delete(snap)
             print("F: Install failed and changes discarded!")
@@ -587,7 +590,7 @@ def install_profile_live(prof, snap, force):
     print(f"Updating the system before installing profile {prof}.")
     auto_upgrade(tmp)
     pkgs = ""
-    profconf = ConfigParser(allow_no_value=True, delimiters=("پ"), strict=False)
+    profconf = ConfigParser(allow_no_value=True, delimiters=("==="), strict=False)
     try:
         if os.path.exists(f"/.snapshots/tmp/{prof}.conf") and not force:
             profconf.read(f"/.snapshots/tmp/{prof}.conf")
@@ -869,22 +872,24 @@ def snapshot_base_new(desc="clone of base"): # immutability toggle not used as b
     print(f"New tree {i} created.")
 
 #   Edit per-snapshot configuration
-def snapshot_config_edit(snap):
+def snapshot_config_edit(snap, skip_prep=False, skip_post=False):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot chroot as snapshot {snap} doesn't exist.")
     elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
-        prepare(snap)
+        if not skip_prep:
+            prepare(snap)
         if "EDITOR" in os.environ:
-            os.system(f"$EDITOR /.snapshots/rootfs/snapshot-chr{snap}/etc/ash.conf") # usage: sudo -E ash edit X
+            os.system(f"$EDITOR /.snapshots/rootfs/snapshot-chr{snap}/etc/ash.conf") # usage: sudo -E ash edit -s <snapshot-number>
         elif not os.system('[ -x "$(command -v nano)" ]'): # nano available:
             os.system(f"nano /.snapshots/rootfs/snapshot-chr{snap}/etc/ash.conf")
         elif not os.system('[ -x "$(command -v vi)" ]'): # vi available
             os.system(f"vi /.snapshots/rootfs/snapshot-chr{snap}/etc/ash.conf")
         else:
             os.system("F: No text editor available!")
-        post_transactions(snap)
+        if not skip_post:
+            post_transactions(snap)
 
 #   Get per-snapshot configuration options from /etc/ast.conf
 def snapshot_config_get(snap):
@@ -1301,7 +1306,7 @@ def main():
       # Deploy
         dep_par = subparsers.add_parser("deploy", aliases=['dep', 'd'], allow_abbrev=True, help='Deploy a snapshot for next boot')
         dep_par.add_argument("--snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
-        dep_par.add_argument('--secondary', '--sec', '-2', action='store_false', required=False, help='Deploy into secondary snapshot slot')
+        dep_par.add_argument('--secondary', '--sec', '-2', action='store_true', required=False, help='Deploy into secondary snapshot slot')
         dep_par.set_defaults(func=deploy)
       # Description
         desc_par = subparsers.add_parser("desc", help='Set a description for a snapshot by number')
