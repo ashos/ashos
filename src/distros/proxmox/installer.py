@@ -76,7 +76,7 @@ os.system("sudo ln -srf /mnt/usr/share/ash/db/dpkg /mnt/var/lib/dpkg")
 #   4. Update hostname, hosts, locales and timezone, hosts
 os.system(f"echo {hostname} | sudo tee /mnt/etc/hostname")
 os.system("echo 127.0.0.1 localhost | sudo tee -a /mnt/etc/hosts")
-os.system(f"echo 10.0.2.15 {hostname}.proxmox.com {hostname} | sudo tee -a /mnt/etc/hosts") ### REVIEW_LATER
+os.system(f"echo {get_ip()} {hostname}.proxmox.com {hostname} | sudo tee -a /mnt/etc/hosts") ### REVIEW_LATER
 #os.system("sudo chroot /mnt sudo localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
 os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
 os.system("sudo chroot /mnt sudo locale-gen")
