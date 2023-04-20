@@ -191,7 +191,18 @@ def chroot_check():
         if str("/.snapshots btrfs") in buf:
              chroot = False
 #       for line in mounts: if str("/.snapshots btrfs") in str(line): chroot = False ### REVIEW NEWER
-    return(chroot)
+    return chroot
+
+def chroot_in(path):
+    real_root = os.open("/", os.O_RDONLY)
+    os.chroot(path)
+    return real_root
+
+def chroot_out(rr):
+    os.fchdir(rr)
+    os.chroot(".")
+    # Back to old root
+    os.close(rr)
 
 #   Clone tree
 def clone_as_tree(desc, snap):
@@ -279,18 +290,19 @@ def clone_under(snap, branch):
         return i
 
 #   Delete tree or branch
-def delete_node(snaps, quiet):
+def delete_node(snaps, quiet, nuke):
     for snap in snaps:
-        if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
-            print(f"F: Cannot delete as snapshot {snap} doesn't exist.")
-        elif snap == 0:
+        if snap == 0:
             print("F: Changing base snapshot is not allowed.")
-        elif snap == get_current_snapshot():
-            print("F: Cannot delete booted snapshot.")
-        elif snap == get_next_snapshot():
-            print("F: Cannot delete deployed snapshot.")
-        elif not quiet and not yes_no(f"Are you sure you want to delete snapshot {snap}?"):
-            sys.exit("Aborted")
+        if not nuke:
+            if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
+                print(f"F: Cannot delete as snapshot {snap} doesn't exist.")
+            elif snap == get_current_snapshot():
+                print("F: Cannot delete booted snapshot.")
+            elif snap == get_next_snapshot():
+                print("F: Cannot delete deployed snapshot.")
+            elif not quiet and not yes_no(f"Are you sure you want to delete snapshot {snap}?"):
+                sys.exit("Aborted")
         else:
             children = return_children(fstree, snap)
             write_desc("", snap) # Clear description # Why have this? REVIEW 2023
@@ -314,6 +326,19 @@ def delete_node(snaps, quiet):
             remove_node(fstree, snap) # Remove node from tree or root
             write_tree(fstree)
             print(f"Snapshot {snap} removed.")
+
+#   Delete tree or branch
+def delete_deploys():
+    for snap in ("deploy", "deploy-aux"):
+        os.system(f"btrfs sub del /.snapshots/boot/boot-{snap}{DEBUG}")
+        os.system(f"btrfs sub del /.snapshots/etc/etc-{snap}{DEBUG}")
+        os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snap}{DEBUG}")
+        # Make sure temporary chroot directories are deleted as well
+        if (os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}")):
+            os.system(f"btrfs sub del /.snapshots/boot/boot-chr{snap}{DEBUG}")
+            os.system(f"btrfs sub del /.snapshots/etc/etc-chr{snap}{DEBUG}")
+            os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snap}{DEBUG}")
+        print(f"Snapshot {snap} removed.")
 
 #   Deploy snapshot
 def deploy(snap, secondary=False):
@@ -379,7 +404,7 @@ def find_new():
     while True:
         i += 1
         if str(f"snapshot-{i}") not in snapshots and str(f"etc-{i}") not in snapshots and str(f"var-{i}") not in snapshots and str(f"boot-{i}") not in snapshots:
-            return(i)
+            return i
 
 #   Get aux tmp
 def get_aux_tmp(tmp, secondary=False):
@@ -418,7 +443,8 @@ def get_next_snapshot(secondary=False):
 #   Get parent
 def get_parent(tree, id):
     par = (find(tree, filter_=lambda node: ("x"+str(node.name)+"x") in ("x"+str(id)+"x")))
-    return(par.parent.name)
+    if par:
+        return par.parent.name
 
 #   Get drive partition
 def get_part():
@@ -772,7 +798,7 @@ def recurse_tree(tree, cid):
         if child != cid:
             order.append(par)
             order.append(child)
-    return (order)
+    return order
 
 #   Refresh snapshot
 def refresh(snap):
@@ -820,7 +846,8 @@ def remove_from_tree(tree, tname, pkg, prof):
 #   Remove node from tree
 def remove_node(tree, id):
     par = (find(tree, filter_=lambda node: ("x"+str(node.name)+"x") in ("x"+str(id)+"x")))
-    par.parent = None
+    if par:
+        par.parent = None
 
 #   Return all children for node
 def return_children(tree, id):
@@ -830,7 +857,7 @@ def return_children(tree, id):
         children.append(child.name)
     if id in children:
         children.remove(id)
-    return (children)
+    return children
 
 #   Rollback last booted deployment
 def rollback():
@@ -891,7 +918,7 @@ def snapshot_config_edit(snap, skip_prep=False, skip_post=False):
         if not skip_post:
             post_transactions(snap)
 
-#   Get per-snapshot configuration options from /etc/ast.conf
+#   Get per-snapshot configuration options from /etc/ash.conf
 def snapshot_config_get(snap):
     options = {"aur":"False","mutable_dirs":"","mutable_dirs_shared":""} # defaults here ### REVIEW This is not distro-generic
     if not os.path.exists(f"/.snapshots/etc/etc-{snap}/ash.conf"):
@@ -947,10 +974,12 @@ def switch_tmp(secondary=False):
     distro_suffix = get_distro_suffix()
     part = get_part()
     tmp_boot = subprocess.check_output("mktemp -d -p /.snapshots/tmp boot.XXXXXXXXXXXXXXXX", shell=True).decode('utf-8').strip()
+###TODO    with TemporaryDirectory(dir="/.snapshots/tmp", prefix="boot.") as tmp_boot:
     os.system(f"mount {part} -o subvol=@boot{distro_suffix} {tmp_boot}") # Mount boot partition for writing
   # Swap deployment subvolumes: deploy <-> deploy-aux
     source_dep = get_tmp()
-    target_dep = get_aux_tmp(get_tmp(), secondary)
+    #target_dep = get_aux_tmp(get_tmp(), secondary)
+    target_dep = get_aux_tmp(source_dep, secondary)
     os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{target_dep}/boot/. {tmp_boot}")
     os.system(f"sed -i 's|@.snapshots{distro_suffix}/rootfs/snapshot-{source_dep}|@.snapshots{distro_suffix}/rootfs/snapshot-{target_dep}|g' {tmp_boot}/{GRUB}/grub.cfg") # Overwrite grub config boot subvolume
     os.system(f"sed -i 's|@.snapshots{distro_suffix}/rootfs/snapshot-{source_dep}|@.snapshots{distro_suffix}/rootfs/snapshot-{target_dep}|g' /.snapshots/rootfs/snapshot-{target_dep}/boot/{GRUB}/grub.cfg")
@@ -972,7 +1001,7 @@ def switch_tmp(secondary=False):
                 line = grubconf.readline()
             if "snapshot-deploy-aux" in gconf:
                 gconf = gconf.replace("snapshot-deploy-aux", "snapshot-deploy")
-            else:
+            elif "snapshot-deploy" in gconf: ### REVIEW 2023 add others as well (secondary etc) ### Before: else
                 gconf = gconf.replace("snapshot-deploy", "snapshot-deploy-aux")
             if distro_name in gconf:
                 gconf = sub('snapshot \\d', '', gconf) ### IMPORTANT REVIEW 2023
@@ -1164,7 +1193,6 @@ def update_boot(snap, secondary = False): ### TODO Other bootloaders
         os.system(f"cp /boot/{GRUB}/grub.cfg /boot/{GRUB}/BAK/grub.cfg.`date '+%Y%m%d-%H%M%S'`")
         os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {GRUB}-mkconfig {part} -o /boot/{GRUB}/grub.cfg")
         os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} sed -i 's|snapshot-chr{snap}|snapshot-{tmp}|g' /boot/{GRUB}/grub.cfg")
-####    os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} sed -i '0,\|{distro_name}| s||{distro_name} snapshot {snap}|' /boot/{GRUB}/grub.cfg")
         os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} sed -i '0,\\|{distro_name}| s||{distro_name} snapshot {snap}|' /boot/{GRUB}/grub.cfg")
         post_transactions(snap)
 
@@ -1302,6 +1330,7 @@ def main():
         del_par = subparsers.add_parser("del", aliases=["delete", "rm", "rem", "remove", "rm-snapshot"], allow_abbrev=True, help="Remove snapshot(s)/tree(s) and any branches recursively")
         del_par.add_argument("--snaps", "--snapshots", "-s", nargs='+', type=int, required=True, help="snapshot number")
         del_par.add_argument('--quiet', '-q', action='store_true', required=False, help='Force delete snapshot(s)')
+        del_par.add_argument('--nuke', action='store_true', required=False, help='Nuke everything leftover from snapshot(s)')
         del_par.set_defaults(func=delete_node)
       # Deploy
         dep_par = subparsers.add_parser("deploy", aliases=['dep', 'd'], allow_abbrev=True, help='Deploy a snapshot for next boot')

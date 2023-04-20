@@ -148,8 +148,29 @@ def init_system_copy(snap, FROM):
 
 #   Install atomic-operation
 def install_package(pkg, snap):
+    prepare(snap)
+    excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} pacman -S {pkg} --needed --overwrite '/var/*'")
+    if excode:
+        aur = aur_install(snap, True, True) ### TODO: do a paru -Si {pkg} check to avoid setup_aur if package already installed!
+        if aur:
+            return os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} su aur -c \"paru -S {pkg} --needed --overwrite '/var/*'\"")
+        else:
+            print("F: AUR is not enabled!")
+            if yes_no("Enable AUR?"):
+                print("Opening snapshot's config file... Please change AUR to True")
+                snapshot_config_edit(snap, True, False) ### TODO move to core.py ? Run prepare but skip post transaction (Optimize code) Update: post_tran need to run too
+                aur = aur_install(snap, True, False)
+                return aur
+            else:
+                return 1
+    else:
+        return 0
+
+#   Install atomic-operation
+def install_package_old(pkg, snap):
     try:
       # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
+        ### TODO IMPORTANT this doesn't work for a package group e.g. "lxqt" errors out even though it's not in AUR, which makes following code malfunction!
         subprocess.check_output(f"pacman -Si {pkg}", shell=True, stderr=subprocess.PIPE) # --sysroot ### do not print if pkg not found
     except subprocess.CalledProcessError:
         aur = aur_install(snap) ### TODO: do a paru -Si {pkg} check to avoid setup_aur if package already installed!

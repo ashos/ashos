@@ -58,11 +58,11 @@ def deploy_to_common():
     if is_efi:
         os.system(f"{SUDO} umount /mnt/boot/efi")
     os.system(f"{SUDO} umount /mnt/boot")
-    os.system(f'{SUDO} mount {bp if is_boot_external else os_root} -o {"subvol="+f"@boot{distro_suffix}"+"," if not is_boot_external else ""}compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy') ### REVIEW_LATER A similar line for is_home_external needed?
-###    if is_boot_external: # easier to read
-###        os.system(f"{SUDO} mount {bp} -o compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
-###    else:
-###        os.system(ff"{SUDO} mount {os_root} -o subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
+###    os.system(f'{SUDO} mount {bp if is_boot_external else os_root} -o {"subvol="+f"@boot{distro_suffix}"+"," if not is_boot_external else ""}compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy') ### REVIEW_LATER A similar line for is_home_external needed?
+    if is_boot_external:
+        os.system(f"{SUDO} mount {bp} -o compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
+    else:
+        os.system(f"{SUDO} mount {os_root} -o subvol=@boot{distro_suffix},compress=zstd,noatime /mnt/.snapshots/boot/boot-deploy")
     os.system(f"{SUDO} cp -r --reflink=auto /mnt/.snapshots/boot/boot-deploy/. /mnt/boot/")
     os.system(f"{SUDO} umount /mnt/etc")
     os.system(f"{SUDO} mount {os_root} -o subvol=@etc{distro_suffix},compress=zstd,noatime /mnt/.snapshots/etc/etc-deploy")
