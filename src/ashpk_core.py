@@ -4,6 +4,7 @@ import os
 import stat
 import subprocess
 import sys
+import time
 from anytree import AsciiStyle, find, Node, PreOrderIter, RenderTree
 from anytree.exporter import DictExporter
 from anytree.importer import DictImporter
@@ -91,9 +92,6 @@ def ash_update(dbg):
     mode = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
     with TemporaryDirectory(dir="/.snapshots/tmp", prefix="ashpk.") as tmpdir:
         try:
-            #f1 = get(f"{URL}/ashpk_core.py", allow_redirects=True)
-            #f2 = get(f"{URL}/distros/{dist}/ashpk.py", allow_redirects=True) ### REVIEW
-            #open(f"{tmpdir}/ash", 'w').write(f1.text + f2.text)
             f1 = urlopen(f"{URL}/ashpk_core.py").read().decode('utf-8')
             f2 = urlopen(f"{URL}/distros/{dist}/ashpk.py").read().decode('utf-8')
             open(f"{tmpdir}/ash", 'w').write(f1 + f2)
@@ -113,7 +111,9 @@ def ash_update(dbg):
                 print(f"Ash updated succesfully. Old Ash moved to {tmpdir}.")
 
 def ash_version():
-    os.system('date -r /usr/bin/ash "+%Y%m%d-%H%M%S"')
+    #os.system('date -r /usr/bin/ash "+%Y%m%d-%H%M%S"')
+    modtime = os.path.getmtime(__file__)
+    print("Last modified on: ", time.ctime(modtime))
 
 #   Add node to branch
 def branch_create(snap, desc=""): # blank description if nothing is passed
