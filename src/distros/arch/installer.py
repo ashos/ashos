@@ -7,6 +7,17 @@ from src.installer_core import * # NOQA
 #from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 from setup import args, distro
 
+#   1. Define variables
+is_format_btrfs = True ### REVIEW TEMPORARY
+KERNEL = "" # options: https://wiki.archlinux.org/title/kernel e.g. "-xanmod"
+packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano linux-firmware" # os-prober bash tmux arch-install-scripts
+if is_efi:
+    packages += " efibootmgr"
+if is_luks:
+    packages += " cryptsetup" ### REVIEW_LATER
+super_group = "wheel"
+v = "" # GRUB version number in /boot/grubN
+
 def initram_update():
     if is_luks:
         os.system(f"{SUDO} dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
@@ -27,17 +38,6 @@ def strap(pkg):
                 return 1
         else: # Success
             return 0
-
-#   1. Define variables
-is_format_btrfs = True ### REVIEW TEMPORARY
-KERNEL = "" # options: https://wiki.archlinux.org/title/kernel e.g. "-xanmod"
-packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano linux-firmware" # os-prober bash tmux arch-install-scripts
-if is_efi:
-    packages += " efibootmgr"
-if is_luks:
-    packages += " cryptsetup" ### REVIEW_LATER
-super_group = "wheel"
-v = "" # GRUB version number in /boot/grubN
 
 #   Pre bootstrap
 pre_bootstrap()
