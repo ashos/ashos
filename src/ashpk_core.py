@@ -1313,12 +1313,14 @@ HOME = os.path.expanduser('~'+ USERNAME) # type: ignore
 def main():
     # TODO 2023 exception: Make 'ash tree' run without root permissions
     if sys.platform.startswith("linux") and os.geteuid() != 0:
-        exit("sudo/doas is required to run ash!")
+        exit("F: Run ash with super user privileges!")
+    elif sys.platform.startswith("cosmo") and os.getuid() != 0: ### TODO use geteuid when fixed
+        exit("F: Run ash with super user privileges!")
     elif sys.platform.startswith("windows"):
-        print("TODO")
+        from ctypes import windll # type: ignore
+        if windll.shell32.IsUserAnAdmin() != 0:
+            exit("F: Run ash with admin privileges!")
     elif sys.platform.startswith("darwin"):
-        print("TODO")
-    elif sys.platform.startswith("cosmo"):
         print("TODO")
     else:
         importer = DictImporter() # Dict importer
