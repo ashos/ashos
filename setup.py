@@ -3,6 +3,7 @@
 import os.path
 import subprocess
 import sys
+from src import detect_os
 
 is_efi = os.path.exists("/sys/firmware/efi")
 use_other_iso = "" # if using different iso to install target OS, use its id
@@ -17,8 +18,8 @@ try:
         distro = sys.argv[3]
         distro_name = sys.argv[4]
 except IndexError:
-    distro = subprocess.check_output(['./src/detect_os.sh', 'id']).decode('utf-8').replace('"', "").strip()
-    distro_name = subprocess.check_output(['./src/detect_os.sh', 'name']).decode('utf-8').replace('"', "").strip()
+    distro = detect_os.get_distro_id()
+    distro_name = detect_os.get_distro_name()
 
 if distro:
     if use_other_iso != "":

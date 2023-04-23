@@ -214,9 +214,9 @@ def post_bootstrap(super_group):
     os.system(f"echo '{to_uuid(os_root)}' | {SUDO} tee /mnt/.snapshots/ash/part")
     os.system(f"{SUDO} cat ./src/ashpk_core.py ./src/distros/{distro}/ashpk.py > /mnt/.snapshots/ash/ash")
     os.system(f"{SUDO} chmod +x /mnt/.snapshots/ash/ash")
-    os.system(f"{SUDO} cp -a ./src/detect_os.sh /mnt/.snapshots/ash/detect_os.sh")
+    os.system(f"{SUDO} cp -a ./src/detect_os.py /mnt/.snapshots/ash/detect_os.py")
     os.system(f"{SUDO} ln -srf /mnt/.snapshots/ash/ash /mnt/usr/bin/ash")
-    os.system(f"{SUDO} ln -srf /mnt/.snapshots/ash/detect_os.sh /mnt/usr/bin/detect_os.sh")
+#    os.system(f"{SUDO} ln -srf /mnt/.snapshots/ash/detect_os.sh /mnt/usr/bin/detect_os.sh")
     os.system(f"{SUDO} ln -srf /mnt/.snapshots/ash /mnt/var/lib/ash")
     os.system(f"echo {{\\'name\\': \\'root\\', \\'children\\': [{{\\'name\\': \\'0\\'}}]}} | {SUDO} tee /mnt/.snapshots/ash/fstree") # Initialize fstree
   # Create user and set password

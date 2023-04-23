@@ -12,12 +12,11 @@ from argparse import ArgumentParser
 from ast import literal_eval
 from configparser import ConfigParser, NoOptionError, NoSectionError
 from filecmp import cmp
-from os.path import expanduser
 from re import sub
 from shutil import copy
 from tempfile import TemporaryDirectory
-from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
+from urllib.request import urlopen
 
 # Directories
 # All snapshots share one /var
@@ -35,13 +34,8 @@ from urllib.error import URLError, HTTPError
 # /var/lib/ash(/fstree)            : ash files, stores fstree, symlink to /.snapshots/ash
 # Failed prompts start with "F: "
 
-distro = subprocess.check_output(['/usr/bin/detect_os.sh', 'id']).decode('utf-8').replace('"', "").strip()
-distro_name = subprocess.check_output(['/usr/bin/detect_os.sh', 'name']).decode('utf-8').strip()
-GRUB = subprocess.check_output("ls /boot | grep grub", encoding='utf-8', shell=True).strip()
 DEBUG = " >/dev/null 2>&1" # options: "", " >/dev/null 2>&1"
 URL = "https://raw.githubusercontent.com/ashos/ashos/main/src"
-USERNAME = os.getenv("SUDO_USER") or os.getenv("USER")
-HOME = os.path.expanduser('~'+ USERNAME) # type: ignore
 
 # ------------------------------ CORE FUNCTIONS ------------------------------ #
 
@@ -88,7 +82,6 @@ def ash_chroot_mounts(i, CHR=""):
 
 #   Update ash itself
 def ash_update(dbg):
-    dist = distro.split("_")[0] # Remove '_ashos"
     mode = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
     with TemporaryDirectory(dir="/.snapshots/tmp", prefix="ashpk.") as tmpdir:
         try:
@@ -425,9 +418,53 @@ def get_current_snapshot():
     with open("/usr/share/ash/snap", "r") as csnap:
         return int(csnap.read().rstrip())
 
-#   This function returns either empty string or underscore plus name of distro if it was appended to sub-volume names to distinguish
+def get_distro_id(path_prepend=""):
+    distro_id = None
+    while distro_id == None:
+        if os.path.exists(f"{path_prepend}/etc/lsb-release"):
+            with open(f"{path_prepend}/etc/lsb-release", "r") as temp:
+                for line in temp.readlines():
+                    if line.startswith("DISTRIB_ID="):
+                        distro_id = line.split('=')[1].lower().strip()
+                        break
+        if os.path.exists(f"{path_prepend}/etc/os-release"):
+            with open(f"{path_prepend}/etc/os-release", "r") as temp:
+                for line in temp.readlines():
+                    if line.startswith("ID="):
+                        distro_id = line.split('=')[1].lower().strip()
+                        break
+        # otherwise loop through all files in /etc and check for "-release"
+        for etcf in os.listdir("/etc"): # depth=1, hopefully just 1 file matches
+            if etcf.endswith("-release") and etcf not in ("os-release", "lsb-release"):
+                distro_id = etcf.split('-')[0]
+                break
+    return distro_id
+
+def get_distro_name(path_prepend=""):
+    distro_name = None
+    while distro_name == None:
+        if os.path.exists(f"{path_prepend}/etc/lsb-release"):
+            with open(f"{path_prepend}/etc/lsb-release", "r") as temp:
+                for line in temp.readlines():
+                    if line.startswith("DISTRIB_DESCRIPTION="):
+                        distro_name = line.split('=')[1].strip()
+                        break
+        if os.path.exists(f"{path_prepend}/etc/os-release"):
+            with open(f"{path_prepend}/etc/os-release", "r") as temp:
+                for line in temp.readlines():
+                    if line.startswith("NAME="):
+                        distro_name = line.split('=')[1].strip()
+                        break
+        # Last resort loop through all files in /etc and check for "-release"
+        for etcf in os.listdir("/etc"):
+            if etcf.endswith("-release") and etcf not in ("os-release", "lsb-release"):
+                distro_name = etcf.split('-')[0].capitalize()
+                break
+    return distro_name
+
+#   This function returns either empty string or underscore plus name of distribution if it was appended to sub-volume names to distinguish
 def get_distro_suffix():
-    if "ashos" in distro:
+    if distro and "ashos" in distro:
         return f'_{distro.replace("_ashos", "")}'
     else:
         sys.exit(1) ### REVIEW before: return ""
@@ -567,7 +604,6 @@ def install_live(pkg, snap=get_current_snapshot()):
 
 #   Install a profile from a text file
 def install_profile(prof, snap, force=False, secondary=False, section_only=None):
-    dist = distro.split("_")[0] # Remove '_ashos"
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot install as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
@@ -610,7 +646,6 @@ def install_profile(prof, snap, force=False, secondary=False, section_only=None)
 
 #   Install profile in live snapshot
 def install_profile_live(prof, snap, force):
-    dist = distro.split("_")[0] # Remove '_ashos"
     tmp = get_tmp()
     ash_chroot_mounts(tmp)
     print(f"Updating the system before installing profile {prof}.")
@@ -651,7 +686,7 @@ def is_pkg_installed(pkg, snap):
     else:
         return None
 
-#   List sub-volumes for the booted distro only
+#   List sub-volumes for the booted distribution only
 def list_subvolumes():
     os.system(f"btrfs sub list / | grep -i {get_distro_suffix()} | sort -f -k 9")
 
@@ -920,7 +955,7 @@ def snapshot_config_edit(snap, skip_prep=False, skip_post=False):
 
 #   Get per-snapshot configuration options from /etc/ash.conf
 def snapshot_config_get(snap):
-    options = {"aur":"False","mutable_dirs":"","mutable_dirs_shared":""} # defaults here ### REVIEW This is not distro-generic
+    options = {"aur":"False","mutable_dirs":"","mutable_dirs_shared":""} # defaults here ### REVIEW This is not generic
     if not os.path.exists(f"/.snapshots/etc/etc-{snap}/ash.conf"):
         return options
     with open(f"/.snapshots/etc/etc-{snap}/ash.conf", "r") as optfile:
@@ -943,7 +978,7 @@ def snapshot_unlock(snap):
 def switch_distro():
     while True:
         map_tmp = subprocess.check_output("cat /boot/efi/EFI/map.txt | awk 'BEGIN { FS = "'"'" === "'"'" } ; { print $1 }'", shell=True).decode('utf-8').strip()
-        print("Type the name of a distro to switch to: (type 'list' to list them, 'q' to quit)")
+        print("Type the name of a distribution to switch to: (type 'list' to list them, 'q' to quit)")
         next_distro = input("> ")
         if next_distro == "q":
             break
@@ -966,7 +1001,7 @@ def switch_distro():
                         #break ### REVIEW
             break
         else:
-            print("Invalid distro!")
+            print("Invalid distribution!")
             continue
 
 #   Switch between /tmp deployments
@@ -1042,7 +1077,7 @@ def tmp_delete(secondary=False):
 #   Print out tree with descriptions
 def tree_print(tree):
     csnap = get_current_snapshot()
-    for pre, fill, node in RenderTree(tree, style=AsciiStyle()): # simpler tree style
+    for pre, fill, node in RenderTree(tree, style=AsciiStyle()): # simpler tree style # type: ignore
         if os.path.isfile(f"/.snapshots/ash/snapshots/{node.name}-desc"):
             with open(f"/.snapshots/ash/snapshots/{node.name}-desc", "r") as descfile:
                 desc = descfile.readline()
@@ -1120,7 +1155,7 @@ def tree_sync(tree, tname, force_offline, live):
                 post_transactions(snap_to) ### IMPORTANT REVIEW 2023 - Moved here from the line immediately after first tree_sync_helper
         print(f"Tree {tname} synced.")
 
-#   Sync tree helper function ### REVIEW might need to put it in distro-specific ashpk.py
+#   Sync tree helper function ### REVIEW might need to put it in distribution-specific ashpk.py
 def tree_sync_helper(CHR, s_f, s_t):
     os.system("mkdir -p /.snapshots/tmp-db/local/") ### REVIEW Still resembling Arch pacman folder structure!
     os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW
@@ -1216,7 +1251,7 @@ def upgrade(snap, baseup=False):
     elif snap == 0 and not baseup:
         print("F: Changing base snapshot is not allowed.")
     else:
-#        prepare(snap) ### REVIEW Moved to a distro-specific function as it needs to go after setup_aur_if_enabled()
+#        prepare(snap) ### REVIEW Moved to a distribution-specific function as it needs to go after setup_aur_if_enabled()
       # Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
         excode = upgrade_helper(snap)
         if excode:
@@ -1263,10 +1298,28 @@ def yes_no(msg):
             continue
     return e
 
+# Define variable
+distro = get_distro_id()
+distro_name = get_distro_name()
+if distro:
+    dist = distro.split("_")[0] # Remove '_ashos"
+else:
+    sys.exit("F: Operating system could not be detected!")
+GRUB = subprocess.check_output("ls /boot | grep grub", encoding='utf-8', shell=True).strip()
+USERNAME = os.getenv("SUDO_USER") or os.getenv("USER")
+HOME = os.path.expanduser('~'+ USERNAME) # type: ignore
+
 #   Main function
 def main():
-    if os.geteuid() != 0: # TODO 2023 exception: Make 'ash tree' run without root permissions
+    # TODO 2023 exception: Make 'ash tree' run without root permissions
+    if sys.platform.startswith("linux") and os.geteuid() != 0:
         exit("sudo/doas is required to run ash!")
+    elif sys.platform.startswith("windows"):
+        print("TODO")
+    elif sys.platform.startswith("darwin"):
+        print("TODO")
+    elif sys.platform.startswith("cosmo"):
+        print("TODO")
     else:
         importer = DictImporter() # Dict importer
 #        isChroot = chroot_check() ### TODO
@@ -1405,7 +1458,7 @@ def main():
         editconf_par.add_argument("--snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         editconf_par.set_defaults(func=snapshot_config_edit)
       # Snapshot diff
-        diff_par = subparsers.add_parser("diff", aliases=['dif'], allow_abbrev=True, help='Show package diff between snapshots')
+        diff_par = subparsers.add_parser("diff", aliases=["dif"], allow_abbrev=True, help='Show package diff between snapshots')
         diff_par.add_argument("snap1", type=int, help="source snapshot")
         diff_par.add_argument("snap2", type=int, help="target snapshot")
         diff_par.set_defaults(func=snapshot_diff)
@@ -1414,7 +1467,7 @@ def main():
         unl_par.add_argument("--snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
         unl_par.set_defaults(func=snapshot_unlock)
       # Switch distros
-        switch_par = subparsers.add_parser("dist", aliases=["distro", "distros"], allow_abbrev=True, help="Switch to another distro")
+        switch_par = subparsers.add_parser("dist", aliases=["distro"], allow_abbrev=True, help="Switch to another distribution")
         switch_par.set_defaults(func=switch_distro)
       # Switch to Windows (semi plausible deniability)
         hide_par = subparsers.add_parser("hide", allow_abbrev=False, help="Hide AshOS and switch to Windows")
