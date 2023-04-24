@@ -99,6 +99,7 @@ def cache_copy(snap, FROM):
 
 #   Fix signature invalid error
 def fix_package_db(snap = 0):
+    run_chroot = False
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot fix package manager database as snapshot {snap} doesn't exist.")
         return
@@ -106,9 +107,10 @@ def fix_package_db(snap = 0):
         print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.")
         return
     elif snap == 0:
-        P = "" ### I think this is wrong. It should be check if snapshot = current-deployed-snapshot, then this.
+        run_chroot = False # Before: P = "" ### I think this is wrong. It should be check if snapshot = current-deployed-snapshot, then this.
     else:
-        P = f"chroot /.snapshots/rootfs/snapshot-chr{snap} "
+        run_chroot = True
+        P = f"/.snapshots/rootfs/snapshot-chr{snap}" # before: P = f"chroot /.snapshots/rootfs/snapshot-chr{snap} "
     try:
         if check_mutability(snap):
             flip = False # Snapshot is mutable so do not make it immutable after fixdb is done
@@ -116,14 +118,23 @@ def fix_package_db(snap = 0):
             immutability_disable(snap)
             flip = True
         prepare(snap)
-        os.system(f"{P}rm -rf /etc/pacman.d/gnupg $HOME/.gnupg") ### $HOME vs /root NEEDS fixing # If folder not present and subprocess.run is used, throws error and stops
-        os.system(f"{P}rm -r /var/lib/pacman/db.lck")
-        os.system(f"{P}pacman -Syy")
-        os.system(f"{P}gpg --refresh-keys")
-        os.system(f"{P}killall gpg-agent")
-        os.system(f"{P}pacman-key --init")
-        os.system(f"{P}pacman-key --populate archlinux")
-        os.system(f"{P}pacman -Syvv --noconfirm archlinux-keyring") ### REVIEW NEEDED? (maybe)
+      # chroot in if needed
+        rr = None
+        if run_chroot:
+            rr = chroot_in(P)
+      # Fix package database
+        # before all these were like: os.system(f"{P}XYZ")
+        os.system("rm -rf /etc/pacman.d/gnupg $HOME/.gnupg") ### $HOME vs /root NEEDS fixing # If folder not present and subprocess.run is used, throws error and stops
+        os.system("rm -r /var/lib/pacman/db.lck")
+        os.system("pacman -Syy")
+        os.system("gpg --refresh-keys")
+        os.system("killall gpg-agent")
+        os.system("pacman-key --init")
+        os.system("pacman-key --populate archlinux")
+        os.system("pacman -Syvv --noconfirm archlinux-keyring") ### REVIEW NEEDED? (maybe)
+      # chroot out if needed
+        if run_chroot:
+            chroot_out(rr)
         post_transactions(snap)
         if flip:
             immutability_enable(snap)
@@ -135,15 +146,15 @@ def fix_package_db(snap = 0):
 #   Delete init system files (Systemd, OpenRC, etc.)
 def init_system_clean(snap, FROM):
     if FROM == "prepare":
-        os.system(f"rm -rf /.snapshots/rootfs/snapshot-chr{snap}/var/lib/systemd/*{DEBUG}")
+        rmrf(f"/.snapshots/rootfs/snapshot-chr{snap}/var/lib/systemd", "/*")
     elif FROM == "deploy":
-        os.system(f"rm -rf /var/lib/systemd/*{DEBUG}")
-        os.system(f"rm -rf /.snapshots/rootfs/snapshot-{snap}/var/lib/systemd/*{DEBUG}")
+        rmrf("/var/lib/systemd", "/*")
+        rmrf(f"/.snapshots/rootfs/snapshot-{snap}/var/lib/systemd/", "/*")
 
 #   Copy init system files (Systemd, OpenRC, etc.) to shared
 def init_system_copy(snap, FROM):
     if FROM == "post_transactions":
-        os.system(f"rm -rf /var/lib/systemd/*{DEBUG}")
+        rmrf("/var/lib/systemd", "/*")
         os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{snap}/var/lib/systemd/. /var/lib/systemd/{DEBUG}")
 
 #   Install atomic-operation

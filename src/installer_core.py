@@ -6,6 +6,7 @@ import subprocess
 from re import search
 from setup import args, distro, distro_name
 from shutil import copy, which
+from ashpk_core import rmrf
 
 SUDO = "sudo" ### Test and emove if sudo not needed in any distro
 
@@ -50,8 +51,10 @@ def deploy_base_snapshot():
     os.system(f"{SUDO} chroot /mnt {SUDO} btrfs sub set-default /.snapshots/rootfs/snapshot-deploy")
     os.system(f"{SUDO} cp -r /mnt/root/. /mnt/.snapshots/root/")
     os.system(f"{SUDO} cp -r /mnt/tmp/. /mnt/.snapshots/tmp/")
-    os.system(f"{SUDO} rm -rf /mnt/root/*")
-    os.system(f"{SUDO} rm -rf /mnt/tmp/*")
+    #os.system(f"{SUDO} rm -rf /mnt/root/*")
+    #os.system(f"{SUDO} rm -rf /mnt/tmp/*")
+    rmrf("/mnt/root", "/*")
+    rmrf("/mnt/tmp", "/*")
 
 #   Copy boot and etc: deployed snapshot <---> common
 def deploy_to_common():
@@ -121,20 +124,20 @@ def get_ip():
     return IP
 
 #   Generic function to choose something from a directory
-def get_item_from_path(thing, apath):
+def get_item_from_path(thing, a_path):
     clear()
     while True:
         print(f"Select a {thing} (type list to list):")
         ch = input("> ")
         if ch == "list":
             ch = []
-            for root, _dirs, files in os.walk(apath, followlinks=True):
+            for root, _dirs, files in os.walk(a_path, followlinks=True):
                 for file in files:
-                    ch.append(os.path.join(root, file).replace(f"{apath}/", ""))
+                    ch.append(os.path.join(root, file).replace(f"{a_path}/", ""))
             ch = "\n".join(sorted(ch))
             os.system(f"echo '{ch}' | less")
         else:
-            temp = str(f"{apath}/{ch}")
+            temp = str(f"{a_path}/{ch}")
             if not ( os.path.isfile(temp) or os.path.isdir(temp) ):
                 print(f"Invalid {thing}!")
                 continue

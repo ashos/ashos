@@ -13,7 +13,7 @@ from ast import literal_eval
 from configparser import ConfigParser, NoOptionError, NoSectionError
 from filecmp import cmp
 from re import sub
-from shutil import copy
+from shutil import copy, rmtree
 from tempfile import TemporaryDirectory
 from urllib.error import URLError, HTTPError
 from urllib.request import urlopen
@@ -285,6 +285,7 @@ def clone_under(snap, branch):
 #   Delete tree or branch
 def delete_node(snaps, quiet, nuke):
     for snap in snaps:
+        run = False
         if snap == 0:
             print("F: Changing base snapshot is not allowed.")
         if not nuke:
@@ -296,7 +297,9 @@ def delete_node(snaps, quiet, nuke):
                 print("F: Cannot delete deployed snapshot.")
             elif not quiet and not yes_no(f"Are you sure you want to delete snapshot {snap}?"):
                 sys.exit("Aborted")
-        else:
+            else:
+                run = True
+        if nuke or run:
             children = return_children(fstree, snap)
             write_desc("", snap) # Clear description # Why have this? REVIEW 2023
             os.system(f"btrfs sub del /.snapshots/boot/boot-{snap}{DEBUG}")
@@ -354,7 +357,8 @@ def deploy(snap, secondary=False):
 ###2023        os.system(f"btrfs sub create /.snapshots/var/var-{tmp} >/dev/null 2>&1") # REVIEW pretty sure not needed
         os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/boot{DEBUG}")
         os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
-        os.system(f"rm -rf /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}")
+        ###TODEL os.system(f"rm -rf /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}")
+        rmrf(f"/.snapshots/rootfs/snapshot-{tmp}/var")
         os.system(f"cp -r --reflink=auto /.snapshots/boot/boot-{snap}/. /.snapshots/rootfs/snapshot-{tmp}/boot{DEBUG}")
         os.system(f"cp -r --reflink=auto /.snapshots/etc/etc-{snap}/. /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
 #       os.system(f"cp --reflink=auto -r /.snapshots/var/var-{etc}/* /.snapshots/var/var-{tmp} >/dev/null 2>&1") # REVIEW 2023 pretty sure not needed
@@ -708,9 +712,9 @@ def post_transactions(snap):
   # Some operations were moved below to fix hollow functionality ### IMPORTANT REVIEW 2023
   # File operations in snapshot-chr
 #    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snap}{DEBUG}") ### REVIEW # Moved to a few lines below ### GOOD_TO_DELETE_2023
-    os.system(f"rm -rf /.snapshots/boot/boot-chr{snap}/*{DEBUG}")
+    rmrf(f"/.snapshots/boot/boot-chr{snap}", "/*")
     os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snap}/boot/. /.snapshots/boot/boot-chr{snap}{DEBUG}")
-    os.system(f"rm -rf /.snapshots/etc/etc-chr{snap}/*{DEBUG}")
+    rmrf(f"/.snapshots/etc/etc-chr{snap}", "/*")
     os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snap}/etc/. /.snapshots/etc/etc-chr{snap}{DEBUG}")
   # Keep package manager's cache after installing packages. This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
     cache_copy(snap, "post_transactions")
@@ -893,6 +897,20 @@ def return_children(tree, id):
     if id in children:
         children.remove(id)
     return children
+
+#   Pythonic rm -rf (for both deleting just contents and everything)
+def rmrf(a_path, contents=""):
+    if contents == "/*": # just delete a_path/*
+        for root, dirs, files in os.walk(a_path):
+            for f in files:
+                os.unlink(os.path.join(root, f))
+            for d in dirs:
+                rmtree(os.path.join(root, d))
+    else: # delete everything
+        if os.path.isfile(a_path):
+            os.unlink(a_path)
+        elif os.path.isdir(a_path):
+            rmtree(a_path)
 
 #   Rollback last booted deployment
 def rollback():
@@ -1158,18 +1176,18 @@ def tree_sync(tree, tname, force_offline, live):
 #   Sync tree helper function ### REVIEW might need to put it in distribution-specific ashpk.py
 def tree_sync_helper(CHR, s_f, s_t):
     os.system("mkdir -p /.snapshots/tmp-db/local/") ### REVIEW Still resembling Arch pacman folder structure!
-    os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW
+    rmrf("/.snapshots/tmp-db/local", "/*") ### REVIEW
     pkg_list_from = pkg_list(s_f, "")
     pkg_list_to = pkg_list(s_t, CHR)
   # Get packages to be inherited
     pkg_list_from = [j for j in pkg_list_from if j not in pkg_list_to]
     os.system(f"cp -r /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/. /.snapshots/tmp-db/local/") ### REVIEW
     os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-{s_f}/. /.snapshots/rootfs/snapshot-{CHR}{s_t}/{DEBUG}")
-    os.system(f"rm -rf /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/*") ### REVIEW
+    rmrf(f"/.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local", "/*") ### REVIEW
     os.system(f"cp -r /.snapshots/tmp-db/local/. /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/") ### REVIEW
     for entry in pkg_list_from:
         os.system(f"bash -c 'cp -r /.snapshots/rootfs/snapshot-{s_f}/usr/share/ash/db/local/{entry}-[0-9]* /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/'") ### REVIEW
-    os.system("rm -rf /.snapshots/tmp-db/local/*")
+    rmrf("/.snapshots/tmp-db/local", "/*")
 
 #   Recursively run an update in tree
 def tree_upgrade(tree, tname):
@@ -1317,7 +1335,7 @@ def main():
     elif sys.platform.startswith("cosmo") and os.getuid() != 0: ### TODO use geteuid when fixed
         exit("F: Run ash with super user privileges!")
     elif sys.platform.startswith("windows"):
-        from ctypes import windll # type: ignore
+        from ctypes import windll # type: ignore ### REVIEW 2023
         if windll.shell32.IsUserAnAdmin() != 0:
             exit("F: Run ash with admin privileges!")
     elif sys.platform.startswith("darwin"):
@@ -1333,7 +1351,9 @@ def main():
         #    print("Please don't use ash inside a chroot!") ### TODO
       # Recognize argument and call appropriate function
         parser = ArgumentParser(prog='ash', description='Any Snapshot Hierarchical OS')
-        subparsers = parser.add_subparsers(dest='command', required=True, help='Different commands for ash')
+        #subparsers = parser.add_subparsers(dest='command', required=True, help='Different commands for ash')
+        subparsers = parser.add_subparsers(dest='command', help='Different commands for ash')
+        subparsers.required = True # backward compatibility with python <= 3.6
       # Ash update
         upme_par = subparsers.add_parser("upme", aliases=['ash-update'], allow_abbrev=True, help="Update ash itself")
         upme_par.add_argument('--dbg', '--debug', '--test', '-d', '-t', action='store_true', required=False, help='Enable live install for snapshot')
@@ -1523,11 +1543,11 @@ def main():
         whichtmp_par = subparsers.add_parser("whichtmp", aliases=["whichdep", "which"], allow_abbrev=True, help="Show which deployment snapshot is in use")
         whichtmp_par.set_defaults(func=lambda: get_tmp(console=True)) # print to console REVIEW 2023 NEWER: test print(get_tmp)
       # Which snapshot(s) contain a package
-        which_snap_par = subparsers.add_parser("whichsnap", aliases=["ws"], allow_abbrev=True, help='Get list of installed packages in a snapshot')
-        which_snap_par.add_argument('pkg', nargs='+', help='a package')
+        which_snap_par = subparsers.add_parser("whichsnap", aliases=["ws"], allow_abbrev=True, help='Which snapshot has a package installed')
+        which_snap_par.add_argument('--pkg', '--package', '-p', nargs='+', required=True, help='a package')
+        #which_snap_par.add_argument('pkg', nargs='+', help='a package')
         which_snap_par.set_defaults(func=which_snapshot_has)
       # Call relevant functions
-        #args_1 = parser.parse_args()
         args_1 = parser.parse_args(args=None if sys.argv[1:] else ['--help']) # Show help if no command used
         args_2 = vars(args_1).copy()
         args_2.pop('command', None)
