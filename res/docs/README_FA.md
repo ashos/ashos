@@ -272,7 +272,7 @@ ash tree-run <tree> <command>
 ash clone <snapshot>
 ```
 
-#### Clone a tree recursively  
+#### Clone a tree recursively
 * This clones an entire tree recursively
 
 ```

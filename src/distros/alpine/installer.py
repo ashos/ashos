@@ -1,12 +1,33 @@
 #!/usr/bin/python3
 
 import os
-from shutil import copy
 import subprocess
-import sys ### REMOVE WHEN TRY EXCEPT ELSE IS IMPLEMENTED
+from setup import args, distro
+from shutil import copy
 from src.installer_core import * # NOQA
 #from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
-from setup import args, distro
+
+#   1. Define variables
+APK = "2.12.11-r0" # https://git.alpinelinux.org/aports/plain/main/apk-tools/APKBUILD
+ARCH = "x86_64"
+RELEASE = "edge"
+KERNEL = "edge" ### lts
+packages = f"linux-{KERNEL} curl coreutils sudo tzdata mount mkinitfs umount tmux python3 py3-anytree bash"
+            #linux-firmware-none networkmanager linux-firmware nano doas os-prober musl-locales musl-locales-lang dbus #### default mount from busybox gives errors. Do I also need umount?!
+if is_efi:
+    packages += " efibootmgr"
+    packages_no_trigger = "grub-efi" # https://gitlab.alpinelinux.org/alpine/aports/-/issues/11673
+#    if is_mutable: ### TODO still errors
+#        packages += " dosfstools" # Optional for fsck.vfat checks at boot up
+else:
+    packages_no_trigger = "grub-bios"
+if is_format_btrfs:
+    packages += " btrfs-progs"
+if is_luks:
+    packages += " cryptsetup" ### REVIEW_LATER
+super_group = "wheel"
+v = "" # GRUB version number in /boot/grubN
+URL = f"https://dl-cdn.alpinelinux.org/alpine/{RELEASE}/main"
 
 def initram_update():
     if is_luks:
@@ -37,27 +58,6 @@ def initram_update():
                         print(f"F: Creating initfs with kernel {kv} failed!")
                         continue
 
-#   1. Define variables
-APK = "2.12.11-r0" # https://git.alpinelinux.org/aports/plain/main/apk-tools/APKBUILD
-ARCH = "x86_64"
-RELEASE = "edge"
-KERNEL = "edge" ### lts
-packages = f"linux-{KERNEL} blkid curl coreutils sudo tzdata mount mkinitfs umount tmux python3 py3-anytree bash"
-            #linux-firmware-none networkmanager linux-firmware nano doas os-prober musl-locales musl-locales-lang dbus #### default mount from busybox gives errors. Do I also need umount?!
-if is_efi:
-    packages += " grub-efi efibootmgr"
-#    if is_mutable: ### TODO still errors
-#        packages += " dosfstools" # Optional for fsck.vfat checks at boot up
-else:
-    packages += " grub-bios"
-if is_format_btrfs:
-    packages += " btrfs-progs"
-if is_luks:
-    packages += " cryptsetup" ### REVIEW_LATER
-super_group = "wheel"
-v = "" # GRUB version number in /boot/grubN
-URL = f"https://dl-cdn.alpinelinux.org/alpine/{RELEASE}/main"
-
 #   Pre bootstrap
 pre_bootstrap()
 
@@ -67,10 +67,14 @@ os.system("tar zxf apk-tools-static-*.apk")
 excode1 = os.system(f"sudo ./sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add alpine-base") ### REVIEW Is "/" needed after {URL} ?
 copy("./src/distros/alpine/repositories", "/mnt/etc/apk/") ### REVIEW MOVED from down at section 3 to here as installing 'bash' was giving error
 os.system("sudo cp --dereference /etc/resolv.conf /mnt/etc/") # --remove-destination ### not writing through dangling symlink! (TODO: try except)
-excode2 = os.system(f"sudo chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'") ### changed bash to sh
 
-if excode1 or excode2:
-    sys.exit("Failed to bootstrap!")
+try:
+    os.system(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'")
+    os.system(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add --no-scripts {packages_no_trigger}'")
+except subprocess.CalledProcessError:
+    print("F: Bootstrap failed!")
+#        if yes_no("Would you like to try again?"):
+#            continue
 
 #   Mount-points for chrooting
 ash_chroot()

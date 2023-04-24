@@ -18,20 +18,20 @@ from tempfile import TemporaryDirectory
 from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
 
-
 # Directories
 # All snapshots share one /var
 # global boot is always at @boot
-# *-deploy and *-deploy-aux         : temporary directories used to boot deployed snapshot
-# *-chr                             : temporary directories used to chroot into snapshot or copy snapshots around
-# /.snapshots/ash/ash               : symlinked to /usr/bin/ash
-# /.snapshots/etc/etc-*             : individual /etc for each snapshot
-# /.snapshots/boot/boot-*           : individual /boot for each snapshot
-# /.snapshots/rootfs/snapshot-*     : snapshots
-# /.snapshots/ash/snapshots/*-desc  : descriptions
-# /usr/share/ash                    : files that store current snapshot info
-# /usr/share/ash/db                 : package database
-# /var/lib/ash(/fstree)             : ash files, stores fstree, symlink to /.snapshots/ash
+# *-deploy and *-deploy-aux        : temporary directories used to boot deployed snapshot
+# *-deploy[-aux]-secondary         : temporary directories used to boot secondary deployed snapshot
+# *-chr                            : temporary directories used to chroot into snapshots or copy them around
+# /.snapshots/ash/ash              : symlinked to /usr/bin/ash
+# /.snapshots/etc/etc-*            : individual /etc for each snapshot
+# /.snapshots/boot/boot-*          : individual /boot for each snapshot
+# /.snapshots/rootfs/snapshot-*    : snapshots
+# /.snapshots/ash/snapshots/*-desc : descriptions
+# /usr/share/ash                   : files that store current snapshot info
+# /usr/share/ash/db                : package database
+# /var/lib/ash(/fstree)            : ash files, stores fstree, symlink to /.snapshots/ash
 # Failed prompts start with "F: "
 
 distro = subprocess.check_output(['/usr/bin/detect_os.sh', 'id']).decode('utf-8').replace('"', "").strip()
@@ -107,7 +107,7 @@ def ash_update(dbg):
             elif cmp(f"{tmpdir}/ash", __file__, shallow=False):
                 print("F: Ash already up to date.")
             else:
-                copy(__file__, f"{dir}/ash_old")
+                copy(__file__, f"{tmpdir}/ash_old")
                 copy(f"{tmpdir}/ash", __file__)
                 os.chmod(__file__, mode)
                 print(f"Ash updated succesfully. Old Ash moved to {tmpdir}.")
@@ -169,7 +169,7 @@ def chroot(snap, cmd=""): ### make cmd to cmds (IMPORTANT for install_profile)
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot chroot as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.") ### REMOVE_ALL_THESE_LINES
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.") ### REMOVE_ALL_THESE_LINES
     elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
@@ -316,18 +316,15 @@ def delete_node(snaps, quiet):
             print(f"Snapshot {snap} removed.")
 
 #   Deploy snapshot
-def deploy(snap):
+def deploy(snap, secondary=False):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot deploy as snapshot {snap} doesn't exist.")
     else:
-        update_boot(snap)
+        update_boot(snap, secondary)
         tmp = get_tmp()
         os.system(f"btrfs sub set-default /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") # Set default volume
-        tmp_delete()
-        if tmp == "deploy-aux":
-            tmp = "deploy"
-        else:
-            tmp = "deploy-aux"
+        tmp_delete(secondary)
+        tmp = get_aux_tmp(tmp, secondary)
       # Special mutable directories
         options = snapshot_config_get(snap)
         mtbl_dirs = options["mutable_dirs"].split(',').remove('')
@@ -362,7 +359,7 @@ def deploy(snap):
                 os.system(f"echo '{src_path} /{mnt_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
         os.system(f"btrfs sub snap /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}") ### REVIEW Is this needed? Can it be moved up?
         os.system(f"echo '{snap}' > /.snapshots/rootfs/snapshot-{tmp}/usr/share/ash/snap")
-        switch_tmp()
+        switch_tmp(secondary)
         init_system_clean(tmp, "deploy")
         os.system(f"btrfs sub set-default /.snapshots/rootfs/snapshot-{tmp}") # Set default volume
         print(f"Snapshot {snap} deployed to /.")
@@ -384,6 +381,20 @@ def find_new():
         if str(f"snapshot-{i}") not in snapshots and str(f"etc-{i}") not in snapshots and str(f"var-{i}") not in snapshots and str(f"boot-{i}") not in snapshots:
             return(i)
 
+#   Get aux tmp
+def get_aux_tmp(tmp, secondary=False):
+    if secondary:
+        if tmp == "secondary":
+            tmp = tmp.replace("-secondary", "")
+        else:
+            tmp = f'{tmp}-secondary'
+    else:
+        if tmp == "deploy-aux":
+            tmp = tmp.replace("deploy-aux", "deploy")
+        else:
+            tmp = tmp.replace("deploy", "deploy-aux")
+    return tmp
+
 #   Get current snapshot
 def get_current_snapshot():
     with open("/usr/share/ash/snap", "r") as csnap:
@@ -397,11 +408,8 @@ def get_distro_suffix():
         sys.exit(1) ### REVIEW before: return ""
 
 #   Get deployed snapshot
-def get_next_snapshot():
-    if get_tmp() == "deploy-aux":
-        d = "deploy"
-    else:
-        d = "deploy-aux"
+def get_next_snapshot(secondary=False):
+    d = get_aux_tmp(get_tmp(), secondary)
     if os.path.exists("/.snapshots/rootfs/snapshot-{d}/usr/share/ash/snap"): # Make sure next snapshot exists
         with open(f"/.snapshots/rootfs/snapshot-{d}/usr/share/ash/snap", "r") as csnap:
             return int(csnap.read().rstrip())
@@ -418,9 +426,13 @@ def get_part():
         return subprocess.check_output(f"blkid | grep '{cpart.read().rstrip()}' | awk -F: '{{print $1}}'", shell=True).decode('utf-8').strip()
 
 #   Get tmp partition state
-def get_tmp(console=False): # By default just "return" which deployment is running
+def get_tmp(console=False): # By default just "return" which deployment is running ### removed ", secondary=False" as 2nd arg not needed
     mount = str(subprocess.check_output("cat /proc/mounts | grep ' / btrfs'", shell=True))
-    if "deploy-aux" in mount:
+    if "deploy-aux-secondary" in mount:
+        r = "deploy-aux-secondary"
+    elif "deploy-secondary" in mount:
+        r = "deploy-secondary"
+    elif "deploy-aux" in mount:
         r = "deploy-aux"
     else:
         r = "deploy"
@@ -434,7 +446,7 @@ def hollow(snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot make hollow as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.")
     elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
@@ -493,7 +505,7 @@ def install(pkg, snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot install as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.")
     elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
@@ -528,12 +540,12 @@ def install_live(pkg, snap=get_current_snapshot()):
         print("F: Live installation failed!")
 
 #   Install a profile from a text file
-def install_profile(prof, snap, force=False):
+def install_profile(prof, snap, force=False, secondary=False, section_only=None):
     dist = distro.split("_")[0] # Remove '_ashos"
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot install as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.")
     elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
@@ -541,7 +553,9 @@ def install_profile(prof, snap, force=False):
         auto_upgrade(snap) # include these in try except too!
         prepare(snap)
         pkgs = ""
-        profconf = ConfigParser(allow_no_value=True)
+        profconf = ConfigParser(allow_no_value=True, delimiters=("==="), strict=False)
+#        profconf.optionxform = lambda option: option # preserve case for letters
+        profconf.optionxform = str # type: ignore
         try:
             if os.path.exists(f"/.snapshots/tmp/{prof}.conf") and not force:
                 profconf.read(f"/.snapshots/tmp/{prof}.conf")
@@ -550,15 +564,14 @@ def install_profile(prof, snap, force=False):
                 resp = urlopen(f"{URL}/profiles/{prof}/{dist}.conf").read().decode('utf-8') ### REVIEW
                 with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
                     cfile.write(resp) # Save for later use
-#                resp = get(f"{URL}/profiles/{prof}/{dist}.conf", allow_redirects=True) ### REVIEW
-#                with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
-#                    cfile.write(resp.text) # Save for later use
                 profconf.read_string(resp)
-                for p in profconf['packages']:
-                    pkgs += f"{p} "
-                install_package(pkgs.strip(), snap) # remove last space
-                for cmd in profconf['commands']:
-                    print(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}")
+            if profconf.has_section('presets'):
+                presets_helper(profconf, snap) ### BEFORE: profconf['presets'] IMPORTANT BAD PRACTICE
+            for p in profconf['packages']:
+                pkgs += f"{p} "
+            install_package(pkgs.strip(), snap) # remove last space
+            for cmd in profconf['commands']:
+                os.system(f'chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}')
         except (NoOptionError, NoSectionError, HTTPError, URLError): ### REVIEW 2023
             chr_delete(snap)
             print("F: Install failed and changes discarded!")
@@ -567,35 +580,7 @@ def install_profile(prof, snap, force=False):
             post_transactions(snap)
             print(f"Profile {prof} installed in snapshot {snap} successfully.")
             print(f"Deploying snapshot {snap}.")
-            deploy(snap)
-
-#   Install a profile from a text file
-def install_profile_OLD(prof, snap):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
-        print(f"F: Cannot install as snapshot {snap} doesn't exist.")
-    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
-    elif snap == 0:
-        print("F: Changing base snapshot is not allowed.")
-    else:
-        print(f"Updating the system before installing profile {prof}.")
-        auto_upgrade(snap)
-        tmp_prof = subprocess.check_output("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX", shell=True, encoding='utf-8').strip()
-        subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{prof}/packages{get_distro_suffix()}.txt", shell=True)
-        prepare(snap)
-        try: # Ignore empty lines or ones starting with # [ % &
-            pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\\[|^%|^&|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
-            install_package(pkg, snap)
-            service_enable(prof, tmp_prof, snap)
-        except subprocess.CalledProcessError:
-            chr_delete(snap)
-            print("F: Install failed and changes discarded!")
-            sys.exit(1)
-        else:
-            post_transactions(snap)
-            print(f"Profile {prof} installed in snapshot {snap} successfully.")
-            print(f"Deploying snapshot {snap}.")
-            deploy(snap)
+            deploy(snap, secondary)
 
 #   Install profile in live snapshot
 def install_profile_live(prof, snap, force):
@@ -605,7 +590,7 @@ def install_profile_live(prof, snap, force):
     print(f"Updating the system before installing profile {prof}.")
     auto_upgrade(tmp)
     pkgs = ""
-    profconf = ConfigParser(allow_no_value=True)
+    profconf = ConfigParser(allow_no_value=True, delimiters=("==="), strict=False)
     try:
         if os.path.exists(f"/.snapshots/tmp/{prof}.conf") and not force:
             profconf.read(f"/.snapshots/tmp/{prof}.conf")
@@ -614,15 +599,12 @@ def install_profile_live(prof, snap, force):
             resp = urlopen(f"{URL}/profiles/{prof}/{dist}.conf").read().decode('utf-8') ### REVIEW
             with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
                 cfile.write(resp) # Save for later use
-#            resp = get(f"{URL}/profiles/{prof}/{dist}.conf", allow_redirects=True) ### REVIEW
-#            with open(f"/.snapshots/tmp/{prof}.conf", 'w') as cfile:
-#                cfile.write(resp.text) # Save for later use
             profconf.read_string(resp)
-            for p in profconf['packages']:
-                pkgs += f"{p} "
-            install_package_live(pkgs.strip(), snap, tmp) ### REVIEW snapshot argument needed
-            for cmd in profconf['commands']:
-                print(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}")
+        for p in profconf['packages']:
+            pkgs += f"{p} "
+        install_package_live(pkgs.strip(), snap, tmp) ### REVIEW snapshot argument needed
+        for cmd in profconf['commands']:
+            os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}")
             #excode2 = service_enable(prof, tmp_prof, tmp) ### IMPORTANT: tmp or snap?!
     except (NoOptionError, NoSectionError, HTTPError, URLError): ### REVIEW 2023
         print("F: Install failed!") # Before: Install failed and changes discarded (rephrased as there is no chr_delete here)
@@ -632,27 +614,6 @@ def install_profile_live(prof, snap, force):
         return 0
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}") ### REVIEW
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") ### REVIEW
-
-
-def install_profile_live_OLD(prof, snap): ### DELETE
-    tmp = get_tmp()
-    ash_chroot_mounts(tmp)
-    print(f"Updating the system before installing profile {prof}.")
-    auto_upgrade(tmp)
-    tmp_prof = subprocess.check_output("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX", shell=True, encoding='utf-8').strip()
-    subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.conf -LO {URL}/profiles/{prof}/packages{get_distro_suffix()}.conf", shell=True)
-  # Ignore empty lines or ones starting with # [ % &
-    pkg = subprocess.check_output(f"cat {tmp_prof}/packages.conf | grep -E -v '^#|^\\[|^%|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
-    excode1 = install_package_live(pkg, snap, tmp) ### REVIEW snapshot argument needed
-    excode2 = service_enable(prof, tmp_prof, tmp) ### IMPORTANT: tmp or snap?!
-    if excode1 or excode2:
-        print("F: Install failed!") # Before: Install failed and changes discarded (rephrased as there is no chr_delete here)
-        return 1
-    else:
-        print(f"Profile {prof} installed in current/live snapshot.") ### REVIEW
-        return 0
-    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
-    os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
 
 def is_efi():
     return os.path.exists("/sys/firmware/efi")
@@ -818,7 +779,7 @@ def refresh(snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot refresh as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"):
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.")
     elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
@@ -911,22 +872,24 @@ def snapshot_base_new(desc="clone of base"): # immutability toggle not used as b
     print(f"New tree {i} created.")
 
 #   Edit per-snapshot configuration
-def snapshot_config_edit(snap):
+def snapshot_config_edit(snap, skip_prep=False, skip_post=False):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot chroot as snapshot {snap} doesn't exist.")
     elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
-        prepare(snap)
+        if not skip_prep:
+            prepare(snap)
         if "EDITOR" in os.environ:
-            os.system(f"$EDITOR /.snapshots/rootfs/snapshot-chr{snap}/etc/ash.conf") # usage: sudo -E ash edit X
+            os.system(f"$EDITOR /.snapshots/rootfs/snapshot-chr{snap}/etc/ash.conf") # usage: sudo -E ash edit -s <snapshot-number>
         elif not os.system('[ -x "$(command -v nano)" ]'): # nano available:
             os.system(f"nano /.snapshots/rootfs/snapshot-chr{snap}/etc/ash.conf")
         elif not os.system('[ -x "$(command -v vi)" ]'): # vi available
             os.system(f"vi /.snapshots/rootfs/snapshot-chr{snap}/etc/ash.conf")
         else:
             os.system("F: No text editor available!")
-        post_transactions(snap)
+        if not skip_post:
+            post_transactions(snap)
 
 #   Get per-snapshot configuration options from /etc/ast.conf
 def snapshot_config_get(snap):
@@ -980,18 +943,14 @@ def switch_distro():
             continue
 
 #   Switch between /tmp deployments
-def switch_tmp():
+def switch_tmp(secondary=False):
     distro_suffix = get_distro_suffix()
     part = get_part()
     tmp_boot = subprocess.check_output("mktemp -d -p /.snapshots/tmp boot.XXXXXXXXXXXXXXXX", shell=True).decode('utf-8').strip()
     os.system(f"mount {part} -o subvol=@boot{distro_suffix} {tmp_boot}") # Mount boot partition for writing
   # Swap deployment subvolumes: deploy <-> deploy-aux
-    if get_tmp() == "deploy-aux":
-        source_dep = "deploy-aux"
-        target_dep = "deploy"
-    else:
-        source_dep = "deploy"
-        target_dep = "deploy-aux"
+    source_dep = get_tmp()
+    target_dep = get_aux_tmp(get_tmp(), secondary)
     os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{target_dep}/boot/. {tmp_boot}")
     os.system(f"sed -i 's|@.snapshots{distro_suffix}/rootfs/snapshot-{source_dep}|@.snapshots{distro_suffix}/rootfs/snapshot-{target_dep}|g' {tmp_boot}/{GRUB}/grub.cfg") # Overwrite grub config boot subvolume
     os.system(f"sed -i 's|@.snapshots{distro_suffix}/rootfs/snapshot-{source_dep}|@.snapshots{distro_suffix}/rootfs/snapshot-{target_dep}|g' /.snapshots/rootfs/snapshot-{target_dep}/boot/{GRUB}/grub.cfg")
@@ -1043,12 +1002,9 @@ def temp_snapshots_clear():
     os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr*{DEBUG}")
 
 #   Clean tmp dirs
-def tmp_delete():
-    tmp = get_tmp()
-    if tmp == "deploy-aux":
-        tmp = "deploy"
-    else:
-        tmp = "deploy-aux"
+def tmp_delete(secondary=False):
+    tmp = get_tmp() ### TODO either 1. combine these two (most likely) and/or 2. sub del tmp1 and tmp2 ?
+    tmp = get_aux_tmp(tmp, secondary)
     os.system(f"btrfs sub del /.snapshots/boot/boot-{tmp}{DEBUG}")
     os.system(f"btrfs sub del /.snapshots/etc/etc-{tmp}{DEBUG}")
     #os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}") # error: Not a Btrfs subvolume
@@ -1091,7 +1047,7 @@ def tree_run(tree, tname, cmd):
             order.remove(order[0])
             order.remove(order[0])
             if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{sarg}"):
-                print(f"F: Snapshot {sarg} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {sarg}'.")
+                print(f"F: Snapshot {sarg} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {sarg}'.")
                 print("Tree command canceled.")
                 return
             else:
@@ -1124,7 +1080,7 @@ def tree_sync(tree, tname, force_offline, live):
             order.remove(order[0])
             order.remove(order[0])
             if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap_to}"):
-                print(f"F: Snapshot {snap_to} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap_to}'.")
+                print(f"F: Snapshot {snap_to} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap_to}'.")
                 print("Tree sync canceled.")
                 return
             else:
@@ -1177,7 +1133,7 @@ def uninstall_package(pkg, snap):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot remove as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"):
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.")
     elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
@@ -1191,11 +1147,16 @@ def uninstall_package(pkg, snap):
             print(f"Package {pkg} removed from snapshot {snap} successfully.")
 
 #   Update boot
-def update_boot(snap): ### TODO Other bootloaders
+def update_boot(snap, secondary = False): ### TODO Other bootloaders
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot update boot as snapshot {snap} doesn't exist.")
     else:
         tmp = get_tmp()
+        if secondary:
+            if tmp == "secondary":
+                tmp = tmp.replace("-secondary", "")
+            else:
+                tmp = f'{tmp}-secondary'
         part = get_part()
         prepare(snap)
         if os.path.exists(f"/boot/{GRUB}/BAK/"): # REVIEW
@@ -1209,7 +1170,7 @@ def update_boot(snap): ### TODO Other bootloaders
 
 #   Saves changes made to /etc to snapshot
 def update_etc():
-    tmp = get_tmp()
+    tmp = get_tmp() ### TODO for secondary too?
     csnap = get_current_snapshot()
     os.system(f"btrfs sub del /.snapshots/etc/etc-{csnap}{DEBUG}")
     if check_mutability(csnap):
@@ -1223,7 +1184,7 @@ def upgrade(snap, baseup=False):
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot upgrade as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"):
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.")
     elif snap == 0 and not baseup:
         print("F: Changing base snapshot is not allowed.")
     else:
@@ -1345,6 +1306,7 @@ def main():
       # Deploy
         dep_par = subparsers.add_parser("deploy", aliases=['dep', 'd'], allow_abbrev=True, help='Deploy a snapshot for next boot')
         dep_par.add_argument("--snap", "--snapshot", "-s", type=int, required=False, default=get_current_snapshot(), help="snapshot number")
+        dep_par.add_argument('--secondary', '--sec', '-2', action='store_true', required=False, help='Deploy into secondary snapshot slot')
         dep_par.set_defaults(func=deploy)
       # Description
         desc_par = subparsers.add_parser("desc", help='Set a description for a snapshot by number')
@@ -1476,7 +1438,7 @@ def main():
       # Which deployment is active
         whichtmp_par = subparsers.add_parser("whichtmp", aliases=["whichdep", "which"], allow_abbrev=True, help="Show which deployment snapshot is in use")
         whichtmp_par.set_defaults(func=lambda: get_tmp(console=True)) # print to console REVIEW 2023 NEWER: test print(get_tmp)
-      # Which snapshots have a package
+      # Which snapshot(s) contain a package
         which_snap_par = subparsers.add_parser("whichsnap", aliases=["ws"], allow_abbrev=True, help='Get list of installed packages in a snapshot')
         which_snap_par.add_argument('pkg', nargs='+', help='a package')
         which_snap_par.set_defaults(func=which_snapshot_has)

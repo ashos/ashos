@@ -67,9 +67,9 @@ def ash_chroot():
     os.system("sudo mount -o x-mount.mkdir --rbind --make-rslave /sys /mnt/sys")
     if is_efi:
         os.system("sudo mount -o x-mount.mkdir --rbind --make-rslave /sys/firmware/efi/efivars /mnt/sys/firmware/efi/efivars")
-        
+
 ####### step3 begins here
-        
+
     os.system("sudo cp --dereference /etc/resolv.conf /mnt/etc/") # --remove-destination ### not writing through dangling symlink! (TODO: try except) <----------- NOT SURE IF THIS NEEDED FOR RHEL+STRATIS install?!!!
 
 subscription-manager register
@@ -157,7 +157,7 @@ Then edit /mnt/boot/grub2/grub.cfg to remove redundatn old root=UUID from redhat
 
 
 
- # subscription-manager repos --disable fast-datapath-for-rhel-8-x86_64-rpms  
+ # subscription-manager repos --disable fast-datapath-for-rhel-8-x86_64-rpms
  # subscription-manager repos --enable fast-datapath-for-rhel-8-x86_64-rpms
 
 

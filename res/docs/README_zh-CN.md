@@ -1,5 +1,5 @@
 # astOS (Arch Snapshot Tree OS)
-### 一个运用了Btrfs快照的基于Arch的发行版  
+### 一个运用了Btrfs快照的基于Arch的发行版
 
 ![ashos-logo](../logos/logo.png)
 
@@ -29,9 +29,9 @@
 
 ---
 
-## 什么是astOS？ 
+## 什么是astOS？
 
-astOS是一个基于[Arch Linux](https://archlinux.org)的现代化发行版。  
+astOS是一个基于[Arch Linux](https://archlinux.org)的现代化发行版。
 不像Arch Linux那样，它使用了一个不可变（只读）的根文件系统，软件和配置被安放在独立的快照中，然后它们可以被部署并启动。这些软件并没有使用astOS专用的软件包管理器，而是依赖于Arch Linux的[pacman](https://wiki.archlinux.org/title/pacman)管理器。
 
 
@@ -60,7 +60,7 @@ astOS是一个基于[Arch Linux](https://archlinux.org)的现代化发行版。
 ## astOS和其他类似发行版的比较
 * **NixOS** - astOS有一个更加传统的文件目录结构。NixOS完全地由Nix编程语言配置，但astOS使用Arch Linux的软件包。astOS占用更少的存储空间，并可以更加快速简单地配置系统（尽管这让可重建性变得不如NixOS），同时配置拥有更大的灵活性。astOS是FHS完备的，软件能更好地运行在它之上。
   * 为了实现类似NixOS的功能，astOS允许用户使用Ansible工具来声明式地进行配置。
-* **Fedora Silverblue/Kinoite** - astOS有更好的可定制性，但这需要更多手动配置。astOS还支持双启动，不像Silverblue。 
+* **Fedora Silverblue/Kinoite** - astOS有更好的可定制性，但这需要更多手动配置。astOS还支持双启动，不像Silverblue。
 * **OpenSUSE MicroOS** - astOS有更好的可定制性，正如上面所说的，但这需要更多手动配置。astOS和MicroOS的相似之处是它们都运用了Btrfs快照。astOS官方支持KDE Plasma桌面环境，同时其他桌面环境可选，但MicroOS仅支持Gnome。astOS还支持双启动，也能在不重新启动的情况下安装软件或修改系统。
 
 ---
@@ -80,8 +80,8 @@ pacman -Sy git
 克隆仓库
 
 ```
-git clone "https://github.com/CuBeRJAN/astOS"  
-cd astOS  
+git clone "https://github.com/CuBeRJAN/astOS"
+cd astOS
 ```
 分区并格式化硬盘
 
@@ -91,7 +91,7 @@ cd astOS
 
 ```
 lsblk  # 查找硬盘名称
-cfdisk /dev/*** # 硬盘分区，确保添加一个EFI分区，如果选择BIOS安装，请预留2MiB空间 
+cfdisk /dev/*** # 硬盘分区，确保添加一个EFI分区，如果选择BIOS安装，请预留2MiB空间
 mkfs.btrfs /dev/*** # 将分区格式化为btrfs文件系统，不要跳过这一步！
 ```
 运行安装脚本
@@ -159,7 +159,7 @@ ast del <tree>
 #### 自定义启动配置
 * 如果你需要使用一个自定义GRUB配置，chroot进一个快照然后编辑`/etc/default/grub`，然后部署这个快照并重新启动。
 
-#### chroot进入快照 
+#### chroot进入快照
 * 在快照内，系统操作就像普通的Arch Linux,所以你可以用`pacman`安装或删除软件包或者其他操作。
 * 不要在chroot环境中运行`ast`，这将会对系统造成破坏，所以有一个保护措施。如果执意要在chroot环境中运行`ast`，请传递`--chroot`参数（不推荐）。
 * 请用`exit`正确退出chroot环境，否则对系统的更改不会被保存。
@@ -199,7 +199,7 @@ ast tree-run <tree> <command>
 ast clone <snapshot>
 ```
 
-#### 递归克隆快照树  
+#### 递归克隆快照树
 * 递归地克隆整个快照树：
 
 ```
@@ -232,7 +232,7 @@ ast new
 * 事后重新启动来进入新部署的快照。
 
 ```
-ast deploy <snapshot>  
+ast deploy <snapshot>
 ```
 
 #### 更新基础（Base）快照：
@@ -305,7 +305,7 @@ ast tree-rmpkg <tree> <pacakge or packages>
 
 #### 更新软件
 * 我们推荐在更新之前进行快照克隆，以便在更新出现错误时回滚。
-* 这只会更新系统软件包，要更新ast工具，请看“[更新ast工具](#更新ast工具)” 
+* 这只会更新系统软件包，要更新ast工具，请看“[更新ast工具](#更新ast工具)”
 
 * 为单个快照更新：
 

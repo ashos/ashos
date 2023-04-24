@@ -5,19 +5,21 @@ def aur_check(snap):
     return os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}/usr/bin/paru")
 
 #   Set up AUR in snapshot (if enabled, return true)
-def aur_install(snap):
+def aur_install(snap, skip_prep=False, skip_post=False):
     options = snapshot_config_get(snap)
     aur = False
     if options["aur"] == 'True':
         aur = True
         if aur and not aur_check(snap):
-            prepare(snap) ### REVIEW NEEDED? Being called twice!
+            if not skip_prep:
+                prepare(snap) ### REVIEW NEEDED? Being called twice!
             excode = aur_install_helper(snap)
             if excode:
                 chr_delete(snap)
                 print("F: Setting up AUR failed!")
                 sys.exit(1) ### REVIEW changed from sys.exit()
-            post_transactions(snap)
+            if not skip_post:
+                post_transactions(snap)
     return aur
 
 #   Set up AUR in snapshot
@@ -73,8 +75,9 @@ def aur_install_live_helper(snap):
 #   Noninteractive update
 def auto_upgrade(snap):
     sync_time() # Required in virtualbox, otherwise error in package db update
-    aur = aur_install(snap)
+#    aur = aur_install(snap) ### OLD
     prepare(snap)
+    aur = aur_install(snap, True, True) # skip both prepare and post
     if not aur:
         excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} pacman --noconfirm -Syyu")
     else:
@@ -100,7 +103,7 @@ def fix_package_db(snap = 0):
         print(f"F: Cannot fix package manager database as snapshot {snap} doesn't exist.")
         return
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"):
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap}'.")
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.")
         return
     elif snap == 0:
         P = "" ### I think this is wrong. It should be check if snapshot = current-deployed-snapshot, then this.
@@ -147,7 +150,7 @@ def init_system_copy(snap, FROM):
 def install_package(pkg, snap):
     try:
       # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
-        subprocess.check_output(f"pacman -Si {pkg}", shell=True) # --sysroot
+        subprocess.check_output(f"pacman -Si {pkg}", shell=True, stderr=subprocess.PIPE) # --sysroot ### do not print if pkg not found
     except subprocess.CalledProcessError:
         aur = aur_install(snap) ### TODO: do a paru -Si {pkg} check to avoid setup_aur if package already installed!
         prepare(snap)
@@ -204,6 +207,14 @@ def install_package_live(pkg, snap, tmp):
 #   Get list of packages installed in a snapshot
 def pkg_list(snap, CHR=""):
     return subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} pacman -Qq", encoding='utf-8', shell=True).strip().split("\n")
+
+#   Distro-specific function to setup snapshot based on preset parameters
+def presets_helper(prof_cp, snap): ### TODO before: prof_section
+    if prof_cp.has_option('presets', 'enable_aur'):
+###        if aur is not already set to True: ### TODO IMPORTANT, concat generic preset and distro preset and paste it in /.snapshots/etc
+        print("Opening snapshot's config file... Please change AUR to True")
+        snapshot_config_edit(snap, False, False) ### TODO move to core.py ? Run prepare but skip post transaction (Optimize code) Update: post_tran need to run too
+        aur_install(snap, False, False) ### Skip prepare, but run post transaction (Optimize code) ### update: because of last step, had to run prepare again too!
 
 #   Refresh snapshot atomic-operation
 def refresh_helper(snap):
