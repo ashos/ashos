@@ -1,0 +1,8 @@
+git remote add upstream https://github.com/ashos/ashos.git
+OR
+git remote add upstream git@github.com:ashos/ashos.git
+
+
+git fetch upstream main -> elke keer om up te daten
+git merge upstream/main
+If out of sync, your PRs won't be approved 
