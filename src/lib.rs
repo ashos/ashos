@@ -117,7 +117,7 @@ pub fn chroot_check() -> bool {
 pub fn clone_as_tree(snapshot: &str, desc: &str) {
     let i = find_new();
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprint!("Cannot clone as snapshot {} doesn't exist.", snapshot);
+        eprintln!("Cannot clone as snapshot {} doesn't exist.", snapshot);
     } else {
         if check_mutability(snapshot) {
             let immutability = "";
@@ -167,7 +167,7 @@ pub fn clone_as_tree(snapshot: &str, desc: &str) {
 pub fn clone_branch(snapshot: &str) -> i32 {
     let i = find_new();
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprint!("Cannot clone as snapshot {} doesn't exist.", snapshot);
+        eprintln!("Cannot clone as snapshot {} doesn't exist.", snapshot);
     } else {
         if check_mutability(snapshot) {
             let immutability = "";
@@ -233,9 +233,9 @@ pub fn clone_recursive(snapshot: &str) {
 pub fn clone_under(snapshot: &str, branch: &str) -> i32 {
     let i = find_new();
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprint!("Cannot clone as snapshot {} doesn't exist.", snapshot);
+        eprintln!("Cannot clone as snapshot {} doesn't exist.", snapshot);
         } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", branch)).try_exists().unwrap() {
-        eprint!("Cannot clone as snapshot {} doesn't exist.", branch);
+        eprintln!("Cannot clone as snapshot {} doesn't exist.", branch);
         } else {
         if check_mutability(snapshot) {
             let immutability = "";
@@ -281,7 +281,7 @@ pub fn clone_under(snapshot: &str, branch: &str) -> i32 {
 pub fn extend_branch(snapshot: &str, desc: &str) {
     let i = find_new();
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprint!("Cannot branch as snapshot {} doesn't exist.", snapshot);
+        eprintln!("Cannot branch as snapshot {} doesn't exist.", snapshot);
     } else {
         if check_mutability(snapshot) {
             let immutability = "";
@@ -356,12 +356,8 @@ pub fn find_new() -> i32 {
 
 // Get current snapshot
 pub fn get_current_snapshot() -> String {
-    let csnapshot = File::open("/usr/share/ash/snap").unwrap();
-    let mut buf_read = BufReader::new(csnapshot);
-    let mut line = String::new();
-    buf_read.read_line(&mut line).unwrap();
-    let csnapshot_trimmed = line.trim();
-    csnapshot_trimmed.to_string()
+    let csnapshot = read_to_string("/usr/share/ash/snap").unwrap();
+    csnapshot.trim_end().to_string()
 }
 
 // This function returns either empty string or underscore plus name of distro if it was appended to sub-volume names to distinguish
@@ -460,6 +456,33 @@ pub fn update_etc() {
                                                    .arg(format!("/.snapshots/etc/etc-{}", snapshot)).output().unwrap();
     }
 }
+
+// Recursively run an update in tree
+/*pub fn update_tree(treename: &str) {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
+        eprintln!("Cannot update as tree {} doesn't exist.", treename);
+    } else {
+        //upgrade(treename)
+        let mut order = recurse_tree(treename);
+        if order.len() > 2 {
+            order.remove(0);
+            order.remove(0);
+        }
+        loop {
+            if order.len() < 2 {
+                break;
+            } else {
+                let arg = &order[0];
+                let sarg = &order[1];
+                println!("{}, {}", arg, sarg);
+                order.remove(0);
+                order.remove(0);
+            }
+            //auto_upgrade(sarg);
+        }
+        println!("Tree {} updated.", treename)
+    }
+}*/
 
 // Write new description (default) or append to an existing one (i.e. toggle immutability)
 fn write_desc(snapshot: &str, desc: &str) -> std::io::Result<()> {
