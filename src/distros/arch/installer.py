@@ -51,7 +51,7 @@ else:
         subprocess.call(f'./src/distros/{distro}/aur/aurutils.sh', shell=True)
     excode = os.system(f"pacman -Sqg base | sed 's/^linux$/&{KERNEL}/' | pacstrap /mnt --needed {packages}") #REVIEW
 if excode != 0:
-    sys.exit("Failed to bootstrap!")
+    sys.exit("F: Install failed!")
 
 #   Mount-points for chrooting
 ashos_mounts()
@@ -69,13 +69,13 @@ os.system("sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /etc/locale.gen")
 os.system("locale-gen")
 os.system("echo 'LANG=en_US.UTF-8' | tee /etc/locale.conf")
 os.system(f"ln -srf /usr/share/zoneinfo/{tz} /etc/localtime") # removed /mnt/XYZ from both paths (and from all lines above)
-os.system(f"hwclock --systohc")
+os.system("hwclock --systohc")
 
 #   Post bootstrap
 post_bootstrap(super_group)
 
 #   5. Services (init, network, etc.)
-os.system("/usr/lib/systemd/system-generators/systemd-fstab-generator /run/systemd/generator '' ''") # REVIEW recommended as fstab changed. "systemctl daemon-reload"
+#os.system("/usr/lib/systemd/system-generators/systemd-fstab-generator /run/systemd/generator '' ''") # REVIEW recommended as fstab changed. "systemctl daemon-reload"
 os.system("systemctl enable NetworkManager")
 
 #   6. Boot and EFI

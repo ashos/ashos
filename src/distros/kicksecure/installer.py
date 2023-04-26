@@ -4,18 +4,7 @@ import os
 import subprocess
 import sys
 from src.installer_core import * # NOQA
-#from src.installer_core import is_luks, ashos_mounts, clear, deploy_base_snapshot, deploy_to_common, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 from setup import args, distro
-
-def initram_update_luks():
-    if is_luks:
-        os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
-        os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
-        os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
-        os.system("sudo sed -i -e 's|^#KEYFILE_PATTERN=|KEYFILE_PATTERN='/etc/crypto_keyfile.bin'|' /mnt/etc/cryptsetup-initramfs/conf-hook")
-        os.system("sudo echo UMASK=0077 >> /mnt/etc/initramfs-tools/initramfs.conf")
-        os.system(f"sudo echo 'luks_root '{args[1]}'  /etc/crypto_keyfile.bin luks' | sudo tee -a /mnt/etc/crypttab")
-        os.system(f"sudo chroot /mnt update-initramfs -u")
 
 #   1. Define variables
 ARCH = "amd64"
@@ -30,6 +19,16 @@ if is_luks:
     packages += " cryptsetup cryptsetup-initramfs cryptsetup-run"
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
+
+def initram_update(): # REVIEW removed "{SUDO}" from all lines below
+    if is_luks:
+        os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
+        os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
+        os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
+        os.system("sudo sed -i -e 's|^#KEYFILE_PATTERN=|KEYFILE_PATTERN='/etc/crypto_keyfile.bin'|' /mnt/etc/cryptsetup-initramfs/conf-hook")
+        os.system("sudo echo UMASK=0077 >> /mnt/etc/initramfs-tools/initramfs.conf")
+        os.system(f"sudo echo 'luks_root '{args[1]}'  /etc/crypto_keyfile.bin luks' | sudo tee -a /mnt/etc/crypttab")
+        os.system(f"sudo chroot /mnt update-initramfs -u")
 
 #   Pre bootstrap
 pre_bootstrap()
@@ -75,7 +74,7 @@ os.system("sudo chroot /mnt passwd user") # Change password for default user
 os.system("sudo chroot /mnt systemctl enable NetworkManager")
 
 #   6. Boot and EFI
-initram_update_luks()
+initram_update()
 grub_ash(v)
 
 #   BTRFS snapshots

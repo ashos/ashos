@@ -7,7 +7,7 @@ from src.installer_core import * # NOQA
 #from src.installer_core import is_luks, ashos_mounts, clear, deploy_base_snapshot, deploy_to_common, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 from setup import args, distro
 
-def initram_update_luks():
+def initram_update():
     if is_luks:
         os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
         os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
@@ -73,7 +73,7 @@ os.system("sudo chroot /mnt systemctl enable NetworkManager")
 os.system("sudo chroot /mnt systemctl disable rpmdb-migrate") # https://fedoraproject.org/wiki/Changes/RelocateRPMToUsr
 
 #   6. Boot and EFI
-initram_update_luks()
+initram_update()
 #	For now I use non-BLS format. Entries go in /boot/grub2/grub.cfg not in /boot/loader/entries/)
 os.system('grep -qxF GRUB_ENABLE_BLSCFG="false" /mnt/etc/default/grub || \
            echo GRUB_ENABLE_BLSCFG="false" | sudo tee -a /mnt/etc/default/grub')

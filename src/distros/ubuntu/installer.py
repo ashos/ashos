@@ -7,7 +7,7 @@ from src.installer_core import * # NOQA
 #from src.installer_core import is_luks, ashos_mounts, clear, deploy_base_snapshot, deploy_to_common, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 from setup import args, distro
 
-def initram_update_luks():
+def initram_update():
     if is_luks:
         os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
         os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
@@ -81,7 +81,7 @@ post_bootstrap(super_group)
 os.system("sudo chroot /mnt systemctl enable NetworkManager")
 
 #   6. Boot and EFI
-initram_update_luks()
+initram_update()
 grub_ash(v)
 
 #   BTRFS snapshots

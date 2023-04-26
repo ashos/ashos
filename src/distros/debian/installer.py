@@ -4,18 +4,7 @@ import os
 import subprocess
 import sys
 from src.installer_core import * # NOQA
-#from src.installer_core import is_luks, ashos_mounts, clear, deploy_base_snapshot, deploy_to_common, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 from setup import args, distro
-
-def initram_update_luks():
-    if is_luks:
-        os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
-        os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
-        os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
-        os.system("sudo sed -i -e 's|^#KEYFILE_PATTERN=|KEYFILE_PATTERN='/etc/crypto_keyfile.bin'|' /mnt/etc/cryptsetup-initramfs/conf-hook")
-        os.system("sudo echo UMASK=0077 >> /mnt/etc/initramfs-tools/initramfs.conf")
-        os.system(f"sudo echo 'luks_root '{args[1]}'  /etc/crypto_keyfile.bin luks' | sudo tee -a /mnt/etc/crypttab")
-        os.system(f"sudo chroot /mnt update-initramfs -u") # REVIEW: Need sudo inside? What about kernel variants?
 
 #   1. Define variables
 ARCH = "amd64"
@@ -31,32 +20,53 @@ if is_luks:
 super_group = "sudo"
 v = "" # GRUB version number in /boot/grubN
 
+def initram_update(): # REVIEW removed "{SUDO}" from all lines below
+    if is_luks:
+        os.system("dd bs=512 count=4 if=/dev/random of=/etc/crypto_keyfile.bin iflag=fullblock") # removed /mnt/XYZ from output (and from lines below)
+        os.system("chmod 000 /etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
+        os.system(f"cryptsetup luksAddKey {args[1]} /etc/crypto_keyfile.bin")
+        os.system("sed -i -e 's|^#KEYFILE_PATTERN=|KEYFILE_PATTERN='/etc/crypto_keyfile.bin'|' /etc/cryptsetup-initramfs/conf-hook")
+        os.system("echo UMASK=0077 >> /etc/initramfs-tools/initramfs.conf")
+        os.system(f"echo 'luks_root '{args[1]}'  /etc/crypto_keyfile.bin luks' | sudo tee -a /etc/crypttab")
+        os.system(f"update-initramfs -u") # REVIEW: Need sudo inside? What about kernel variants?
+
+def strap(pkg):
+    excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
+    while True:
+        excode = os.system(f"sudo debootstrap --arch {ARCH} --exclude={excl} {RELEASE} /mnt http://ftp.debian.org/debian") # REVIEW --include={packages} ? --variant=minbase ?
+        if excode:
+            if not yes_no("F: Failed to strap package(s). Retry?"):
+                unmounts(revert=True)
+                return 1 # User declined
+        else: # Success
+            return 0
+
 #   Pre bootstrap
 pre_bootstrap()
 
 #   2. Bootstrap and install packages in chroot
-excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
-excode = os.system(f"sudo debootstrap --arch {ARCH} --exclude={excl} {RELEASE} /mnt http://ftp.debian.org/debian") ### --include={packages} ? --variant=minbase ?
+excode = strap(packages)
 if excode != 0:
-    sys.exit("Failed to bootstrap!")
+    sys.exit("F: Install failed!")
 
 #   Mount-points for chrooting
 ashos_mounts()
+os.system("sudo systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
+cur_dir_code = chroot_in("/mnt")
 
 # Install anytree and necessary packages in chroot
-os.system("sudo systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
-os.system(f"echo 'deb [trusted=yes] https://www.deb-multimedia.org {RELEASE} main' | sudo tee -a /mnt/etc/apt/sources.list.d/multimedia.list{DEBUG}")
-os.system("sudo chmod 1777 /mnt/tmp") # Otherwise error "Couldn't create temporary file /tmp/apt.conf.XYZ"
-os.system("sudo chroot /mnt apt-get -y update -oAcquire::AllowInsecureRepositories=true")
-os.system("sudo chroot /mnt apt-get -y -f install deb-multimedia-keyring --allow-unauthenticated")
-os.system("sudo chroot /mnt apt-get -y full-upgrade --allow-unauthenticated") ### REVIEW_LATER necessary?
-excode = os.system(f"sudo chroot /mnt apt-get -y install --no-install-recommends --fix-broken {packages}")
+os.system(f"echo 'deb [trusted=yes] https://www.deb-multimedia.org {RELEASE} main' | tee -a /etc/apt/sources.list.d/multimedia.list{DEBUG}")
+os.system("chmod 1777 /tmp") # Otherwise error "Couldn't create temporary file /tmp/apt.conf.XYZ" # REVIEW necessary after switching to chroot_in and chroot_out ?
+os.system("apt-get -y update -oAcquire::AllowInsecureRepositories=true")
+os.system("apt-get -y -f install deb-multimedia-keyring --allow-unauthenticated")
+os.system("apt-get -y full-upgrade --allow-unauthenticated") # REVIEW necessary?
+excode = os.system(f"apt-get -y install --no-install-recommends --fix-broken {packages}")
 if excode != 0:
     sys.exit("Failed to download packages!")
 
 #   3. Package manager database and config files
-os.system("sudo mv /mnt/var/lib/dpkg /mnt/usr/share/ash/db/")
-os.system("sudo ln -srf /mnt/usr/share/ash/db/dpkg /mnt/var/lib/dpkg")
+os.system("sudo mv /var/lib/dpkg /usr/share/ash/db/") # removed /mnt/XYZ from both paths and below
+os.system("sudo ln -srf /usr/share/ash/db/dpkg /var/lib/dpkg")
 
 #   4. Update hostname, hosts, locales and timezone, hosts
 os.system(f"echo {hostname} | sudo tee /mnt/etc/hostname")
@@ -75,7 +85,7 @@ post_bootstrap(super_group)
 os.system("sudo chroot /mnt systemctl enable NetworkManager")
 
 #   6. Boot and EFI
-initram_update_luks()
+initram_update()
 grub_ash(v)
 
 #   BTRFS snapshots
