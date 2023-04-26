@@ -60,7 +60,7 @@ mkdir /mnt/etc
 ## didn't create these but maybe needed to be uniform with other types of installation? /mnt/home var boot .snapshot
 
 #   Mount-points needed for chrooting
-def ash_chroot():
+def ashos_mounts():
     os.system("sudo mount -o x-mount.mkdir --rbind --make-rslave /dev /mnt/dev")
     os.system("sudo mount -o x-mount.mkdir --types proc /proc /mnt/proc")
     os.system("sudo mount -o x-mount.mkdir --bind --make-slave /run /mnt/run")

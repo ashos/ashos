@@ -5,7 +5,7 @@ import subprocess
 from setup import args, distro
 from shutil import copy
 from src.installer_core import * # NOQA
-#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
+#from src.installer_core import is_luks, ashos_mounts, clear, deploy_base_snapshot, deploy_to_common, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 
 #   1. Define variables
 APK = "2.12.11-r0" # https://git.alpinelinux.org/aports/plain/main/apk-tools/APKBUILD
@@ -77,7 +77,7 @@ except subprocess.CalledProcessError:
 #            continue
 
 #   Mount-points for chrooting
-ash_chroot()
+ashos_mounts()
 
 #   3. Package manager database and config files
 #os.system(f"{SUDO} cp -r /mnt/var/lib/apk/. /mnt/usr/share/ash/db") ### REVIEW seems always empty?

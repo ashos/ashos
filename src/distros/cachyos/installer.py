@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 from src.installer_core import * # NOQA
-#from src.installer_core import is_luks, ash_chroot, clear, deploy_base_snapshot, deploy_to_common, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
+#from src.installer_core import is_luks, ashos_mounts, clear, deploy_base_snapshot, deploy_to_common, grub_ash, is_efi, post_bootstrap, pre_bootstrap, unmounts
 from setup import args, distro
 
 def initram_update():
@@ -48,7 +48,7 @@ if excode != 0:
     sys.exit("Failed to bootstrap!")
 
 #   Mount-points for chrooting
-ash_chroot()
+ashos_mounts()
 
 #   3. Package manager database and config files
 os.system("sudo cp -r /mnt/var/lib/pacman/. /mnt/usr/share/ash/db/")

@@ -5,6 +5,7 @@ import subprocess
 import sys
 from src import detect_os
 
+installer_dir = os.path.dirname(os.path.abspath(__file__))
 is_efi = os.path.exists("/sys/firmware/efi")
 use_other_iso = "" # if using different iso to install target OS, use its id
 

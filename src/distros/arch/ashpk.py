@@ -100,6 +100,7 @@ def cache_copy(snap, FROM):
 #   Fix signature invalid error
 def fix_package_db(snap = 0):
     run_chroot = False
+    P = None ### REVIEW 2023
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot fix package manager database as snapshot {snap} doesn't exist.")
         return
@@ -232,7 +233,7 @@ def install_package_live(pkg, snap, tmp):
                 print("F: Not enabling AUR for live snapshot!")
                 excode = 1 # i.e. aur = False
     else:
-        #ash_chroot_mounts(tmp) ### REVIEW If issues to have this in ashpk_core.py, uncomment this
+        #ash_mounts(tmp) ### REVIEW If issues to have this in ashpk_core.py, uncomment this
         excode = os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite '*' --noconfirm {pkg}{DEBUG}") ### REVIEW Maybe just do this in try section and remove else section!
     return excode
 

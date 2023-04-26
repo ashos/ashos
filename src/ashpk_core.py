@@ -54,7 +54,7 @@ def add_node_to_parent(tree, id, val):
 def append_base_tree(tree, val):
     Node(val, parent=tree.root)
 
-def ash_chroot_mounts(i, CHR=""):
+def ash_mounts(i, CHR=""):
     os.system(f"mount --bind --make-slave /.snapshots/rootfs/snapshot-{CHR}{i} /.snapshots/rootfs/snapshot-{CHR}{i}{DEBUG}")
     os.system(f"mount --rbind --make-rslave /dev /.snapshots/rootfs/snapshot-{CHR}{i}/dev{DEBUG}")
     os.system(f"mount --bind --make-slave /etc /.snapshots/rootfs/snapshot-{CHR}{i}/etc{DEBUG}")
@@ -158,7 +158,7 @@ def chr_delete(snap):
 #        print(f"Snapshot chroot {snap} deleted.") ### just when debugging
 
 #   Chroot into snapshot and optionally run command(s)
-def chroot(snap, cmd=""): ### make cmd to cmds (IMPORTANT for install_profile)
+def chroot(snap, cmd=""): # TODO change cmd to cmds - IMPORTANT for install_profile
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot chroot as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
@@ -189,6 +189,7 @@ def chroot_check():
 def chroot_in(path):
     real_root = os.open("/", os.O_RDONLY)
     os.chroot(path)
+    os.chdir(path)
     return real_root
 
 def chroot_out(rr):
@@ -596,7 +597,7 @@ def install_live(pkg, snap=get_current_snapshot()):
 #    os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}") ###REDUNDANT
 #    os.system(f"mount --bind /etc /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}") ###REDUNDANT
 #    os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp{DEBUG}") ###REDUNDANT
-    ash_chroot_mounts(tmp) ### REVIEW Not having this was the culprit for live install to fail for Arch and derivative. Now, does having this here Ok or does it cause errors in NON-Arch distros? If so move it to ashpk.py
+    ash_mounts(tmp) ### REVIEW Not having this was the culprit for live install to fail for Arch and derivative. Now, does having this here Ok or does it cause errors in NON-Arch distros? If so move it to ashpk.py
     print("Please wait as installation is finishing.")
     excode = install_package_live(pkg, snap, tmp)
     os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
@@ -651,7 +652,7 @@ def install_profile(prof, snap, force=False, secondary=False, section_only=None)
 #   Install profile in live snapshot
 def install_profile_live(prof, snap, force):
     tmp = get_tmp()
-    ash_chroot_mounts(tmp)
+    ash_mounts(tmp)
     print(f"Updating the system before installing profile {prof}.")
     auto_upgrade(tmp)
     pkgs = ""
@@ -792,7 +793,7 @@ def prepare(snap):
     chr_delete(snap)
     os.system(f"btrfs sub snap /.snapshots/rootfs/snapshot-{snap} /.snapshots/rootfs/snapshot-chr{snap}{DEBUG}")
   # Pacman gets weird when chroot directory is not a mountpoint, so the following mount is necessary ### REVIEW
-#    ash_chroot_mounts(snap, "chr") ### REVIEW 2023 REPLACE THESE WITH THIS (move etcresolve outside)
+#    ash_mounts(snap, "chr") ### REVIEW 2023 REPLACE THESE WITH THIS (move etcresolve outside)
     os.system(f"mount --bind --make-slave /.snapshots/rootfs/snapshot-chr{snap} /.snapshots/rootfs/snapshot-chr{snap}{DEBUG}")
     os.system(f"mount --rbind --make-rslave /dev /.snapshots/rootfs/snapshot-chr{snap}/dev{DEBUG}")
     os.system(f"mount --bind --make-slave /home /.snapshots/rootfs/snapshot-chr{snap}/home{DEBUG}")
@@ -826,7 +827,7 @@ def prepare(snap):
             os.system(f"mkdir -p /.snapshots/mutable_dirs/{mnt_path}")
             os.system(f"mkdir -p /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}")
             os.system(f"mount --bind /.snapshots/mutable_dirs/{mnt_path} /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}")
-  # Important: Do not move the following line above (otherwise error) ###UPDATE2023 REVIEW WHEN replaced with ash_chroot_mounts, this would be redundant
+  # Important: Do not move the following line above (otherwise error) ###UPDATE2023 REVIEW WHEN replaced with ash_mounts, this would be redundant
     os.system(f"mount --bind --make-slave /etc/resolv.conf /.snapshots/rootfs/snapshot-chr{snap}/etc/resolv.conf{DEBUG}")
 
 #   Return order to recurse tree
@@ -1057,7 +1058,7 @@ def switch_tmp(secondary=False):
             elif "snapshot-deploy" in gconf: ### REVIEW 2023 add others as well (secondary etc) ### Before: else
                 gconf = gconf.replace("snapshot-deploy", "snapshot-deploy-aux")
             if distro_name in gconf:
-                gconf = sub('snapshot \\d', '', gconf) ### IMPORTANT REVIEW 2023
+                gconf = sub('snapshot \\d', '', gconf) # REVIEW important
                 gconf = gconf.replace(f"{distro_name}", f"{distro_name} last booted deployment (snapshot {snap})")
         os.system(f"sed -i '$ d' {boot_location}/{GRUB}/grub.cfg")
         with open(f"{boot_location}/{GRUB}/grub.cfg", "a") as grubconf:
