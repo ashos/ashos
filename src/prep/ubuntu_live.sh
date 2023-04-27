@@ -7,7 +7,7 @@ main() {
     if [ $(id -u) -ne 0 ]; then echo "Please run as root!"; exit 1; fi
     if [ -z "$HOME" ]; then HOME="/root" ; fi
     RELEASE="kinetic"
-    prep_packages=(debootstrap dialog ntp tmux) # btrfs-progs
+    prep_packages=(debootstrap dialog ntp tmux zip unzip tar) # btrfs-progs
 
   # attempt to install and if errors sync time and database
     apt-get -y --fix-broken install $prep_packages

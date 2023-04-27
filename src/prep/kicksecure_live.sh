@@ -8,7 +8,7 @@
 main() {
     if [ -z "$HOME" ]; then HOME=~ ; fi
     RELEASE=("bullseye")
-    prep_packages=(btrfs-progs curl cryptsetup dialog dosfstools efibootmgr git mmdebstrap ntp parted tmux apt-transport-https apt-transport-tor tor)
+    prep_packages=(btrfs-progs curl cryptsetup dialog dosfstools efibootmgr git mmdebstrap ntp parted tmux apt-transport-https apt-transport-tor tor zip unzip tar)
 
   # attempt to install and if errors sync time and database
 

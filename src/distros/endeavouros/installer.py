@@ -78,6 +78,8 @@ def main():
 
     #   Unmount everything and finish
     chroot_out(cur_dir_code)
+    if is_ash_bundle:
+        bundler()
     unmounts()
 
 clear()

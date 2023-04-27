@@ -3,7 +3,7 @@
 main() {
     if [ $(id -u) -ne 0 ]; then echo "Please run as root!"; exit 1; fi
     if [ -z "$HOME" ]; then HOME=~ ; fi
-    prep_packages=(dialog git)
+    prep_packages=(dialog git zip unzip tar)
 
   # Prevent error of running out of space in /
     mount / -o remount,size=4G /run/archiso/cowspace

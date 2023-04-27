@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 
 import os
+import stat
 import socket
 import subprocess
+import sys
 from re import search
 from setup import args, installer_dir, distro, distro_name
 from shutil import copy, which, rmtree # REVIEW remove rmtree later
 #from src.ashpk_core import chroot_in, chroot_out, rmrf # TODO Error as it reads whole file
+from tempfile import TemporaryDirectory
+from urllib.error import URLError, HTTPError
+from urllib.request import urlopen
 
 SUDO = "sudo" # REVIEW remove if not needed in any distro
 
@@ -21,6 +26,67 @@ def ashos_mounts():
     if is_efi:
         os.system(f"{SUDO} mount -o x-mount.mkdir --rbind --make-rslave /sys/firmware/efi/efivars /mnt/sys/firmware/efi/efivars")
     os.system(f"{SUDO} cp --dereference /etc/resolv.conf /mnt/etc/") # --remove-destination ? # not writing through dangling symlink! # TODO: 1. move to post_bootstrap 2. try except else
+
+def bundler():
+    with TemporaryDirectory(dir="/tmp", prefix="ash.") as tmpdir:
+        anytree_url = ""
+        ext = ""
+        try:
+            temp = urlopen("https://api.github.com/repos/c0fec0de/anytree/releases/latest").read().decode('utf-8')
+            if which("unzip"):
+                anytree_url = search('zipball_url":"(.+?)"', temp).group(1)
+                ext = ".zip"
+            elif which("tar"):
+                anytree_url = search('tarball_url":"(.+?)"', temp).group(1)
+                ext = ".tar.gz"
+            else:
+                print("F: package zip/tar not available!")
+            anytree_file = urlopen(anytree_url).read()
+            open(f"{tmpdir}/anytree{ext}", "wb").write(anytree_file)
+            os.mkdir(f"{tmpdir}/.python") # modules folder to be bundled
+            if ext == ".zip":
+                os.mkdir(f"{tmpdir}/TEMP")
+                os.system(f"unzip {tmpdir}/anytree*{ext} -d {tmpdir}/TEMP")
+                os.system(f"mv {tmpdir}/TEMP/anytree*/anytree {tmpdir}/.python/")
+            elif ext == ".tar.gz":
+                if "busybox" in os.path.realpath(which("tar")): # type: ignore
+                    os.mkdir(f"{tmpdir}/TEMP")
+                    os.system(f"tar x -f {tmpdir}/*anytree*{ext} -C {tmpdir}/TEMP")
+                    os.system(f"mv {tmpdir}/TEMP/*anytree*/anytree {tmpdir}/.python/")
+                else:
+                    os.mkdir(f"{tmpdir}/TEMP")
+                    os.system(f"tar x -f {tmpdir}/*anytree*{ext} -C {tmpdir}/TEMP")
+                    os.system(f"mv {tmpdir}/TEMP/*anytree*/anytree {tmpdir}/.python/")
+            csmp_file = urlopen("http://justine.lol/ftrace/python.com").read()
+            open(f"{tmpdir}/python.com", "wb").write(csmp_file)
+          # .args
+            open(f"{tmpdir}/.args", "w").write("/zip/ash\n...")
+          # six
+            six_file = urlopen("https://raw.githubusercontent.com/benjaminp/six/master/six.py").read().decode('utf-8')
+            open(f"{tmpdir}/six.py", 'w').write(six_file)
+            os.system(f"mv {tmpdir}/six.py {tmpdir}/.python/")
+        except (HTTPError, URLError):
+            print(f"F: Failed to bundle ash.")
+        else:
+            print("zip them together") # should I close them?
+            os.system(f"cat {installer_dir}/src/ashpk_core.py {installer_dir}/src/distros/{distro}/ashpk.py > {tmpdir}/ash")
+            os.system(f"zip -ur {tmpdir}/python.com {tmpdir}/.python {tmpdir}/ash {tmpdir}/.args")
+          # Make it executable
+            mode = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+            os.chmod(f"{tmpdir}/python.com", mode)
+            if is_efi:
+                # mount EFI is not mounted
+                if not os.path.ismount(args[3]):
+                    os.system(f"mount {args[3]} /mnt/boot/efi")
+                os.system(f"mv {tmpdir}/python.com /mnt/boot/efi/ash")
+                os.system(f"{SUDO} umount {args[3]}") # REVIEW redundant?
+            else:
+                if not os.path.ismount(f"{args[2]}1"):
+                    os.system(f"mount {args[2]}1 /mnt/temp_ash") # important NOT {args[1]}
+                os.system(f"mv {tmpdir}/python.com /mnt/temp_ash/ash") # TODO in ashpk.py
+                os.system(f"{SUDO} umount /mnt/temp_ash") # REVIEW redundant?
+            anytree_file.close()
+            csmp_file.close()
 
 def chroot_in(path): # REVIEW remove later
     real_root = os.open("/", os.O_RDONLY) # or "." ?
@@ -210,6 +276,8 @@ def post_bootstrap(super_group): # REVIEW removed "{SUDO}" from all lines below
             f.write(f'UUID=\"{to_uuid(hp)}\" /home btrfs subvol=@home{distro_suffix},compress=zstd,noatime 0 0\n')
         if is_efi:
             f.write(f'UUID=\"{to_uuid(args[3])}\" /boot/efi vfat umask=0077 0 2\n')
+        if is_ash_bundle and not is_efi:
+            f.write(f'UUID=\"{to_uuid(args[2])}1\" /.snapshots/ash/bundle vfat umask=0077 0 2\n')
         f.write('/.snapshots/ash/root /root none bind 0 0\n')
         f.write('/.snapshots/ash/tmp /tmp none bind 0 0\n')
   # TODO may write these in python
@@ -284,6 +352,8 @@ def pre_bootstrap():
         os.system(f"mkdir -p /mnt/.snapshots/{i}")
     for i in ("root", "tmp"): # necessary to prevent error booting some distros
         os.system(f"mkdir -p /mnt/.snapshots/ash/{i}")
+    if is_ash_bundle and not is_efi:
+        os.system(f"mkdir -p /mnt/.snapshots/ash/bundle") # REVIEW /mnt/boot/bundle better?
     os.system(f"{SUDO} mkdir -p /mnt/usr/share/ash/db") # REVIEW was in step "Database and config files" before (better to create after bootstrap for aesthetics)
     if is_efi:
         os.system(f"{SUDO} mkdir -p /mnt/boot/efi")
@@ -362,6 +432,12 @@ with open(f'{installer_dir}/res/logos/logo.txt', 'r') as f:
 DEBUG = "" # options: "", " >/dev/null 2>&1"
 choice, distro_suffix = get_multiboot(distro)
 is_format_btrfs = True # REVIEW temporary
+is_efi = check_efi()
+is_ash_bundle = yes_no("Would you like ash as a bundle?")
+if is_ash_bundle and not is_efi:
+    print("A special partitioning layout should be used to achieve this. Please modify and run MBR prep script.")
+    if not yes_no("Confirm that you have done previous step?"):
+        sys.exit("F: Please modify and run MBR prep script and run setup later!")
 is_boot_external = yes_no("Would you like to use a separate boot partition?")
 is_home_external = yes_no("Would you like to use a separate home partition?")
 is_mutable = yes_no("Would you like this installation to be mutable?")
@@ -381,8 +457,10 @@ elif is_home_external:
 else:
     btrdirs = [f"@{distro_suffix}", f"@.snapshots{distro_suffix}", f"@boot{distro_suffix}", f"@etc{distro_suffix}", f"@home{distro_suffix}", f"@var{distro_suffix}"]
     mntdirs = ["", ".snapshots", "boot", "etc", "home", "var"]
+#if is_ash_bundle and not is_efi: # disadvantage: only for BTRFS
+#    mntdirs += " bundle"
+#    btrdirs.append(f"@bundle{distro_suffix}")
 is_luks = yes_no("Would you like to use LUKS?")
-is_efi = check_efi()
 if is_luks:
     os_root = "/dev/mapper/luks_root"
     if is_efi:
@@ -398,3 +476,4 @@ tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
 
 # Notes
 # replaced /mnt/XYZ with /XYZ ---> #RSLASHMNT
+

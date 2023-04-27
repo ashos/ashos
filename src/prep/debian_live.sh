@@ -8,7 +8,7 @@
 main() {
     if [ -z "$HOME" ]; then HOME=~ ; fi
     RELEASE="sid"
-    prep_packages=(btrfs-progs cryptsetup debootstrap dialog dosfstools efibootmgr git ntp parted tmux)
+    prep_packages=(btrfs-progs cryptsetup debootstrap dialog dosfstools efibootmgr git ntp parted tmux zip unzip tar)
 
   # attempt to install and if errors sync time and database
     apt-get -y --fix-broken install $prep_packages
