@@ -26,9 +26,16 @@ def main():
     ashos_mounts()
 
     #   2. Bootstrap and install packages in chroot
-    excode = os.system(f"sudo dnf -c ./src/distros/fedora/base.repo --installroot=/mnt install -y {packages} --releasever={RELEASE} --forcearch={ARCH}")
-    if excode != 0:
-        sys.exit("Failed to bootstrap!")
+    while True:
+        try:
+            strap(packages, ARCH, RELEASE)
+        except subprocess.CalledProcessError as e:
+            print(e)
+            if not yes_no("F: Failed to strap package(s). Retry?"):
+                unmounts("failed") # user declined
+                sys.exit("F: Install failed!")
+        else: # success
+            break
 
     #   3. Package manager database and config files
     os.system('echo "kernel.printk=4" | sudo tee -a /mnt/etc/sysctl.d/10-kernel-printk.conf') ### https://github.com/coreos/fedora-coreos-tracker/issues/220
@@ -94,6 +101,8 @@ def initram_update():
                         -e 's|^FILES=(|FILES=(/etc/crypto_keyfile.bin|' /mnt/etc/mkinitcpio.conf")
 #        os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}") ### TODO
 
-if __name__ == "__main__":
-    main()
+def strap(pkg, ARCH, RELEASE):
+    subprocess.check_output(f"sudo dnf -c ./src/distros/fedora/base.repo --installroot=/mnt install -y {pkg} --releasever={RELEASE} --forcearch={ARCH}", shell=True)
+
+main()
 

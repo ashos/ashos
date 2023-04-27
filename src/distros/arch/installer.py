@@ -6,31 +6,35 @@ import sys
 from src.installer_core import * # NOQA
 from setup import args, distro
 
-def main():
-    #   1. Define variables
-    is_format_btrfs = True # REVIEW temporary
-    KERNEL = "" # options: https://wiki.archlinux.org/title/kernel e.g. "-xanmod"
-    packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano \
-                linux-firmware" # os-prober bash tmux arch-install-scripts
-    if is_efi:
-        packages += " efibootmgr"
-    if is_luks:
-        packages += " cryptsetup" # REVIEW
-    super_group = "wheel"
-    v = "" # GRUB version number in /boot/grubN
+#   1. Define variables
+is_format_btrfs = True # REVIEW temporary
+KERNEL = "" # options: https://wiki.archlinux.org/title/kernel e.g. "-xanmod"
+packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano \
+            linux-firmware" # os-prober bash tmux arch-install-scripts
+if is_efi:
+    packages += " efibootmgr"
+if is_luks:
+    packages += " cryptsetup" # REVIEW
+super_group = "wheel"
+v = "" # GRUB version number in /boot/grubN
 
+def main():
     #   Pre bootstrap
     pre_bootstrap()
 
     #   2. Bootstrap and install packages in chroot
-    if KERNEL == "":
-        excode = strap(packages)
-    else:
-        if KERNEL not in ("-hardened", "-lts", "-zen"): # AUR required
-            subprocess.call(f'./src/distros/{distro}/aur/aurutils.sh', shell=True)
-        excode = os.system(f"pacman -Sqg base | sed 's/^linux$/&{KERNEL}/' | pacstrap /mnt --needed {packages}") #REVIEW
-    if excode != 0:
-        sys.exit("F: Install failed!")
+    if KERNEL not in ("-hardened", "-lts", "-zen"): # AUR required
+        subprocess.call(f'./src/distros/{distro}/aur/aurutils.sh', shell=True)
+    while True:
+        try:
+            strap(packages)
+        except subprocess.CalledProcessError as e:
+            print(e)
+            if not yes_no("F: Failed to strap package(s). Retry?"):
+                unmounts("failed") # user declined
+                sys.exit("F: Install failed!")
+        else: # success
+            break
 
     #   Mount-points for chrooting
     ashos_mounts()
@@ -90,15 +94,7 @@ def initram_update(): # REVIEW removed "{SUDO}" from all lines below
         os.system(f"mkinitcpio -p linux{KERNEL}")
 
 def strap(pkg):
-    while True:
-        excode = os.system(f"{SUDO} pacstrap /mnt --needed {pkg}")
-        if excode:
-            if not yes_no("F: Failed to strap package(s). Retry?"):
-                unmounts(revert=True)
-                return 1 # User declined
-        else: # Success
-            return 0
+    subprocess.check_output(f"{SUDO} pacstrap /mnt --needed {pkg}", shell=True)
 
-if __name__ == "__main__":
-    main()
+main()
 

@@ -25,9 +25,16 @@ def main():
     pre_bootstrap()
 
     #   2. Bootstrap and install packages in chroot
-    excode = strap(packages, ARCH, RELEASE)
-    if excode != 0:
-        sys.exit("F: Install failed!")
+    while True:
+        try:
+            strap(packages, ARCH, RELEASE)
+        except subprocess.CalledProcessError as e:
+            print(e)
+            if not yes_no("F: Failed to strap package(s). Retry?"):
+                unmounts("failed") # user declined
+                sys.exit("F: Install failed!")
+        else: # success
+            break
 
     #   Mount-points for chrooting
     ashos_mounts()
@@ -92,16 +99,8 @@ def initram_update(): # REVIEW removed "{SUDO}" from all lines below
         os.system(f"update-initramfs -u") # REVIEW: Need sudo inside? What about kernel variants?
 
 def strap(pkg, ARCH, RELEASE):
-    excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
-    while True:
-        excode = os.system(f"sudo debootstrap --arch {ARCH} --exclude={excl} {RELEASE} /mnt http://ftp.debian.org/debian") # REVIEW --include={packages} ? --variant=minbase ?
-        if excode:
-            if not yes_no("F: Failed to strap package(s). Retry?"):
-                unmounts(revert=True)
-                return 1 # User declined
-        else: # Success
-            return 0
+    excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
+    subprocess.check_output(f"sudo debootstrap --arch {ARCH} --exclude={excl} {RELEASE} /mnt http://ftp.debian.org/debian", shell=True) # REVIEW --include={packages} ? --variant=minbase ?
 
-if __name__ == "__main__":
-    main()
+main()
 

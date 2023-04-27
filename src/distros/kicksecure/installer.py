@@ -25,12 +25,17 @@ def main():
     pre_bootstrap()
 
     #   2. Bootstrap and install packages in chroot
-    #excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
-    os.system(f"sed 's/RELEASE/{RELEASE}/g' ./src/distros/{distro}/sources.list | sudo tee tmp_sources.list")
-    excode = os.system(f"sudo SECURITY_MISC_INSTALL=force DERIVATIVE_APT_REPOSITORY_OPTS=stable anon_shared_inst_tb=open mmdebstrap --skip=check/empty --arch {ARCH}  --include='{packages}' --variant=required {RELEASE} /mnt tmp_sources.list") ### --include={packages} ? --variant=minbase ?
-    excode = os.system(f"sudo rm /mnt/etc/apt/sources.list.d/*tmp_sources.list")
-    if excode != 0:
-        sys.exit("Failed to bootstrap!")
+
+    while True:
+        try:
+            strap(packages, ARCH, RELEASE)
+        except subprocess.CalledProcessError as e:
+            print(e)
+            if not yes_no("F: Failed to strap package(s). Retry?"):
+                unmounts("failed") # user declined
+                sys.exit("F: Install failed!")
+        else: # success
+            break
 
     #   Mount-points for chrooting
     ashos_mounts()
@@ -91,6 +96,11 @@ def initram_update(): # REVIEW removed "{SUDO}" from all lines below
         os.system(f"sudo echo 'luks_root '{args[1]}'  /etc/crypto_keyfile.bin luks' | sudo tee -a /mnt/etc/crypttab")
         os.system(f"sudo chroot /mnt update-initramfs -u")
 
-if __name__ == "__main__":
-    main()
+def strap(pkg, ARCH, RELEASE):
+    #excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
+    subprocess.check_output(f"sed 's/RELEASE/{RELEASE}/g' ./src/distros/{distro}/sources.list | sudo tee tmp_sources.list", shell=True)
+    subprocess.check_output(f"sudo SECURITY_MISC_INSTALL=force DERIVATIVE_APT_REPOSITORY_OPTS=stable anon_shared_inst_tb=open mmdebstrap --skip=check/empty --arch {ARCH}  --include='{pkg}' --variant=required {RELEASE} /mnt tmp_sources.list", shell=True) ### --include={packages} ? --variant=minbase ?
+    subprocess.check_output(f"sudo rm /mnt/etc/apt/sources.list.d/*tmp_sources.list", shell=True)
+
+main()
 

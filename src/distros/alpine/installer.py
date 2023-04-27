@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+import tarfile
 from re import search
 from setup import args, distro
 from shutil import copy
@@ -11,45 +12,46 @@ from setup import args, distro
 from urllib.error import URLError, HTTPError
 from urllib.request import urlopen
 
+#   1. Define variables
+ARCH = "x86_64"
+RELEASE = "edge"
+KERNEL = "edge" # options: lts
+packages = f"linux-{KERNEL} curl coreutils sudo tzdata mount mkinitfs umount \
+            tmux python3 py3-anytree bash" # \
+            #linux-firmware-none networkmanager linux-firmware nano doas os-prober musl-locales musl-locales-lang dbus"
+            # default mount from busybox gives errors. # umount still required?!
+if is_efi:
+    packages += " efibootmgr"
+    packages_no_trigger = "grub-efi" # https://gitlab.alpinelinux.org/alpine/aports/-/issues/11673
+#if is_mutable: # TODO still errors
+#    packages += " dosfstools" # Optional for fsck.vfat checks at boot up
+else:
+    packages_no_trigger = "grub-bios"
+if is_format_btrfs:
+    packages += " btrfs-progs"
+if is_luks:
+    packages += " cryptsetup" # REVIEW
+super_group = "wheel"
+URL = f"https://dl-cdn.alpinelinux.org/alpine/{RELEASE}/main"
+v = "" # GRUB version number in /boot/grubN
+
 def main():
-    #   1. Define variables
-    APK = get_apk_ver()
-    ARCH = "x86_64"
-    RELEASE = "edge"
-    KERNEL = "edge" # options: lts
-    packages = f"linux-{KERNEL} curl coreutils sudo tzdata mount mkinitfs umount \
-                tmux python3 py3-anytree bash"
-                #linux-firmware-none networkmanager linux-firmware nano doas os-prober musl-locales musl-locales-lang dbus # default mount from busybox gives errors. # umount still required?!
-    if is_efi:
-        packages += " efibootmgr"
-        packages_no_trigger = "grub-efi" # https://gitlab.alpinelinux.org/alpine/aports/-/issues/11673
-    #if is_mutable: # TODO still errors
-    #    packages += " dosfstools" # Optional for fsck.vfat checks at boot up
-    else:
-        packages_no_trigger = "grub-bios"
-    if is_format_btrfs:
-        packages += " btrfs-progs"
-    if is_luks:
-        packages += " cryptsetup" # REVIEW
-    super_group = "wheel"
-    v = "" # GRUB version number in /boot/grubN
-    URL = f"https://dl-cdn.alpinelinux.org/alpine/{RELEASE}/main"
+    APK = get_apk_ver() # e.g. 2.14.0_rc1-r0
 
     #   Pre bootstrap
     pre_bootstrap()
 
     #   2. Bootstrap and install packages in chroot
-    os.system(f"curl -LO {URL}/{ARCH}/apk-tools-static-{APK}.apk")
-    os.system(f"tar zxf apk-tools-static-{APK}.apk")
-    excode = os.system(f"{SUDO} ./sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add alpine-base") # REVIEW "/" needed after {URL} ?
-    copy("./src/distros/alpine/repositories", "/mnt/etc/apk/") # REVIEW moved here from section 3 as error in installing 'bash'
-    os.system(f"{SUDO} cp --dereference /etc/resolv.conf /mnt/etc/") # REVIEW --remove-destination # not writing through dangling symlink! (TODO: try except)
-    try:
-        os.system(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'")
-        os.system(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add --no-scripts {packages_no_trigger}'")
-    except subprocess.CalledProcessError:
-        unmounts(revert=True)
-        sys.exit("F: Install failed!")
+    while True:
+        try:
+            strap(packages, APK)
+        except (subprocess.CalledProcessError, HTTPError, URLError, FileNotFoundError, tarfile.ExtractError) as e:
+            print(e)
+            if not yes_no("F: Failed to strap package(s). Retry?"):
+                unmounts("failed") # user declined
+                sys.exit("F: Install failed!")
+        else: # success
+            break
 
     #   Mount-points for chrooting
     ashos_mounts()
@@ -159,6 +161,17 @@ def initram_update(): # REVIEW removed "{SUDO}" from all lines below
                         print(f"F: Creating initfs with kernel {kv} failed!")
                         continue
 
-if __name__ == "__main__":
-    main()
+def strap(packages, APK):
+    with TemporaryDirectory(dir="/tmp", prefix="ash.") as tmpdir:
+        apk_file = urlopen(f"{URL}/{ARCH}/apk-tools-static-{APK}.apk").read() # curl -LO
+        open(f"{tmpdir}/apk-tools-static-{APK}.apk", "wb").write(apk_file)
+        tarfile.open(f"{tmpdir}/apk-tools-static-{APK}.apk").extractall(path=tmpdir) # tar zxf
+        # REVIEW close() needed?
+        subprocess.check_output(f"{SUDO} {tmpdir}/sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add alpine-base", shell=True) # REVIEW "/" needed after {URL} ?
+    copy(f"{installer_dir}/src/distros/alpine/repositories", "/mnt/etc/apk/") # REVIEW moved here from section 3 as error in installing 'bash'
+    subprocess.check_output(f"{SUDO} cp --dereference /etc/resolv.conf /mnt/etc/", shell=True)
+    subprocess.check_output(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'", shell=True)
+    subprocess.check_output(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add --no-scripts {packages_no_trigger}'", shell=True)
+
+main()
 

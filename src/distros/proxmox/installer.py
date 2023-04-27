@@ -35,10 +35,16 @@ def main():
     pre_bootstrap()
 
     #   2. Bootstrap and install packages in chroot
-    excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
-    excode = os.system(f"sudo debootstrap --arch {ARCH} --exclude={excl} {RELEASE} /mnt http://ftp.debian.org/debian") ### --include={packages} ? --variant=minbase ?
-    if excode != 0:
-        sys.exit("Failed to bootstrap!")
+    while True:
+        try:
+            strap(packages, ARCH, RELEASE)
+        except subprocess.CalledProcessError as e:
+            print(e)
+            if not yes_no("F: Failed to strap package(s). Retry?"):
+                unmounts("failed") # user declined
+                sys.exit("F: Install failed!")
+        else: # success
+            break
 
     #   Mount-points for chrooting
     ashos_mounts()
@@ -107,6 +113,9 @@ def initram_update():
         os.system(f"sudo echo 'luks_root '{args[1]}'  /etc/crypto_keyfile.bin luks' | sudo tee -a /mnt/etc/crypttab")
         os.system(f"sudo chroot /mnt update-initramfs -u") # REVIEW: Need sudo inside? What about kernel variants?
 
-if __name__ == "__main__":
-    main()
+def strap(pkg, ARCH, RELEASE):
+    excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
+    subprocess.check_output(f"sudo debootstrap --arch {ARCH} --exclude={excl} {RELEASE} /mnt http://ftp.debian.org/debian", shell=True) # REVIEW --include={packages} ? --variant=minbase ?
+
+main()
 

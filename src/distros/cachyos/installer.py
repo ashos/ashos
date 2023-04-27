@@ -6,19 +6,19 @@ import sys
 from src.installer_core import * # NOQA
 from setup import args, distro
 
-def main():
-    #   1. Define variables
-    is_format_btrfs = True # REVIEW temporary
-    KERNEL = "-cachyos" # options: -cachyos, -cachyos-cfs, -cachyos-cacule, -cachyos-bmq, -cachyos-pds, -cachyos-tt
-    packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano \
-                linux-firmware" # os-prober bash tmux arch-install-scripts
-    if is_efi:
-        packages += " efibootmgr"
-    if is_luks:
-        packages += " cryptsetup" # REVIEW
-    super_group = "wheel"
-    v = "" # GRUB version number in /boot/grubN
+#   1. Define variables
+is_format_btrfs = True # REVIEW temporary
+KERNEL = "-cachyos" # options: -cachyos, -cachyos-cfs, -cachyos-cacule, -cachyos-bmq, -cachyos-pds, -cachyos-tt
+packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano \
+            linux-firmware" # os-prober bash tmux arch-install-scripts
+if is_efi:
+    packages += " efibootmgr"
+if is_luks:
+    packages += " cryptsetup" # REVIEW
+super_group = "wheel"
+v = "" # GRUB version number in /boot/grubN
 
+def main():
     #   Pre bootstrap
     pre_bootstrap()
 
@@ -26,6 +26,17 @@ def main():
     excode = strap(packages)
     if excode != 0:
         sys.exit("F: Install failed!")
+
+    while True:
+        try:
+            strap(packages)
+        except subprocess.CalledProcessError as e:
+            print(e)
+            if not yes_no("F: Failed to strap package(s). Retry?"):
+                unmounts("failed") # user declined
+                sys.exit("F: Install failed!")
+        else: # success
+            break
 
     #   Mount-points for chrooting
     ashos_mounts()
@@ -85,15 +96,7 @@ def initram_update(KERNEL): # REVIEW removed "{SUDO}" from all lines below
         os.system(f"mkinitcpio -p linux{KERNEL}")
 
 def strap(pkg):
-    while True:
-        excode = os.system(f"{SUDO} pacstrap /mnt --needed {pkg}")
-        if excode:
-            if not yes_no("F: Failed to strap package(s). Retry?"):
-                unmounts(revert=True)
-                return 1 # User declined
-        else: # Success
-            return 0
+    subprocess.check_output(f"{SUDO} pacstrap /mnt --needed {pkg}", shell=True)
 
-if __name__ == "__main__":
-    main()
+main()
 
