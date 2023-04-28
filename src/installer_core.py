@@ -394,10 +394,10 @@ def to_uuid(part):
         return subprocess.check_output(f"blkid -s UUID -o value {part}", shell=True).decode('utf-8').strip()
 
 #   Unmount everything and finish
-def unmounts(revert=False): # REVIEW at least for Arch, {SUDO} is not needed
+def unmounts(install=""): # REVIEW at least for Arch, {SUDO} is not needed
     os.system(f"{SUDO} umount --recursive /mnt")
     os.system(f"{SUDO} mount {os_root} -o subvolid=0 /mnt")
-    if revert: # install failed
+    if install == "failed":
         os.system(f"{SUDO} btrfs sub del /mnt/@*")
     else:
         os.system(f"{SUDO} btrfs sub del /mnt/@{distro_suffix}")
