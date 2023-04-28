@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import os
-import subprocess
+import subprocess as sp
 import sys
 import tarfile
 from re import search
@@ -12,14 +12,26 @@ from setup import args, distro
 from urllib.error import URLError, HTTPError
 from urllib.request import urlopen
 
+#1
+# /dev/sda1 btrfs
+# /dev/sda boot
+
+#2
+# /dev/sda1 ash
+# /dev/sda2 btrfs
+# /dev/sda
+#setup /dev/sda2 /dev/sda args[1] args[2]
+
 #   1. Define variables
 ARCH = "x86_64"
 RELEASE = "edge"
 KERNEL = "edge" # options: lts
 packages = f"linux-{KERNEL} curl coreutils sudo tzdata mount mkinitfs umount \
-            tmux python3 py3-anytree bash" # \
+            tmux bash" # \
             #linux-firmware-none networkmanager linux-firmware nano doas os-prober musl-locales musl-locales-lang dbus"
             # default mount from busybox gives errors. # umount still required?!
+if not is_ash_bundle:
+    packages +=  " python3 py3-anytree"
 if is_efi:
     packages += " efibootmgr"
     packages_no_trigger = "grub-efi" # https://gitlab.alpinelinux.org/alpine/aports/-/issues/11673
@@ -36,16 +48,14 @@ URL = f"https://dl-cdn.alpinelinux.org/alpine/{RELEASE}/main"
 v = "" # GRUB version number in /boot/grubN
 
 def main():
-    APK = get_apk_ver() # e.g. 2.14.0_rc1-r0
-
     #   Pre bootstrap
     pre_bootstrap()
 
     #   2. Bootstrap and install packages in chroot
     while True:
         try:
-            strap(packages, APK)
-        except (subprocess.CalledProcessError, HTTPError, URLError, FileNotFoundError, tarfile.ExtractError) as e:
+            strap(packages)
+        except (sp.CalledProcessError, HTTPError, URLError, FileNotFoundError, tarfile.ExtractError) as e:
             print(e)
             if not yes_no("F: Failed to strap package(s). Retry?"):
                 unmounts("failed") # user declined
@@ -61,7 +71,7 @@ def main():
     #os.system(f"{SUDO} cp -r /mnt/var/lib/apk/. /mnt/usr/share/ash/db") # REVIEW seems always empty?
     # /var/cache/apk/ , /var/lib/apk/ , /etc/apk/cache/
     os.system("mv /lib/apk /usr/share/ash/db/")
-    os.system("ln -srf /usr/share/ash/db/apk /lib/apk")
+    os.system("ln -sf /usr/share/ash/db/apk /lib/apk")
 
     #   4. Update hostname, hosts, locales and timezone, hosts
     os.system(f"echo {hostname} | tee /etc/hostname")
@@ -69,7 +79,7 @@ def main():
     #os.system(f"{SUDO} sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
     #os.system(f"{SUDO} chroot /mnt {SUDO} locale-gen")
     #os.system(f"echo 'LANG=en_US.UTF-8' | {SUDO} tee /mnt/etc/locale.conf")
-    os.system(f"ln -srf /usr/share/zoneinfo/{tz} /etc/localtime") # removed /mnt/XYZ from both paths (and from all lines above)
+    os.system(f"ln -sf /usr/share/zoneinfo/{tz} /etc/localtime") # removed /mnt/XYZ from both paths (and from all lines above)
     os.system("/sbin/hwclock --systohc")
 
     #   Post bootstrap
@@ -142,36 +152,40 @@ def initram_update(): # REVIEW removed "{SUDO}" from all lines below
     if is_format_btrfs: # REVIEW temporary
         os.system("sed -i 's|ext4|ext4 btrfs|' /etc/mkinitfs/mkinitfs.conf") # TODO if array not empty, needs to be "btrfs "
     if is_luks or is_format_btrfs: # REVIEW: mkinitcpio need to be run without these conditions too?
-        try: # work with default kernel modules first
-            subprocess.check_output("mkinitfs -b / -f /etc/fstab", shell=True) # REVIEW <kernelvers>
-        except subprocess.CalledProcessError: # and if errors
+        try: # default kernel modules first
+            sp.check_call("mkinitfs -b / -f /etc/fstab", shell=True) # REVIEW <kernelvers>
+        except sp.CalledProcessError: # and if errors
             kv = os.listdir('/lib/modules')
             try:
-                if len(kv) == 1:
-                    subprocess.check_output(f"mkinitfs -b / -f /etc/fstab -k {''.join(kv)}", shell=True)
+                if len(kv) == 1: # only one folder exists
+                    sp.check_call(f"mkinitfs -b / -f /etc/fstab -k {''.join(kv)}", shell=True)
             except:
-                print(f"F: Creating initfs with either live default or {kv} kernels failed!")
+                print(f"F: Failed to create initfs with either live default or {kv} kernels!")
                 print("Next, type just folder name from /lib/modules i.e. 5.15.104-0-lts")
                 while True:
                     try:
                         kv = get_item_from_path("kernel version", "/lib/modules")
-                        subprocess.check_output(f"mkinitfs -b / -f /etc/fstab -k {kv}", shell=True)
+                        sp.check_call(f"mkinitfs -b / -f /etc/fstab -k {kv}", shell=True)
                         break # Success
-                    except subprocess.CalledProcessError:
+                    except sp.CalledProcessError:
                         print(f"F: Creating initfs with kernel {kv} failed!")
                         continue
 
-def strap(packages, APK):
+def strap(packages):
+    APK = get_apk_ver() # e.g. 2.14.0_rc1-r0
     with TemporaryDirectory(dir="/tmp", prefix="ash.") as tmpdir:
         apk_file = urlopen(f"{URL}/{ARCH}/apk-tools-static-{APK}.apk").read() # curl -LO
         open(f"{tmpdir}/apk-tools-static-{APK}.apk", "wb").write(apk_file)
         tarfile.open(f"{tmpdir}/apk-tools-static-{APK}.apk").extractall(path=tmpdir) # tar zxf
         # REVIEW close() needed?
-        subprocess.check_output(f"{SUDO} {tmpdir}/sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add alpine-base", shell=True) # REVIEW "/" needed after {URL} ?
+        sp.check_call(f"{SUDO} {tmpdir}/sbin/apk.static --arch {ARCH} -X {URL} -U --allow-untrusted --root /mnt --initdb --no-cache add alpine-base", shell=True) # REVIEW "/" needed after {URL} ?
     copy(f"{installer_dir}/src/distros/alpine/repositories", "/mnt/etc/apk/") # REVIEW moved here from section 3 as error in installing 'bash'
-    subprocess.check_output(f"{SUDO} cp --dereference /etc/resolv.conf /mnt/etc/", shell=True)
-    subprocess.check_output(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add {packages}'", shell=True)
-    subprocess.check_output(f"chroot /mnt /bin/sh -c '/sbin/apk update && /sbin/apk add --no-scripts {packages_no_trigger}'", shell=True)
+    commands = f'''
+    {SUDO} cp --dereference /etc/resolv.conf /mnt/etc/
+    chroot /mnt /bin/sh -c "/sbin/apk update && /sbin/apk add {packages}"
+    chroot /mnt /bin/sh -c "/sbin/apk update && /sbin/apk add --no-scripts {packages_no_trigger}"
+    '''
+    sp.check_call(commands, shell=True)
 
 main()
 

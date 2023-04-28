@@ -27,7 +27,32 @@ def ashos_mounts():
         os.system(f"{SUDO} mount -o x-mount.mkdir --rbind --make-rslave /sys/firmware/efi/efivars /mnt/sys/firmware/efi/efivars")
     os.system(f"{SUDO} cp --dereference /etc/resolv.conf /mnt/etc/") # --remove-destination ? # not writing through dangling symlink! # TODO: 1. move to post_bootstrap 2. try except else
 
+#   Bundle everything ash needs in one executable
 def bundler():
+    with TemporaryDirectory(dir="/tmp", prefix="ash.") as tmpdir:
+        csmp_file = urlopen("https://github.com/ashos/bundle/raw/main/python311anytree.com").read()
+        open(f"{tmpdir}/python.com", "wb").write(csmp_file)
+        os.system(f"cat {installer_dir}/src/ashpk_core.py {installer_dir}/src/distros/{distro}/ashpk.py > {tmpdir}/ash")
+        os.system(f"zip {tmpdir}/python.com {tmpdir}/ash")
+        # Make it executable
+        mode = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+        os.chmod(f"{tmpdir}/python.com", mode)
+        if is_efi:
+            # mount EFI if not mounted
+            if not os.path.ismount(args[3]):
+                os.system(f"mount {args[3]} /mnt/boot/efi")
+            os.system(f"mv {tmpdir}/python.com /mnt/boot/efi/ash")
+            os.system(f"{SUDO} umount {args[3]}") # REVIEW redundant?
+        else:
+            if not os.path.ismount(f"{args[2]}1"):
+                os.mkdir(f"{tmpdir}/temp_ash")
+                os.system(f"mount {args[2]}1 {tmpdir}/temp_ash") # important NOT {args[1]}
+            os.system(f"mv {tmpdir}/python.com {tmpdir}/temp_ash/ash") # TODO in ashpk.py
+            os.system(f"{SUDO} umount {tmpdir}/temp_ash") # REVIEW redundant?
+    print("Bundle created!")
+
+#   Bundle everything ash needs in one executable
+def bundler_advanced():
     with TemporaryDirectory(dir="/tmp", prefix="ash.") as tmpdir:
         anytree_url = ""
         ext = ""
@@ -46,12 +71,12 @@ def bundler():
             os.mkdir(f"{tmpdir}/.python") # modules folder to be bundled
             if ext == ".zip":
                 os.mkdir(f"{tmpdir}/TEMP")
-                os.system(f"unzip {tmpdir}/anytree*{ext} -d {tmpdir}/TEMP")
-                os.system(f"mv {tmpdir}/TEMP/anytree*/anytree {tmpdir}/.python/")
+                os.system(f"unzip {tmpdir}/anytree{ext} -d {tmpdir}/TEMP")
+                os.system(f"mv {tmpdir}/TEMP/*anytree*/anytree {tmpdir}/.python/")
             elif ext == ".tar.gz":
                 if "busybox" in os.path.realpath(which("tar")): # type: ignore
                     os.mkdir(f"{tmpdir}/TEMP")
-                    os.system(f"tar x -f {tmpdir}/*anytree*{ext} -C {tmpdir}/TEMP")
+                    os.system(f"tar x -f {tmpdir}/anytree{ext} -C {tmpdir}/TEMP")
                     os.system(f"mv {tmpdir}/TEMP/*anytree*/anytree {tmpdir}/.python/")
                 else:
                     os.mkdir(f"{tmpdir}/TEMP")
@@ -68,25 +93,26 @@ def bundler():
         except (HTTPError, URLError):
             print(f"F: Failed to bundle ash.")
         else:
-            print("zip them together") # should I close them?
             os.system(f"cat {installer_dir}/src/ashpk_core.py {installer_dir}/src/distros/{distro}/ashpk.py > {tmpdir}/ash")
             os.system(f"zip -ur {tmpdir}/python.com {tmpdir}/.python {tmpdir}/ash {tmpdir}/.args")
           # Make it executable
             mode = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
             os.chmod(f"{tmpdir}/python.com", mode)
             if is_efi:
-                # mount EFI is not mounted
+                # mount EFI if not mounted
                 if not os.path.ismount(args[3]):
                     os.system(f"mount {args[3]} /mnt/boot/efi")
                 os.system(f"mv {tmpdir}/python.com /mnt/boot/efi/ash")
                 os.system(f"{SUDO} umount {args[3]}") # REVIEW redundant?
             else:
                 if not os.path.ismount(f"{args[2]}1"):
-                    os.system(f"mount {args[2]}1 /mnt/temp_ash") # important NOT {args[1]}
-                os.system(f"mv {tmpdir}/python.com /mnt/temp_ash/ash") # TODO in ashpk.py
-                os.system(f"{SUDO} umount /mnt/temp_ash") # REVIEW redundant?
-            anytree_file.close()
-            csmp_file.close()
+                    os.mkdir(f"{tmpdir}/temp_ash")
+                    os.system(f"mount {args[2]}1 {tmpdir}/temp_ash") # important NOT {args[1]}
+                os.system(f"mv {tmpdir}/python.com {tmpdir}/temp_ash/ash") # TODO in ashpk.py
+                os.system(f"{SUDO} umount {tmpdir}/temp_ash") # REVIEW redundant?
+            #anytree_file.close() # REVIEW redundant
+            #csmp_file.close() # REVIEW redundant
+            print("Bundle created!")
 
 def chroot_in(path): # REVIEW remove later
     real_root = os.open("/", os.O_RDONLY) # or "." ?
@@ -267,7 +293,7 @@ def post_bootstrap(super_group): # REVIEW removed "{SUDO}" from all lines below
     if distro in ("arch", "cachyos", "endeavouros"):
         os.system(f"echo 'aur::False' | tee -a /etc/ash.conf")
   # Update fstab
-    with open('/etc/fstab', 'a') as f: # assumes script run as root
+    with open('/etc/fstab', 'a') as f: # assumes script run as root # REVIEW 'w'
         for mntdir in mntdirs: # common entries
             f.write(f'UUID=\"{to_uuid(os_root)}\" /{mntdir} btrfs subvol=@{mntdir}{distro_suffix},compress=zstd,noatime{"" if mntdir or is_mutable else ",ro"} 0 0\n') # ro for / entry (only for immutable installs)
         if is_boot_external:
@@ -277,7 +303,7 @@ def post_bootstrap(super_group): # REVIEW removed "{SUDO}" from all lines below
         if is_efi:
             f.write(f'UUID=\"{to_uuid(args[3])}\" /boot/efi vfat umask=0077 0 2\n')
         if is_ash_bundle and not is_efi:
-            f.write(f'UUID=\"{to_uuid(args[2])}1\" /.snapshots/ash/bundle vfat umask=0077 0 2\n')
+            f.write(f'UUID=\"{to_uuid(args[2]+"1")}\" /.snapshots/ash/bundle vfat umask=0077 0 2\n')
         f.write('/.snapshots/ash/root /root none bind 0 0\n')
         f.write('/.snapshots/ash/tmp /tmp none bind 0 0\n')
   # TODO may write these in python
@@ -287,11 +313,15 @@ def post_bootstrap(super_group): # REVIEW removed "{SUDO}" from all lines below
   # Copy common ash files and create symlinks
     os.system("mkdir -p /.snapshots/ash/snapshots")
     os.system(f"echo '{to_uuid(os_root)}' | tee /.snapshots/ash/part")
-  # Remainder of "copy ash files" operations
-    os.system("chmod +x /.snapshots/ash/ash")
-    os.system("ln -srf /.snapshots/ash/ash /usr/bin/ash") #RSLASHMNT from both
+    if is_ash_bundle:
+        if is_efi:
+            os.system("ln -sf /boot/efi/ash /usr/bin/ash")
+        else:
+            os.system("ln -sf /.snapshots/ash/bundle/ash /usr/bin/ash")
+    else:
+        os.system("ln -sf /.snapshots/ash/ash /usr/bin/ash")
     #os.system(f"{SUDO} ln -srf /mnt/.snapshots/ash/detect_os.sh /mnt/usr/bin/detect_os.sh")
-    os.system("ln -srf /.snapshots/ash /var/lib/ash") #RSLASHMNT from both
+    os.system("ln -sf /.snapshots/ash /var/lib/ash")
   # Initialize fstree
     os.system("echo {\\'name\\': \\'root\\', \\'children\\': [{\\'name\\': \\'0\\'}]} | tee /.snapshots/ash/fstree")
   # Create user and set password
@@ -359,8 +389,10 @@ def pre_bootstrap():
         os.system(f"{SUDO} mkdir -p /mnt/boot/efi")
         os.system(f"{SUDO} mount {args[3]} /mnt/boot/efi")
   # Copy executables to chroot, as files still accessible (inside host)
-    os.system(f"{SUDO} cat {installer_dir}/src/ashpk_core.py {installer_dir}/src/distros/{distro}/ashpk.py > /mnt/.snapshots/ash/ash")
-    os.system(f"{SUDO} cp -a {installer_dir}/src/detect_os.py /mnt/.snapshots/ash/")
+    if not is_ash_bundle: # else: post function will handle
+        os.system(f"{SUDO} cat {installer_dir}/src/ashpk_core.py {installer_dir}/src/distros/{distro}/ashpk.py > /mnt/.snapshots/ash/ash")
+        os.system(f"{SUDO} cp -a {installer_dir}/src/detect_os.py /mnt/.snapshots/ash/")
+        os.system("chmod +x /.snapshots/ash/ash")
 
 #   Pythonic rm -rf (for both deleting just contents and everything)
 def rmrf(a_path, contents=""): # REVIEW remove later
@@ -393,7 +425,7 @@ def to_uuid(part):
     else: # util-linx (non-Alpine)
         return subprocess.check_output(f"blkid -s UUID -o value {part}", shell=True).decode('utf-8').strip()
 
-#   Unmount everything and finish
+#   Unmount everything
 def unmounts(install=""): # REVIEW at least for Arch, {SUDO} is not needed
     os.system(f"{SUDO} umount --recursive /mnt")
     os.system(f"{SUDO} mount {os_root} -o subvolid=0 /mnt")

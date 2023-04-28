@@ -54,13 +54,13 @@ def main():
     os.system(f"echo 'releasever={RELEASE}' | tee /mnt/etc/yum.conf") ### REVIEW Needed?
 
     #   4. Update hostname, hosts, locales and timezone, hosts
-    os.system(f"echo {hostname} | sudo tee /mnt/etc/hostname")
-    os.system(f"echo 127.0.0.1 {hostname} {distro} | sudo tee -a /mnt/etc/hosts")
+    os.system(f"echo {hostname} | sudo tee /etc/hostname")
+    os.system(f"echo 127.0.0.1 {hostname} {distro} | sudo tee -a /etc/hosts")
     os.system("sudo chroot /mnt sudo localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
     #os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
     #os.system("sudo chroot /mnt sudo locale-gen")
     os.system("echo 'LANG=en_US.UTF-8' | sudo tee /mnt/etc/locale.conf")
-    os.system(f"sudo ln -srf /mnt/usr/share/zoneinfo/{tz} /mnt/etc/localtime")
+    os.system(f"sudo ln -sf /usr/share/zoneinfo/{tz} /etc/localtime")
     os.system("sudo chroot /mnt sudo hwclock --systohc")
 
     #   Post bootstrap

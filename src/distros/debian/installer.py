@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import os
-import subprocess
+import subprocess as sp
 import sys
 from src.installer_core import * # NOQA
 from setup import args, distro
@@ -11,7 +11,9 @@ def main():
     ARCH = "amd64"
     RELEASE = "sid"
     KERNEL = ""
-    packages = f"linux-image-{ARCH} network-manager btrfs-progs sudo curl python3 python3-anytree dhcpcd5 locales nano" # console-setup firmware-linux firmware-linux-nonfree os-prober
+    packages = f"linux-image-{ARCH} network-manager btrfs-progs sudo curl dhcpcd5 locales nano" # console-setup firmware-linux firmware-linux-nonfree os-prober
+    if not is_ash_bundle:
+        packages +=  " python3 python3-anytree"
     if is_efi:
         packages += " grub-efi"  # includes efibootmgr
     else:
@@ -28,7 +30,7 @@ def main():
     while True:
         try:
             strap(packages, ARCH, RELEASE)
-        except subprocess.CalledProcessError as e:
+        except sp.CalledProcessError as e:
             print(e)
             if not yes_no("F: Failed to strap package(s). Retry?"):
                 unmounts("failed") # user declined
@@ -42,7 +44,7 @@ def main():
     cur_dir_code = chroot_in("/mnt")
 
     # Install anytree and necessary packages in chroot
-    os.system(f"echo 'deb [trusted=yes] https://www.deb-multimedia.org {RELEASE} main' | tee -a /etc/apt/sources.list.d/multimedia.list{DEBUG}")
+    os.system(f"echo 'deb [trusted=yes] https://www.deb-multimedia.org {RELEASE} main' >> /etc/apt/sources.list.d/multimedia.list{DEBUG}")
     os.system("chmod 1777 /tmp") # Otherwise error "Couldn't create temporary file /tmp/apt.conf.XYZ" # REVIEW necessary after switching to chroot_in and chroot_out ?
     os.system("apt-get -y update -oAcquire::AllowInsecureRepositories=true")
     os.system("apt-get -y -f install deb-multimedia-keyring --allow-unauthenticated")
@@ -53,23 +55,23 @@ def main():
 
     #   3. Package manager database and config files
     os.system("sudo mv /var/lib/dpkg /usr/share/ash/db/") # removed /mnt/XYZ from both paths and below
-    os.system("sudo ln -srf /usr/share/ash/db/dpkg /var/lib/dpkg")
+    os.system("sudo ln -sf /usr/share/ash/db/dpkg /var/lib/dpkg")
 
     #   4. Update hostname, hosts, locales and timezone, hosts
-    os.system(f"echo {hostname} | sudo tee /mnt/etc/hostname")
-    os.system(f"echo 127.0.0.1 {hostname} {distro} | sudo tee -a /mnt/etc/hosts")
+    os.system(f"echo {hostname} | sudo tee /etc/hostname")
+    os.system(f"echo 127.0.0.1 {hostname} {distro} | sudo tee -a /etc/hosts")
     #os.system("sudo chroot /mnt sudo localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
-    os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
-    os.system("sudo chroot /mnt sudo locale-gen")
-    os.system("echo 'LANG=en_US.UTF-8' | sudo tee /mnt/etc/locale.conf")
-    os.system(f"sudo ln -srf /mnt/usr/share/zoneinfo/{tz} /mnt/etc/localtime")
-    os.system("sudo chroot /mnt sudo hwclock --systohc")
+    os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /etc/locale.gen")
+    os.system("locale-gen")
+    os.system("echo 'LANG=en_US.UTF-8' | sudo tee /etc/locale.conf")
+    os.system(f"sudo ln -sf /usr/share/zoneinfo/{tz} /etc/localtime")
+    os.system("hwclock --systohc")
 
     #   Post bootstrap
     post_bootstrap(super_group)
 
     #   5. Services (init, network, etc.)
-    os.system("sudo chroot /mnt systemctl enable NetworkManager")
+    os.system("systemctl enable NetworkManager")
 
     #   6. Boot and EFI
     initram_update()
@@ -99,8 +101,8 @@ def initram_update(): # REVIEW removed "{SUDO}" from all lines below
         os.system(f"update-initramfs -u") # REVIEW: Need sudo inside? What about kernel variants?
 
 def strap(pkg, ARCH, RELEASE):
-    excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
-    subprocess.check_output(f"sudo debootstrap --arch {ARCH} --exclude={excl} {RELEASE} /mnt http://ftp.debian.org/debian", shell=True) # REVIEW --include={packages} ? --variant=minbase ?
+    excl = sp.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
+    sp.check_call(f"sudo debootstrap --arch {ARCH} --exclude={excl} {RELEASE} /mnt http://ftp.debian.org/debian", shell=True) # REVIEW --include={packages} ? --variant=minbase ?
 
 main()
 

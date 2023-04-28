@@ -102,7 +102,7 @@ os.system("sudo chroot /mnt sudo localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
 #os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
 #os.system("sudo chroot /mnt sudo locale-gen")
 os.system("echo 'LANG=en_US.UTF-8' | tee /mnt/etc/locale.conf")
-os.system(f"ln -srf /mnt/usr/share/zoneinfo/{tz} /mnt/etc/localtime")
+os.system(f"ln -srf /mnt/usr/share/zoneinfo/{tz} /mnt/etc/localtime") # TODO remove -r
 os.system("chroot /mnt hwclock --systohc")
 
 #then run post_bootstrap

@@ -9,8 +9,10 @@ from setup import args, distro
 #   1. Define variables
 is_format_btrfs = True # REVIEW temporary
 KERNEL = "-cachyos" # options: -cachyos, -cachyos-cfs, -cachyos-cacule, -cachyos-bmq, -cachyos-pds, -cachyos-tt
-packages = f"base linux{KERNEL} btrfs-progs sudo grub python3 python-anytree dhcpcd networkmanager nano \
+packages = f"base linux{KERNEL} btrfs-progs sudo grub dhcpcd networkmanager nano \
             linux-firmware" # os-prober bash tmux arch-install-scripts
+if not is_ash_bundle:
+    packages +=  " python3 python-anytree"
 if is_efi:
     packages += " efibootmgr"
 if is_luks:
@@ -53,7 +55,7 @@ def main():
     os.system("sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /etc/locale.gen")
     os.system("locale-gen")
     os.system("echo 'LANG=en_US.UTF-8' | tee /etc/locale.conf")
-    os.system(f"ln -srf /usr/share/zoneinfo/{tz} /etc/localtime") # removed /mnt/XYZ from both paths (and from all lines above)
+    os.system(f"ln -sf /usr/share/zoneinfo/{tz} /etc/localtime") # removed /mnt/XYZ from both paths (and from all lines above)
     os.system("hwclock --systohc")
 
     #   Post bootstrap

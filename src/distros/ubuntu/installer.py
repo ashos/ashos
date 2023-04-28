@@ -58,7 +58,7 @@ def main():
     #os.system(f"sed 's/RELEASE/{RELEASE}/g' ./src/distros/{distro}/sources.list | sudo tee /mnt/etc/apt/sources.list") ### REVIEW here or right before/after bootstrapping? ### REVIEW Needed?
     #os.system("sudo sed -i '/cdrom/d' /mnt/etc/apt/sources.list")
     os.system("sudo mv /mnt/var/lib/dpkg /mnt/usr/share/ash/db/") ### how about /var/lib/apt ?
-    os.system("sudo ln -srf /mnt/usr/share/ash/db/dpkg /mnt/var/lib/dpkg")
+    os.system("sudo ln -sf /mnt/usr/share/ash/db/dpkg /mnt/var/lib/dpkg")
     #os.system(f"echo 'RootDir=/usr/share/ash/db/' | sudo tee -a /mnt/etc/apt/apt.conf") ### REVIEW I don't think this works?!
 
     #   4. Update hostname, hosts, locales and timezone, hosts
@@ -68,7 +68,7 @@ def main():
     os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
     os.system("sudo chroot /mnt sudo locale-gen")
     os.system("echo 'LANG=en_US.UTF-8' | sudo tee /mnt/etc/locale.conf")
-    os.system(f"sudo ln -srf /mnt/usr/share/zoneinfo/{tz} /mnt/etc/localtime")
+    os.system(f"sudo ln -sf /mnt/usr/share/zoneinfo/{tz} /mnt/etc/localtime")
     os.system("sudo chroot /mnt sudo hwclock --systohc")
 
     #   Post bootstrap
