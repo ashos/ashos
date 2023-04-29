@@ -55,12 +55,12 @@ def main():
     os.system("sed -i 's|[#?]DBPath.*$|DBPath       = /usr/share/ash/db/|g' /etc/pacman.conf")
 
     #   4. Update hostname, hosts, locales and timezone, hosts
-    os.system(f"echo {hostname} | tee /etc/hostname")
-    os.system(f"echo 127.0.0.1 {hostname} {distro} | tee -a /etc/hosts")
+    os.system(f"echo {hostname} > /etc/hostname")
+    os.system(f"echo 127.0.0.1 {hostname} {distro} >> /etc/hosts")
     #os.system(f"{SUDO} chroot /mnt {SUDO} localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
     os.system("sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /etc/locale.gen")
     os.system("locale-gen")
-    os.system("echo 'LANG=en_US.UTF-8' | tee /etc/locale.conf")
+    os.system("echo 'LANG=en_US.UTF-8' > /etc/locale.conf")
     os.system(f"ln -sf /usr/share/zoneinfo/{tz} /etc/localtime") # removed /mnt/XYZ from both paths (and from all lines above)
     os.system("hwclock --systohc")
 

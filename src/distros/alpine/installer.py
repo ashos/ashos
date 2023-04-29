@@ -74,8 +74,8 @@ def main():
     os.system("ln -sf /usr/share/ash/db/apk /lib/apk")
 
     #   4. Update hostname, hosts, locales and timezone, hosts
-    os.system(f"echo {hostname} | tee /etc/hostname")
-    os.system(f"echo 127.0.0.1 {hostname} {distro} | tee -a /etc/hosts")
+    os.system(f"echo {hostname} > /etc/hostname")
+    os.system(f"echo 127.0.0.1 {hostname} {distro} >> /etc/hosts")
     #os.system(f"{SUDO} sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
     #os.system(f"{SUDO} chroot /mnt {SUDO} locale-gen")
     #os.system(f"echo 'LANG=en_US.UTF-8' | {SUDO} tee /mnt/etc/locale.conf")

@@ -26,12 +26,12 @@ main() {
 # Configurations
 configs() {
     setfont Lat38-TerminusBold24x12 # /usr/share/consolefonts/
-    echo "export LC_ALL=C LC_CTYPE=C LANGUAGE=C" | tee -a $HOME/.bashrc
-    #echo "alias p='curl -F "'"sprunge=<-"'" sprunge.us'" | tee -a $HOME/.bashrc
-    echo "alias p='curl -F "'"f:1=<-"'" ix.io'" | tee -a $HOME/.bashrc
-    echo "alias d='df -h | grep -v sda'" | tee -a $HOME/.bashrc
-    echo "setw -g mode-keys vi" | tee -a $HOME/.tmux.conf
-    echo "set -g history-limit 999999" | tee -a $HOME/.tmux.conf
+    echo "export LC_ALL=C LC_CTYPE=C LANGUAGE=C" >> $HOME/.bashrc
+    #echo "alias p='curl -F "'"sprunge=<-"'" sprunge.us'" >> $HOME/.bashrc
+    echo "alias p='curl -F "'"f:1=<-"'" ix.io'" >> $HOME/.bashrc
+    echo "alias d='df -h | grep -v sda'" >> $HOME/.bashrc
+    echo "setw -g mode-keys vi" >> $HOME/.tmux.conf
+    echo "set -g history-limit 999999" >> $HOME/.tmux.conf
 }
 
 # Remove man pages (fixes slow man-db trigger) and update packages db

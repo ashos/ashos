@@ -129,13 +129,13 @@ def clear():
     os.system("#clear")
 
 #   Users
-def create_user(u, g):
+def create_user(u, g): # REVIEW removed "{SUDO}" from all lines below
     if distro == "alpine": # REVIEW not generic
-        os.system(f"{SUDO} /usr/sbin/adduser -h /home/{u} -G {g} -s /bin/sh -D {u}")
+        os.system(f"/usr/sbin/adduser -h /home/{u} -G {g} -s /bin/sh -D {u}")
     else:
-        os.system(f"{SUDO} useradd -m -G {g} -s /bin/sh {u}")
-    os.system(f"echo '%{g} ALL=(ALL:ALL) ALL' | {SUDO} tee -a /etc/sudoers") #RSLASHMNT and below
-    os.system(f"echo 'export XDG_RUNTIME_DIR=\"/run/user/1000\"' | {SUDO} tee -a /home/{u}/.$(echo $0)rc")
+        os.system(f"useradd -m -G {g} -s /bin/sh {u}")
+    os.system(f"echo '%{g} ALL=(ALL:ALL) ALL' >> /etc/sudoers")
+    os.system(f"echo 'export XDG_RUNTIME_DIR=\"/run/user/1000\"' >> /home/{u}/.$(echo $0)rc")
 
 #   BTRFS snapshots
 def deploy_base_snapshot(): # REVIEW removed "{SUDO}" from all lines below
@@ -152,7 +152,7 @@ def deploy_base_snapshot(): # REVIEW removed "{SUDO}" from all lines below
     os.system("btrfs sub set-default /.snapshots/rootfs/snapshot-deploy")
     os.system("cp -r /root/. /.snapshots/root/")
     os.system("cp -r /tmp/. /.snapshots/tmp/")
-    rmrf("/root", "/*") #RSLASHMNT from first (and below)
+    rmrf("/root", "/*")
     rmrf("/tmp", "/*")
 
 # deploy_to_common_in_chroot()
@@ -245,12 +245,12 @@ def get_item_from_path(thing, a_path):
 
 #   GRUB and EFI
 def grub_ash(v): # REVIEW removed "{SUDO}" from all lines below
-    os.system(f"sed -i 's/^GRUB_DISTRIBUTOR.*$/GRUB_DISTRIBUTOR=\"{distro_name}\"/' /etc/default/grub") #RSLASHMNT
+    os.system(f"sed -i 's/^GRUB_DISTRIBUTOR.*$/GRUB_DISTRIBUTOR=\"{distro_name}\"/' /etc/default/grub")
     if is_luks:
-        os.system("sed -i 's/^#GRUB_ENABLE_CRYPTODISK.*$/GRUB_ENABLE_CRYPTODISK=y/' /etc/default/grub") #RSLASHMNT
-        os.system(f"sed -i -E 's|^#?GRUB_CMDLINE_LINUX=\"|GRUB_CMDLINE_LINUX=\"cryptdevice=UUID={to_uuid(args[1])}:luks_root cryptkey=rootfs:/etc/crypto_keyfile.bin|' /etc/default/grub") #RSLASHMNT from last path
+        os.system("sed -i 's/^#GRUB_ENABLE_CRYPTODISK.*$/GRUB_ENABLE_CRYPTODISK=y/' /etc/default/grub")
+        os.system(f"sed -i -E 's|^#?GRUB_CMDLINE_LINUX=\"|GRUB_CMDLINE_LINUX=\"cryptdevice=UUID={to_uuid(args[1])}:luks_root cryptkey=rootfs:/etc/crypto_keyfile.bin|' /etc/default/grub")
         os.system(f"sed -e 's|DISTRO|{distro}|' -e 's|LUKS_UUID_NODASH|{to_uuid(args[1]).replace('-', '')}|' \
-                        -e '/^#/d' ./src/prep/grub_luks2.conf | tee /etc/grub_luks2.conf") #RSLASHMNT
+                        -e '/^#/d' ./src/prep/grub_luks2.conf > /etc/grub_luks2.conf")
   # grub-install rewrites default core.img, so run grub-mkimage AFTER!
     if distro != "fedora": # https://bugzilla.redhat.com/show_bug.cgi?id=1917213
         if is_efi:
@@ -262,10 +262,10 @@ def grub_ash(v): # REVIEW removed "{SUDO}" from all lines below
             os.system(f'grub{v}-mkimage -p "(crypto0)/@boot_{distro}/grub{v}" -O x86_64-efi -c /etc/grub_luks2.conf -o /boot/efi/EFI/{distro}/grubx64.efi {luks_grub_args}') # without '/grub' gives error normal.mod not found (maybe only one of these here and grub_luks2.conf is enough?!)
         else:
             os.system(f'grub{v}-mkimage -p "(crypto0)/@boot_{distro}/grub{v}" -O i386-pc -c /etc/grub_luks2.conf -o /boot/grub{v}/i386-pc/core_luks2.img {luks_grub_args}') # 'biosdisk' module not needed eh?
-            os.system(f'dd oflag=seek_bytes seek=512 if=/boot/grub{v}/i386-pc/core_luks2.img of={bp if is_boot_external else args[2]}') # REVIEW #RSLASHMNT IF= segment ONLY
+            os.system(f'dd oflag=seek_bytes seek=512 if=/boot/grub{v}/i386-pc/core_luks2.img of={bp if is_boot_external else args[2]}') # REVIEW
     os.system(f"grub{v}-mkconfig {bp if is_boot_external else args[2]} -o /boot/grub{v}/grub.cfg")
-    os.system(f"mkdir -p /boot/grub{v}/BAK") # Folder for backing up grub configs created by ashpk #RSLASHMNT
-    os.system(f"sed -i 's|subvol=@{distro_suffix}|subvol=@.snapshots{distro_suffix}/rootfs/snapshot-deploy|g' /boot/grub{v}/grub.cfg") #RSLASHMNT from last path only
+    os.system(f"mkdir -p /boot/grub{v}/BAK") # Folder for backing up grub configs created by ashpk
+    os.system(f"sed -i 's|subvol=@{distro_suffix}|subvol=@.snapshots{distro_suffix}/rootfs/snapshot-deploy|g' /boot/grub{v}/grub.cfg")
     # Create a mapping of "distro" <=> "BootOrder number". Ash reads from this file to switch between distros.
     if is_efi:
         if is_boot_external:
@@ -284,13 +284,13 @@ def post_bootstrap(super_group): # REVIEW removed "{SUDO}" from all lines below
   # Database and config files
     #os.system(f"{SUDO} ln -srf /mnt/.snapshots/ash/root /mnt/root")
     #os.system(f"{SUDO} ln -srf /mnt/.snapshots/ash/tmp /mnt/tmp")
-    os.system("chmod 700 /.snapshots/ash/root") #RSLASHMNT for all lines till "for mntdir"
+    os.system("chmod 700 /.snapshots/ash/root")
     os.system("chmod 1777 /.snapshots/ash/tmp")
-    os.system(f"echo '0' | tee /usr/share/ash/snap")
-    os.system(f"echo 'mutable_dirs::' | tee /etc/ash.conf")
-    os.system(f"echo 'mutable_dirs_shared::' | tee -a /etc/ash.conf")
+    os.system(f"echo '0' > /usr/share/ash/snap")
+    os.system(f"echo 'mutable_dirs::' > /etc/ash.conf")
+    os.system(f"echo 'mutable_dirs_shared::' >> /etc/ash.conf")
     if distro in ("arch", "cachyos", "endeavouros"):
-        os.system(f"echo 'aur::False' | tee -a /etc/ash.conf")
+        os.system(f"echo 'aur::False' >> /etc/ash.conf")
   # Update fstab
     with open('/etc/fstab', 'a') as f: # assumes script run as root # REVIEW 'w'
         for mntdir in mntdirs: # common entries
@@ -306,12 +306,12 @@ def post_bootstrap(super_group): # REVIEW removed "{SUDO}" from all lines below
         f.write('/.snapshots/ash/root /root none bind 0 0\n')
         f.write('/.snapshots/ash/tmp /tmp none bind 0 0\n')
   # TODO may write these in python
-    os.system(f"sed -i '0,/@{distro_suffix}/ s|@{distro_suffix}|@.snapshots{distro_suffix}/rootfs/snapshot-deploy|' /etc/fstab") #RSLASHMNT for all lines till create user
+    os.system(f"sed -i '0,/@{distro_suffix}/ s|@{distro_suffix}|@.snapshots{distro_suffix}/rootfs/snapshot-deploy|' /etc/fstab")
     os.system(f"sed -i '0,/@boot{distro_suffix}/ s|@boot{distro_suffix}|@.snapshots{distro_suffix}/boot/boot-deploy|' /etc/fstab")
     os.system(f"sed -i '0,/@etc{distro_suffix}/ s|@etc{distro_suffix}|@.snapshots{distro_suffix}/etc/etc-deploy|' /etc/fstab")
   # Copy common ash files and create symlinks
     os.system("mkdir -p /.snapshots/ash/snapshots")
-    os.system(f"echo '{to_uuid(os_root)}' | tee /.snapshots/ash/part")
+    os.system(f"echo '{to_uuid(os_root)}' > /.snapshots/ash/part")
     if is_ash_bundle:
         if is_efi:
             os.system("ln -sf /boot/efi/ash /usr/bin/ash")
@@ -322,7 +322,7 @@ def post_bootstrap(super_group): # REVIEW removed "{SUDO}" from all lines below
     #os.system(f"{SUDO} ln -srf /mnt/.snapshots/ash/detect_os.sh /mnt/usr/bin/detect_os.sh")
     os.system("ln -sf /.snapshots/ash /var/lib/ash")
   # Initialize fstree
-    os.system("echo {\\'name\\': \\'root\\', \\'children\\': [{\\'name\\': \\'0\\'}]} | tee /.snapshots/ash/fstree")
+    os.system("echo {\\'name\\': \\'root\\', \\'children\\': [{\\'name\\': \\'0\\'}]} > /.snapshots/ash/fstree")
   # Create user and set password
     if distro == "alpine": # REVIEW not generic
         set_password("root", "") # will fix for "doas"
@@ -337,7 +337,7 @@ def post_bootstrap(super_group): # REVIEW removed "{SUDO}" from all lines below
     else:
         print("Username is 'user' please change the default password")
   # Modify OS release information (optional)
-    os.system(f"sed -i 's|^ID.*$|ID={distro}_ashos|' /etc/os-release") #RSLASHMNT for these 3 lines
+    os.system(f"sed -i 's|^ID.*$|ID={distro}_ashos|' /etc/os-release")
     os.system(f"sed -i 's|^NAME=.*$|NAME=\"{distro_name}\"|' /etc/os-release")
     os.system(f"sed -i 's|^PRETTY_NAME=.*$|PRETTY_NAME=\"{distro_name}\"|' /etc/os-release")
 
@@ -504,7 +504,4 @@ else:
 hostname = get_name('hostname')
 username = get_name('username') # REVIEW made it global variable for Alpine installer
 tz = get_item_from_path("timezone", "/usr/share/zoneinfo")
-
-# Notes
-# replaced /mnt/XYZ with /XYZ ---> #RSLASHMNT
 

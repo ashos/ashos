@@ -51,7 +51,7 @@ def main():
     os.system("sudo cp -a /mnt/var/lib/dnf /mnt/usr/share/ash/db/") ### mv and symlink if this is not working
     os.system("sudo cp -a /mnt/var/lib/rpm /mnt/usr/share/ash/db/")
     os.system('echo persistdir="/usr/share/ash/db/dnf" | sudo tee -a /mnt/etc/dnf/dnf.conf') ### REVIEW I'm not sure if this works?!
-    os.system(f"echo 'releasever={RELEASE}' | tee /mnt/etc/yum.conf") ### REVIEW Needed?
+    os.system(f"echo 'releasever={RELEASE}' > /mnt/etc/yum.conf") ### REVIEW Needed?
 
     #   4. Update hostname, hosts, locales and timezone, hosts
     os.system(f"echo {hostname} | sudo tee /etc/hostname")
