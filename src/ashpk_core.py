@@ -148,11 +148,11 @@ def check_update():
 def chr_delete(snap):
     try:
         if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"):
-            subprocess.check_output(f"btrfs sub del /.snapshots/boot/boot-chr{snap}", shell=True)
-            subprocess.check_output(f"btrfs sub del /.snapshots/etc/etc-chr{snap}", shell=True)
+            sp.check_output(f"btrfs sub del /.snapshots/boot/boot-chr{snap}", shell=True)
+            sp.check_output(f"btrfs sub del /.snapshots/etc/etc-chr{snap}", shell=True)
             #os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snap}/*{DEBUG}") # error: Not a Btrfs subvolume
-            subprocess.check_output(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snap}", shell=True)
-    except subprocess.CalledProcessError:
+            sp.check_output(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snap}", shell=True)
+    except sp.CalledProcessError:
         print(f"F: Failed to delete chroot snapshot {snap}.")
 #    else:
 #        print(f"Snapshot chroot {snap} deleted.") ### just when debugging
@@ -491,11 +491,11 @@ def get_parent(tree, id):
 #   Get drive partition
 def get_part():
     with open("/.snapshots/ash/part", "r") as cpart:
-        return subprocess.check_output(f"blkid | grep '{cpart.read().rstrip()}' | awk -F: '{{print $1}}'", shell=True).decode('utf-8').strip()
+        return sp.check_output(f"blkid | grep '{cpart.read().rstrip()}' | awk -F: '{{print $1}}'", shell=True).decode('utf-8').strip()
 
 #   Get tmp partition state
 def get_tmp(console=False): # By default just "return" which deployment is running ### removed ", secondary=False" as 2nd arg not needed
-    mount = str(subprocess.check_output("cat /proc/mounts | grep ' / btrfs'", shell=True))
+    mount = str(sp.check_output("cat /proc/mounts | grep ' / btrfs'", shell=True))
     if "deploy-aux-secondary" in mount:
         r = "deploy-aux-secondary"
     elif "deploy-secondary" in mount:
@@ -927,13 +927,13 @@ def service_enable(prof, tmp_prof, snap):
         print(f"F: Cannot enable services as snapshot {snap} doesn't exist.")
     else: ### No need for other checks as this function is not exposed to user
         try:
-            postinst = subprocess.check_output(f"cat {tmp_prof}/packages.conf | grep -E -w '^&' | sed 's|& ||'", shell=True).decode('utf-8').strip().split('\n')
+            postinst = sp.check_output(f"cat {tmp_prof}/packages.conf | grep -E -w '^&' | sed 's|& ||'", shell=True).decode('utf-8').strip().split('\n')
             for cmd in list(filter(None, postinst)): # remove '' from [''] if no postinstalls
-                subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}", shell=True)
-            services = subprocess.check_output(f"cat {tmp_prof}/packages.conf | grep -E -w '^%' | sed 's|% ||'", shell=True).decode('utf-8').strip().split('\n')
+                sp.check_output(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}", shell=True)
+            services = sp.check_output(f"cat {tmp_prof}/packages.conf | grep -E -w '^%' | sed 's|% ||'", shell=True).decode('utf-8').strip().split('\n')
             for cmd in list(filter(None, services)): # remove '' from [''] if no services
-                subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}", shell=True)
-        except subprocess.CalledProcessError:
+                sp.check_output(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {cmd}", shell=True)
+        except sp.CalledProcessError:
             print(f"F: Failed to enable service(s) from {prof}.")
             return 1
         else:
@@ -996,7 +996,7 @@ def snapshot_unlock(snap):
 #   Switch between distros
 def switch_distro():
     while True:
-        map_tmp = subprocess.check_output("cat /boot/efi/EFI/map.txt | awk 'BEGIN { FS = "'"'" === "'"'" } ; { print $1 }'", shell=True).decode('utf-8').strip()
+        map_tmp = sp.check_output("cat /boot/efi/EFI/map.txt | awk 'BEGIN { FS = "'"'" === "'"'" } ; { print $1 }'", shell=True).decode('utf-8').strip()
         print("Type the name of a distribution to switch to: (type 'list' to list them, 'q' to quit)")
         next_distro = input("> ")
         if next_distro == "q":
@@ -1009,11 +1009,11 @@ def switch_distro():
                 for row in csv.DictReader(file, delimiter=',', quoting=csv.QUOTE_NONE):
                     if row["DISTRO"] == next_distro:
                         try:
-                            boot_order = subprocess.check_output("efibootmgr | grep BootOrder | awk '{print $2}'", shell=True).decode('utf-8').strip()
+                            boot_order = sp.check_output("efibootmgr | grep BootOrder | awk '{print $2}'", shell=True).decode('utf-8').strip()
                             temp = boot_order.replace(f'{row["BootOrder"]},', "")
                             new_boot_order = f"{row['BootOrder']},{temp}"
-                            subprocess.check_output(f'efibootmgr --bootorder {new_boot_order}{DEBUG}', shell=True)
-                        except subprocess.CalledProcessError as e:
+                            sp.check_output(f'efibootmgr --bootorder {new_boot_order}{DEBUG}', shell=True)
+                        except sp.CalledProcessError as e:
                             print(f"F: Failed to switch distros: {e.output}.") ###
                         else:
                             print(f'Done! Please reboot whenever you would like switch to {next_distro}')
@@ -1027,7 +1027,7 @@ def switch_distro():
 def switch_tmp(secondary=False):
     distro_suffix = get_distro_suffix()
     part = get_part()
-    tmp_boot = subprocess.check_output("mktemp -d -p /.snapshots/tmp boot.XXXXXXXXXXXXXXXX", shell=True).decode('utf-8').strip()
+    tmp_boot = sp.check_output("mktemp -d -p /.snapshots/tmp boot.XXXXXXXXXXXXXXXX", shell=True).decode('utf-8').strip()
 ###TODO    with TemporaryDirectory(dir="/.snapshots/tmp", prefix="boot.") as tmp_boot:
     os.system(f"mount {part} -o subvol=@boot{distro_suffix} {tmp_boot}") # Mount boot partition for writing
   # Swap deployment subvolumes: deploy <-> deploy-aux
@@ -1324,7 +1324,7 @@ if distro:
     dist = distro.split("_")[0] # Remove '_ashos"
 else:
     sys.exit("F: Operating system could not be detected!")
-GRUB = subprocess.check_output("ls /boot | grep grub", encoding='utf-8', shell=True).strip()
+GRUB = sp.check_output("ls /boot | grep grub", encoding='utf-8', shell=True).strip()
 USERNAME = os.getenv("SUDO_USER") or os.getenv("USER")
 HOME = os.path.expanduser('~'+ USERNAME) # type: ignore
 

@@ -29,10 +29,10 @@ if distro:
         use_distro = distro
 #    try: # CAUTION: comment lines 30-37 & unindent line 38 if prepared manually
 #        if is_efi:
-#            subprocess.check_output([f'./src/prep/{use_distro}_live.sh', f'{args[1]}', f'{args[2]}', f'{args[3]}'])
+#            sp.check_output([f'./src/prep/{use_distro}_live.sh', f'{args[1]}', f'{args[2]}', f'{args[3]}'])
 #        else:
-#            subprocess.check_output([f'./src/prep/{use_distro}_live.sh', f'{args[1]}', f'{args[2]}'])
-#    except subprocess.CalledProcessError as e:
+#            sp.check_output([f'./src/prep/{use_distro}_live.sh', f'{args[1]}', f'{args[2]}'])
+#    except sp.CalledProcessError as e:
 #        print(f"F: There was an error in prep steps! {e.output.decode('utf-8')}")
 #    else:
     __import__(f"src.distros.{distro}.installer")

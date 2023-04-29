@@ -4,7 +4,7 @@ import os
 import time
 import subprocess as sp
 
-snapshot = subprocess.check_output("/usr/bin/ash c", shell=True)
+snapshot = sp.check_output("/usr/bin/ash c", shell=True)
 while True:
     if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"):
         time.sleep(20)

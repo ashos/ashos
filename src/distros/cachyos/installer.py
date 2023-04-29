@@ -32,7 +32,7 @@ def main():
     while True:
         try:
             strap(packages)
-        except subprocess.CalledProcessError as e:
+        except sp.CalledProcessError as e:
             print(e)
             if not yes_no("F: Failed to strap package(s). Retry?"):
                 unmounts("failed") # user declined
@@ -98,7 +98,7 @@ def initram_update(KERNEL): # REVIEW removed "{SUDO}" from all lines below
         os.system(f"mkinitcpio -p linux{KERNEL}")
 
 def strap(pkg):
-    subprocess.check_output(f"{SUDO} pacstrap /mnt --needed {pkg}", shell=True)
+    sp.check_output(f"{SUDO} pacstrap /mnt --needed {pkg}", shell=True)
 
 main()
 

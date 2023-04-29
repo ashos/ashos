@@ -49,7 +49,7 @@ def install_package_live(snapshot, tmp, pkg):
 
 #   Get list of packages installed in a snapshot
 def pkg_list(CHR, snap):
-    return subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} sudo dnf list installed", encoding='utf-8', shell=True).strip().split("\n")
+    return sp.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} sudo dnf list installed", encoding='utf-8', shell=True).strip().split("\n")
 
 #   Refresh snapshot atomic-operation
 def refresh_helper(snapshot):

@@ -110,7 +110,7 @@ def initram_update(): # REVIEW removed "{SUDO}" from all lines below
 def strap(pkg, ARCH, RELEASE):
     #excl = sp.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
     sp.check_output(f"sed 's/RELEASE/{RELEASE}/g' {installer_dir}/src/distros/{distro}/sources.list > tmp_sources.list", shell=True)
-    subprocess.check_output(f"SECURITY_MISC_INSTALL=force DERIVATIVE_APT_REPOSITORY_OPTS=stable anon_shared_inst_tb=open mmdebstrap --skip=check/empty --arch {ARCH} --include='{pkg}' --variant=required {RELEASE} /mnt tmp_sources.list", shell=True) ### --include={packages} ? --variant=minbase ?
+    sp.check_output(f"SECURITY_MISC_INSTALL=force DERIVATIVE_APT_REPOSITORY_OPTS=stable anon_shared_inst_tb=open mmdebstrap --skip=check/empty --arch {ARCH} --include='{pkg}' --variant=required {RELEASE} /mnt tmp_sources.list", shell=True) ### --include={packages} ? --variant=minbase ?
     sp.check_output(f"rm /mnt/etc/apt/sources.list.d/*tmp_sources.list", shell=True)
 
 main()

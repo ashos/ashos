@@ -271,7 +271,7 @@ def grub_ash(v): # REVIEW removed "{SUDO}" from all lines below
         if is_boot_external:
             os.system(f"efibootmgr -c -d {bp} -p 1 -L {distro_name} -l '\\EFI\\{distro}\\grubx64.efi'")
         ex = os.path.exists("/boot/efi/EFI/map.txt")
-        boot_num = subprocess.check_output(f'efibootmgr -v | grep -i {distro} | awk "{{print $1}}" | sed "s|[^0-9]*||g"', encoding='UTF-8', shell=True)
+        boot_num = sp.check_output(f'efibootmgr -v | grep -i {distro} | awk "{{print $1}}" | sed "s|[^0-9]*||g"', encoding='UTF-8', shell=True)
         with open("/boot/efi/EFI/map.txt", "a") as m:
             if not ex: m.write("DISTRO,BootOrder\n")
             if boot_num: m.write(distro + ',' + boot_num)
@@ -421,10 +421,10 @@ def set_password(u, s="sudo"): # REVIEW Use super_group?
 
 def to_uuid(part):
     if 'busybox' in os.path.realpath(which('blkid')): # type: ignore
-        u = subprocess.check_output(f"blkid {part}", shell=True).decode('utf-8').strip()
+        u = sp.check_output(f"blkid {part}", shell=True).decode('utf-8').strip()
         return search('UUID="(.+?)"' , u).group(1)
     else: # util-linx (non-Alpine)
-        return subprocess.check_output(f"blkid -s UUID -o value {part}", shell=True).decode('utf-8').strip()
+        return sp.check_output(f"blkid -s UUID -o value {part}", shell=True).decode('utf-8').strip()
 
 #   Unmount everything
 def unmounts(install=""): # REVIEW at least for Arch, {SUDO} is not needed

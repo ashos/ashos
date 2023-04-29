@@ -113,7 +113,7 @@ def fix_package_db(snapshot = "0"):
             immutability_disable(snapshot)
             flip = True
         prepare(snapshot)
-        os.system(f"{P}rm -rf /etc/pacman.d/gnupg $HOME/.gnupg") ### $HOME vs /root NEEDS fixing # If folder not present and subprocess.run is used, throws error and stops
+        os.system(f"{P}rm -rf /etc/pacman.d/gnupg $HOME/.gnupg") ### $HOME vs /root NEEDS fixing # If folder not present and sp.run is used, throws error and stops
         os.system(f"{P}rm -r /var/lib/pacman/db.lck")
         os.system(f"{P}pacman -Syy")
         os.system(f"{P}gpg --refresh-keys")
@@ -126,7 +126,7 @@ def fix_package_db(snapshot = "0"):
         if flip:
             immutability_enable(snapshot)
         print(f"Snapshot {snapshot}'s package manager database fixed successfully.")
-    except subprocess.CalledProcessError:
+    except sp.CalledProcessError:
         chr_delete(snapshot)
         print("F: Fixing package manager database failed.")
 
@@ -148,8 +148,8 @@ def init_system_copy(snapshot, FROM):
 def install_package(snapshot, pkg):
     try:
       # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
-        subprocess.check_output(f"pacman -Si {pkg}", shell=True) # --sysroot
-    except subprocess.CalledProcessError:
+        sp.check_output(f"pacman -Si {pkg}", shell=True) # --sysroot
+    except sp.CalledProcessError:
         aur = aur_install(snapshot) ### TODO: do a paru -Si {pkg} check to avoid setup_aur if package already installed!
         prepare(snapshot)
         if aur:
@@ -165,8 +165,8 @@ def install_package(snapshot, pkg):
 def install_package_live(snapshot, tmp, pkg):
     try:
       # This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
-        subprocess.check_output(f"pacman -Si {pkg}", shell=True) # --sysroot
-    except subprocess.CalledProcessError:
+        sp.check_output(f"pacman -Si {pkg}", shell=True) # --sysroot
+    except sp.CalledProcessError:
         options = snapshot_config_get(tmp)
         if options["aur"] == "True":
             aur_in_tmp = True
@@ -209,7 +209,7 @@ def install_package_live(snapshot, tmp, pkg):
 
 #   Get list of packages installed in a snapshot
 def pkg_list(CHR, snap):
-    return subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} pacman -Qq", encoding='utf-8', shell=True).strip().split("\n")
+    return sp.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} pacman -Qq", encoding='utf-8', shell=True).strip().split("\n")
 
 #   Refresh snapshot atomic-operation
 def refresh_helper(snapshot):

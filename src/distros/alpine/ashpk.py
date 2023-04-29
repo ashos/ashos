@@ -44,7 +44,7 @@ def fix_package_db(snap = 0):
         if flip:
             immutability_enable(snap)
         print(f"Snapshot {snap}'s package manager database fixed successfully.")
-    except subprocess.CalledProcessError:
+    except sp.CalledProcessError:
         chr_delete(snap)
         print("F: Fixing package manager database failed.")
 
@@ -75,7 +75,7 @@ def install_package_live(pkg, snap, tmp): ### TODO remove 'snapshot' as not used
 
 #   Get list of packages installed in a snapshot
 def pkg_list(snap, CHR=""):
-    return subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} apk list -i", encoding='utf-8', shell=True).strip().split("\n")
+    return sp.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} apk list -i", encoding='utf-8', shell=True).strip().split("\n")
 
 #   Refresh snapshot atomic-operation
 def refresh_helper(snap):

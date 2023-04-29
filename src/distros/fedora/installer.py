@@ -30,7 +30,7 @@ def main():
     while True:
         try:
             strap(packages, ARCH, RELEASE)
-        except subprocess.CalledProcessError as e:
+        except sp.CalledProcessError as e:
             print(e)
             if not yes_no("F: Failed to strap package(s). Retry?"):
                 unmounts("failed") # user declined
@@ -106,7 +106,7 @@ def initram_update():
         #os.system(f"mkinitcpio -p linux{KERNEL}") # TODO
 
 def strap(pkg, ARCH, RELEASE):
-    subprocess.check_output(f"dnf -c {installer_dir}/src/distros/fedora/base.repo --installroot=/mnt install -y {pkg} --releasever={RELEASE} --forcearch={ARCH}", shell=True)
+    sp.check_output(f"dnf -c {installer_dir}/src/distros/fedora/base.repo --installroot=/mnt install -y {pkg} --releasever={RELEASE} --forcearch={ARCH}", shell=True)
 
 main()
 
