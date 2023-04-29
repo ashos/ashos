@@ -32,14 +32,14 @@ def bundler():
     with TemporaryDirectory(dir="/tmp", prefix="ash.") as tmpdir:
         csmp_file = urlopen("https://github.com/ashos/bundle/raw/main/python311anytree.com").read()
         open(f"{tmpdir}/python.com", "wb").write(csmp_file)
+        open(f"{tmpdir}/.args", "w").write("/zip/ash\n...")
         os.system(f"cat {installer_dir}/src/ashpk_core.py {installer_dir}/src/distros/{distro}/ashpk.py > {tmpdir}/ash")
-        os.system(f"zip {tmpdir}/python.com {tmpdir}/ash")
-        # Make it executable
+        os.system(f"zip {tmpdir}/python.com {tmpdir}/ash {tmpdir}/.args")
+      # Make it executable
         mode = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
         os.chmod(f"{tmpdir}/python.com", mode)
         if is_efi:
-            # mount EFI if not mounted
-            if not os.path.ismount(args[3]):
+            if not os.path.ismount(args[3]): # mount EFI if not mounted
                 os.system(f"mount {args[3]} /mnt/boot/efi")
             os.system(f"mv {tmpdir}/python.com /mnt/boot/efi/ash")
             os.system(f"{SUDO} umount {args[3]}") # REVIEW redundant?
@@ -99,8 +99,7 @@ def bundler_advanced():
             mode = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
             os.chmod(f"{tmpdir}/python.com", mode)
             if is_efi:
-                # mount EFI if not mounted
-                if not os.path.ismount(args[3]):
+                if not os.path.ismount(args[3]): # mount EFI if not mounted
                     os.system(f"mount {args[3]} /mnt/boot/efi")
                 os.system(f"mv {tmpdir}/python.com /mnt/boot/efi/ash")
                 os.system(f"{SUDO} umount {args[3]}") # REVIEW redundant?
