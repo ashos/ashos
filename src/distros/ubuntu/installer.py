@@ -55,7 +55,7 @@ def main():
     # auto-remove packages at the end or include ash auto-remove function in ashpk.py
 
     #   3. Package manager database and config files
-    #os.system(f"sed 's/RELEASE/{RELEASE}/g' ./src/distros/{distro}/sources.list | sudo tee /mnt/etc/apt/sources.list") ### REVIEW here or right before/after bootstrapping? ### REVIEW Needed?
+    #os.system(f"sed 's/RELEASE/{RELEASE}/g' {installer_dir}/src/distros/{distro}/sources.list | sudo tee /mnt/etc/apt/sources.list") ### REVIEW here or right before/after bootstrapping? ### REVIEW Needed?
     #os.system("sudo sed -i '/cdrom/d' /mnt/etc/apt/sources.list")
     os.system("sudo mv /mnt/var/lib/dpkg /mnt/usr/share/ash/db/") ### how about /var/lib/apt ?
     os.system("sudo ln -sf /mnt/usr/share/ash/db/dpkg /mnt/var/lib/dpkg")

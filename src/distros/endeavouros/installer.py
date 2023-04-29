@@ -28,7 +28,7 @@ def main():
 
     #   2. Bootstrap and install packages in chroot
     if KERNEL not in ("-hardened", "-lts", "-zen"): # AUR required
-        subprocess.call(f'./src/distros/{distro}/aur/aurutils.sh', shell=True)
+        subprocess.call(f'{installer_dir}/src/distros/{distro}/aur/aurutils.sh', shell=True)
     while True:
         try:
             strap(packages)

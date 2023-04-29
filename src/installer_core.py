@@ -250,7 +250,7 @@ def grub_ash(v): # REVIEW removed "{SUDO}" from all lines below
         os.system("sed -i 's/^#GRUB_ENABLE_CRYPTODISK.*$/GRUB_ENABLE_CRYPTODISK=y/' /etc/default/grub")
         os.system(f"sed -i -E 's|^#?GRUB_CMDLINE_LINUX=\"|GRUB_CMDLINE_LINUX=\"cryptdevice=UUID={to_uuid(args[1])}:luks_root cryptkey=rootfs:/etc/crypto_keyfile.bin|' /etc/default/grub")
         os.system(f"sed -e 's|DISTRO|{distro}|' -e 's|LUKS_UUID_NODASH|{to_uuid(args[1]).replace('-', '')}|' \
-                        -e '/^#/d' ./src/prep/grub_luks2.conf > /etc/grub_luks2.conf")
+                        -e '/^#/d' /tmp/grub_luks2.conf > /etc/grub_luks2.conf") # REVIEW
   # grub-install rewrites default core.img, so run grub-mkimage AFTER!
     if distro != "fedora": # https://bugzilla.redhat.com/show_bug.cgi?id=1917213
         if is_efi:
@@ -309,7 +309,7 @@ def post_bootstrap(super_group): # REVIEW removed "{SUDO}" from all lines below
     os.system(f"sed -i '0,/@{distro_suffix}/ s|@{distro_suffix}|@.snapshots{distro_suffix}/rootfs/snapshot-deploy|' /etc/fstab")
     os.system(f"sed -i '0,/@boot{distro_suffix}/ s|@boot{distro_suffix}|@.snapshots{distro_suffix}/boot/boot-deploy|' /etc/fstab")
     os.system(f"sed -i '0,/@etc{distro_suffix}/ s|@etc{distro_suffix}|@.snapshots{distro_suffix}/etc/etc-deploy|' /etc/fstab")
-  # Copy common ash files and create symlinks
+  # files operations (part 2) - create symlinks
     os.system("mkdir -p /.snapshots/ash/snapshots")
     os.system(f"echo '{to_uuid(os_root)}' > /.snapshots/ash/part")
     if is_ash_bundle:
@@ -387,7 +387,9 @@ def pre_bootstrap():
     if is_efi:
         os.system(f"{SUDO} mkdir -p /mnt/boot/efi")
         os.system(f"{SUDO} mount {args[3]} /mnt/boot/efi")
-  # Copy executables to chroot, as files still accessible (inside host)
+  # files operations (part 1) - copy to chroot, as still accessible (inside host)
+    if is_luks:
+        os.system(f"{SUDO} cp -a {installer_dir}/src/prep/grub_luks2.conf /mnt/tmp/")
     if not is_ash_bundle: # else: post function will handle
         os.system(f"{SUDO} cat {installer_dir}/src/ashpk_core.py {installer_dir}/src/distros/{distro}/ashpk.py > /mnt/.snapshots/ash/ash")
         os.system(f"{SUDO} cp -a {installer_dir}/src/detect_os.py /mnt/.snapshots/ash/")

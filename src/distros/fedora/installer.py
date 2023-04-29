@@ -14,7 +14,7 @@ def main():
                 glibc-langpack-en glibc-locale-source dhcpcd NetworkManager"
     if is_efi:
         packages += " efibootmgr"
-        if "64" in ARCH: ### Not good for AARCH64/ARM64
+        if "64" in ARCH: # REVIEW not good for AARCH64/ARM64
             packages += " shim-x64 grub2-efi-x64-modules"
     super_group = "wheel"
     v = "2" # GRUB version number in /boot/grubN
@@ -24,6 +24,7 @@ def main():
 
     # Mount-points for chrooting
     ashos_mounts()
+    cur_dir_code = chroot_in("/mnt")
 
     #   2. Bootstrap and install packages in chroot
     while True:
@@ -38,43 +39,43 @@ def main():
             break
 
     #   3. Package manager database and config files
-    os.system('echo "kernel.printk=4" | sudo tee -a /mnt/etc/sysctl.d/10-kernel-printk.conf') ### https://github.com/coreos/fedora-coreos-tracker/issues/220
+    os.system('echo "kernel.printk=4" >> /etc/sysctl.d/10-kernel-printk.conf') # https://github.com/coreos/fedora-coreos-tracker/issues/220
     # If rpmdb is under /usr, move it to /var and create a symlink
     if os.path.islink("/var/lib/dnf") or os.path.isfile("/usr/lib/sysimage/dnf/history.sqlite"):
-        os.system("sudo rm -r /var/lib/dnf")
-        os.system("sudo mv /usr/lib/sysimage/dnf /var/lib/")
-        os.system("sudo ln -s /usr/lib/sysimage/dnf /var/lib/dnf")
+        os.system("rm -r /var/lib/dnf")
+        os.system("mv /usr/lib/sysimage/dnf /var/lib/")
+        os.system("ln -s /usr/lib/sysimage/dnf /var/lib/dnf")
     if os.path.islink("/var/lib/rpm") or os.path.isfile("/usr/lib/sysimage/rpm/rpmdb.sqlite"):
-        os.system("sudo rm -r /var/lib/rpm")
-        os.system("sudo mv /usr/lib/sysimage/rpm /var/lib/")
-        os.system("sudo ln -s /usr/lib/sysimage/rpm /var/lib/rpm")
-    os.system("sudo cp -a /mnt/var/lib/dnf /mnt/usr/share/ash/db/") ### mv and symlink if this is not working
-    os.system("sudo cp -a /mnt/var/lib/rpm /mnt/usr/share/ash/db/")
-    os.system('echo persistdir="/usr/share/ash/db/dnf" | sudo tee -a /mnt/etc/dnf/dnf.conf') ### REVIEW I'm not sure if this works?!
-    os.system(f"echo 'releasever={RELEASE}' > /mnt/etc/yum.conf") ### REVIEW Needed?
+        os.system("rm -r /var/lib/rpm")
+        os.system("mv /usr/lib/sysimage/rpm /var/lib/")
+        os.system("ln -s /usr/lib/sysimage/rpm /var/lib/rpm")
+    os.system("cp -a /var/lib/dnf /usr/share/ash/db/") # REVIEW mv and symlink if this is not working
+    os.system("cp -a /var/lib/rpm /usr/share/ash/db/")
+    os.system('echo persistdir="/usr/share/ash/db/dnf" >> /etc/dnf/dnf.conf') # REVIEW not sure!
+    os.system(f"echo 'releasever={RELEASE}' > /etc/yum.conf") # REVIEW needed?
 
     #   4. Update hostname, hosts, locales and timezone, hosts
-    os.system(f"echo {hostname} | sudo tee /etc/hostname")
-    os.system(f"echo 127.0.0.1 {hostname} {distro} | sudo tee -a /etc/hosts")
-    os.system("sudo chroot /mnt sudo localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
+    os.system(f"echo {hostname} > /etc/hostname")
+    os.system(f"echo 127.0.0.1 {hostname} {distro} >> /etc/hosts")
+    os.system("localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
     #os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
     #os.system("sudo chroot /mnt sudo locale-gen")
-    os.system("echo 'LANG=en_US.UTF-8' | sudo tee /mnt/etc/locale.conf")
-    os.system(f"sudo ln -sf /usr/share/zoneinfo/{tz} /etc/localtime")
-    os.system("sudo chroot /mnt sudo hwclock --systohc")
+    os.system("echo 'LANG=en_US.UTF-8' > /etc/locale.conf")
+    os.system(f"ln -sf /usr/share/zoneinfo/{tz} /etc/localtime")
+    os.system("hwclock --systohc")
 
     #   Post bootstrap
     post_bootstrap(super_group)
 
     #   5. Services (init, network, etc.)
-    os.system("sudo chroot /mnt systemctl enable NetworkManager")
-    os.system("sudo chroot /mnt systemctl disable rpmdb-migrate") # https://fedoraproject.org/wiki/Changes/RelocateRPMToUsr
+    os.system("systemctl enable NetworkManager")
+    os.system("systemctl disable rpmdb-migrate") # https://fedoraproject.org/wiki/Changes/RelocateRPMToUsr
 
     #   6. Boot and EFI
     initram_update()
-    #	For now I use non-BLS format. Entries go in /boot/grub2/grub.cfg not in /boot/loader/entries/)
-    os.system('grep -qxF GRUB_ENABLE_BLSCFG="false" /mnt/etc/default/grub || \
-            echo GRUB_ENABLE_BLSCFG="false" | sudo tee -a /mnt/etc/default/grub')
+    #	For now non-BLS format is used (Entries go in /boot/grub2/grub.cfg not in /boot/loader/entries/)
+    os.system('grep -qxF GRUB_ENABLE_BLSCFG="false" /etc/default/grub || \
+            echo GRUB_ENABLE_BLSCFG="false" >> /etc/default/grub')
     if is_efi: # This needs to go before grub_ash otherwise map.txt entry would be empty
         os.system(f"efibootmgr -c -d {args[2]} -p 1 -L 'Fedora' -l '\\EFI\\fedora\\shim.efi'")
     grub_ash(v)
@@ -86,6 +87,9 @@ def main():
     deploy_to_common()
 
     #   Unmount everything and finish
+    chroot_out(cur_dir_code)
+    if is_ash_bundle:
+        bundler()
     unmounts()
 
     clear()
@@ -94,15 +98,15 @@ def main():
 
 def initram_update():
     if is_luks:
-        os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
-        os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
-        os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
-        os.system("sudo sed -i -e '/^HOOKS/ s/filesystems/encrypt filesystems/' \
-                        -e 's|^FILES=(|FILES=(/etc/crypto_keyfile.bin|' /mnt/etc/mkinitcpio.conf")
-#        os.system(f"sudo chroot /mnt sudo mkinitcpio -p linux{KERNEL}") ### TODO
+        os.system("dd bs=512 count=4 if=/dev/random of=/etc/crypto_keyfile.bin iflag=fullblock")
+        os.system("chmod 000 /etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
+        os.system(f"cryptsetup luksAddKey {args[1]} /etc/crypto_keyfile.bin")
+        os.system("sed -i -e '/^HOOKS/ s/filesystems/encrypt filesystems/' \
+                          -e 's|^FILES=(|FILES=(/etc/crypto_keyfile.bin|' /etc/mkinitcpio.conf")
+        #os.system(f"mkinitcpio -p linux{KERNEL}") # TODO
 
 def strap(pkg, ARCH, RELEASE):
-    subprocess.check_output(f"sudo dnf -c ./src/distros/fedora/base.repo --installroot=/mnt install -y {pkg} --releasever={RELEASE} --forcearch={ARCH}", shell=True)
+    subprocess.check_output(f"dnf -c {installer_dir}/src/distros/fedora/base.repo --installroot=/mnt install -y {pkg} --releasever={RELEASE} --forcearch={ARCH}", shell=True)
 
 main()
 

@@ -11,7 +11,8 @@ def main():
     ARCH = "amd64"
     RELEASE = "sid"
     KERNEL = ""
-    packages = f"linux-image-{ARCH} network-manager btrfs-progs sudo curl dhcpcd5 locales nano" # console-setup firmware-linux firmware-linux-nonfree os-prober
+    packages = f"linux-image-{ARCH} btrfs-progs sudo curl dhcpcd5 locales nano \
+                network-manager" # console-setup firmware-linux firmware-linux-nonfree os-prober
     if not is_ash_bundle:
         packages +=  " python3 python3-anytree"
     if is_efi:
@@ -40,31 +41,36 @@ def main():
 
     #   Mount-points for chrooting
     ashos_mounts()
-    os.system("sudo systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
+    os.system("systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
     cur_dir_code = chroot_in("/mnt")
 
     # Install anytree and necessary packages in chroot
-    os.system(f"echo 'deb [trusted=yes] https://www.deb-multimedia.org {RELEASE} main' >> /etc/apt/sources.list.d/multimedia.list{DEBUG}")
-    os.system("chmod 1777 /tmp") # Otherwise error "Couldn't create temporary file /tmp/apt.conf.XYZ" # REVIEW necessary after switching to chroot_in and chroot_out ?
-    os.system("apt-get -y update -oAcquire::AllowInsecureRepositories=true")
-    os.system("apt-get -y -f install deb-multimedia-keyring --allow-unauthenticated")
-    os.system("apt-get -y full-upgrade --allow-unauthenticated") # REVIEW necessary?
-    excode = os.system(f"apt-get -y install --no-install-recommends --fix-broken {packages}")
-    if excode != 0:
+    try:
+        open("/etc/apt/sources.list.d/multimedia.list", "a").write(f"deb [trusted=yes] https://www.deb-multimedia.org {RELEASE} main")
+        os.chmod("/tmp", 0o1777)
+        commands = f'''
+        apt-get -y update -oAcquire::AllowInsecureRepositories=true
+        apt-get -y -f install deb-multimedia-keyring --allow-unauthenticated
+        apt-get -y full-upgrade --allow-unauthenticated
+        apt-get -y install --no-install-recommends --fix-broken {packages}
+        '''
+        # REVIEW /tmp Otherwise error "Couldn't create temporary file /tmp/apt.conf.XYZ" # REVIEW necessary after switching to chroot_in and chroot_out? second last line necessary?
+        sp.check_call(commands, shell=True)
+    except (Exception, sp.CalledProcessError, FileNotFoundError):
         sys.exit("Failed to download packages!")
 
     #   3. Package manager database and config files
-    os.system("sudo mv /var/lib/dpkg /usr/share/ash/db/") # removed /mnt/XYZ from both paths and below
-    os.system("sudo ln -sf /usr/share/ash/db/dpkg /var/lib/dpkg")
+    os.system("mv /var/lib/dpkg /usr/share/ash/db/")
+    os.system("ln -sf /usr/share/ash/db/dpkg /var/lib/dpkg")
 
     #   4. Update hostname, hosts, locales and timezone, hosts
-    os.system(f"echo {hostname} | sudo tee /etc/hostname")
-    os.system(f"echo 127.0.0.1 {hostname} {distro} | sudo tee -a /etc/hosts")
-    #os.system("sudo chroot /mnt sudo localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
-    os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /etc/locale.gen")
+    os.system(f"echo {hostname} > /etc/hostname")
+    os.system(f"echo 127.0.0.1 {hostname} {distro} >> /etc/hosts")
+    #os.system("localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
+    os.system("sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /etc/locale.gen")
     os.system("locale-gen")
-    os.system("echo 'LANG=en_US.UTF-8' | sudo tee /etc/locale.conf")
-    os.system(f"sudo ln -sf /usr/share/zoneinfo/{tz} /etc/localtime")
+    os.system("echo 'LANG=en_US.UTF-8' > /etc/locale.conf")
+    os.system(f"ln -sf /usr/share/zoneinfo/{tz} /etc/localtime")
     os.system("hwclock --systohc")
 
     #   Post bootstrap
@@ -90,19 +96,19 @@ def main():
     print("Installation complete!")
     print("You can reboot now :)")
 
-def initram_update(): # REVIEW removed "{SUDO}" from all lines below
+def initram_update():
     if is_luks:
-        os.system("dd bs=512 count=4 if=/dev/random of=/etc/crypto_keyfile.bin iflag=fullblock") # removed /mnt/XYZ from output (and from lines below)
+        os.system("dd bs=512 count=4 if=/dev/random of=/etc/crypto_keyfile.bin iflag=fullblock")
         os.system("chmod 000 /etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
         os.system(f"cryptsetup luksAddKey {args[1]} /etc/crypto_keyfile.bin")
         os.system("sed -i -e 's|^#KEYFILE_PATTERN=|KEYFILE_PATTERN='/etc/crypto_keyfile.bin'|' /etc/cryptsetup-initramfs/conf-hook")
         os.system("echo UMASK=0077 >> /etc/initramfs-tools/initramfs.conf")
-        os.system(f"echo 'luks_root '{args[1]}'  /etc/crypto_keyfile.bin luks' | sudo tee -a /etc/crypttab")
-        os.system(f"update-initramfs -u") # REVIEW: Need sudo inside? What about kernel variants?
+        os.system(f"echo 'luks_root '{args[1]}'  /etc/crypto_keyfile.bin luks' >> /etc/crypttab")
+        os.system(f"update-initramfs -u") # REVIEW: What about kernel variants?
 
 def strap(pkg, ARCH, RELEASE):
     excl = sp.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
-    sp.check_call(f"sudo debootstrap --arch {ARCH} --exclude={excl} {RELEASE} /mnt http://ftp.debian.org/debian", shell=True) # REVIEW --include={packages} ? --variant=minbase ?
+    sp.check_call(f"debootstrap --arch {ARCH} --exclude={excl} {RELEASE} /mnt http://ftp.debian.org/debian", shell=True) # REVIEW --include={packages} ? --variant=minbase ?
 
 main()
 

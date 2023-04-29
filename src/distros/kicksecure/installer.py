@@ -39,6 +39,7 @@ def main():
 
     #   Mount-points for chrooting
     ashos_mounts()
+    cur_dir_code = chroot_in("/mnt")
 
     # Install anytree and necessary packages in chroot
     os.system("sudo systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
@@ -80,6 +81,9 @@ def main():
     deploy_to_common()
 
     #   Unmount everything and finish
+    chroot_out(cur_dir_code)
+    if is_ash_bundle:
+        bundler()
     unmounts()
 
     clear()
@@ -98,7 +102,7 @@ def initram_update(): # REVIEW removed "{SUDO}" from all lines below
 
 def strap(pkg, ARCH, RELEASE):
     #excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
-    subprocess.check_output(f"sed 's/RELEASE/{RELEASE}/g' ./src/distros/{distro}/sources.list | sudo tee tmp_sources.list", shell=True)
+    subprocess.check_output(f"sed 's/RELEASE/{RELEASE}/g' {installer_dir}/src/distros/{distro}/sources.list | sudo tee tmp_sources.list", shell=True)
     subprocess.check_output(f"sudo SECURITY_MISC_INSTALL=force DERIVATIVE_APT_REPOSITORY_OPTS=stable anon_shared_inst_tb=open mmdebstrap --skip=check/empty --arch {ARCH}  --include='{pkg}' --variant=required {RELEASE} /mnt tmp_sources.list", shell=True) ### --include={packages} ? --variant=minbase ?
     subprocess.check_output(f"sudo rm /mnt/etc/apt/sources.list.d/*tmp_sources.list", shell=True)
 
