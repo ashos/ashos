@@ -3,7 +3,7 @@
 import os
 import stat
 import socket
-import subprocess
+import subprocess as sp
 import sys
 from re import search
 from setup import args, installer_dir, distro, distro_name

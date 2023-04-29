@@ -2,7 +2,7 @@
 
 import os
 import time
-import subprocess
+import subprocess as sp
 
 snapshot = subprocess.check_output("/usr/bin/ash c", shell=True)
 while True:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import os.path
-import subprocess
+import subprocess as sp
 import sys
 from src import detect_os
 

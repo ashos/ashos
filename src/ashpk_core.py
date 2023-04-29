@@ -2,7 +2,7 @@
 
 import os
 import stat
-import subprocess
+import subprocess as sp
 import sys
 import time
 from anytree import AsciiStyle, find, Node, PreOrderIter, RenderTree

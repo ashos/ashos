@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import os
-import subprocess
+import subprocess as sp
 import sys
 from src.installer_core import * # NOQA
 from setup import args, distro
@@ -11,7 +11,11 @@ def main():
     ARCH = "amd64"
     RELEASE = "bullseye"
     KERNEL = ""
-    packages = f"linux-image-{ARCH} network-manager btrfs-progs sudo curl python3 python3-anytree dhcpcd5 locales nano kicksecure-cli deb-multimedia-keyring" # console-setup firmware-linux firmware-linux-nonfree os-prober
+    packages = f"linux-image-{ARCH} btrfs-progs sudo curl dhcpcd5 locales nano \
+                network-manager kicksecure-cli deb-multimedia-keyring"
+                # console-setup firmware-linux firmware-linux-nonfree os-prober
+    if not is_ash_bundle:
+        packages +=  " python3 python3-anytree"
     if is_efi:
         packages += " grub-efi"  # includes efibootmgr
     else:
@@ -25,11 +29,10 @@ def main():
     pre_bootstrap()
 
     #   2. Bootstrap and install packages in chroot
-
     while True:
         try:
             strap(packages, ARCH, RELEASE)
-        except subprocess.CalledProcessError as e:
+        except sp.CalledProcessError as e:
             print(e)
             if not yes_no("F: Failed to strap package(s). Retry?"):
                 unmounts("failed") # user declined
@@ -39,36 +42,40 @@ def main():
 
     #   Mount-points for chrooting
     ashos_mounts()
+    os.system("systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
     cur_dir_code = chroot_in("/mnt")
 
     # Install anytree and necessary packages in chroot
-    os.system("sudo systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
-    os.system(f"echo 'deb [trusted=yes] https://www.deb-multimedia.org {RELEASE} main' | sudo tee -a /mnt/etc/apt/sources.list.d/multimedia.list{DEBUG}")
-    excode = os.system(f"sudo chroot /mnt apt-get -y update")
-    excode = os.system(f"sudo chroot /mnt apt-get -y install --no-install-recommends --fix-broken {packages}")
-    if excode != 0:
+    try:
+        open("/etc/apt/sources.list.d/multimedia.list", "a").write(f"deb [trusted=yes] https://www.deb-multimedia.org {RELEASE} main")
+        commands = f'''
+        apt-get -y update
+        apt-get -y install --no-install-recommends --fix-broken {packages}
+        '''
+        sp.check_call(commands, shell=True)
+    except (Exception, sp.CalledProcessError, FileNotFoundError):
         sys.exit("Failed to download packages!")
 
     #   3. Package manager database and config files
-    os.system("sudo mv /mnt/var/lib/dpkg /mnt/usr/share/ash/db/")
-    os.system("sudo ln -sf /mnt/usr/share/ash/db/dpkg /mnt/var/lib/dpkg")
+    os.system("mv /var/lib/dpkg /usr/share/ash/db/")
+    os.system("ln -sf /usr/share/ash/db/dpkg /var/lib/dpkg")
 
     #   4. Update hostname, hosts, locales and timezone, hosts
-    os.system(f"echo {hostname} | sudo tee /mnt/etc/hostname")
-    os.system(f"echo 127.0.0.1 {hostname} {distro} | sudo tee -a /mnt/etc/hosts")
+    os.system(f"echo {hostname} > /etc/hostname")
+    os.system(f"echo 127.0.0.1 {hostname} {distro} >> /etc/hosts")
     #os.system("sudo chroot /mnt sudo localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
-    os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
-    os.system("sudo chroot /mnt sudo locale-gen")
-    os.system("echo 'LANG=en_US.UTF-8' | sudo tee /mnt/etc/locale.conf")
-    os.system(f"sudo ln -sf /mnt/usr/share/zoneinfo/{tz} /mnt/etc/localtime")
-    os.system("sudo chroot /mnt sudo hwclock --systohc")
+    os.system("sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /etc/locale.gen")
+    os.system("locale-gen")
+    os.system("echo 'LANG=en_US.UTF-8' > /etc/locale.conf")
+    os.system(f"ln -sf /usr/share/zoneinfo/{tz} /etc/localtime")
+    os.system("hwclock --systohc")
 
     #   Post bootstrap
     post_bootstrap(super_group)
-    os.system("sudo chroot /mnt passwd user") # Change password for default user
+    os.system("passwd user") # Change password for default user
 
     #   5. Services (init, network, etc.)
-    os.system("sudo chroot /mnt systemctl enable NetworkManager")
+    os.system("systemctl enable NetworkManager")
 
     #   6. Boot and EFI
     initram_update()
@@ -92,19 +99,19 @@ def main():
 
 def initram_update(): # REVIEW removed "{SUDO}" from all lines below
     if is_luks:
-        os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
-        os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
-        os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
-        os.system("sudo sed -i -e 's|^#KEYFILE_PATTERN=|KEYFILE_PATTERN='/etc/crypto_keyfile.bin'|' /mnt/etc/cryptsetup-initramfs/conf-hook")
-        os.system("sudo echo UMASK=0077 >> /mnt/etc/initramfs-tools/initramfs.conf")
-        os.system(f"sudo echo 'luks_root '{args[1]}'  /etc/crypto_keyfile.bin luks' | sudo tee -a /mnt/etc/crypttab")
-        os.system(f"sudo chroot /mnt update-initramfs -u")
+        os.system("dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
+        os.chmod("/mnt/etc/crypto_keyfile.bin", 0o000) # Changed from 600 as even root doesn't need access
+        os.system(f"cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
+        os.system("sed -i -e 's|^#KEYFILE_PATTERN=|KEYFILE_PATTERN='/etc/crypto_keyfile.bin'|' /etc/cryptsetup-initramfs/conf-hook")
+        os.system("echo UMASK=0077 >> /etc/initramfs-tools/initramfs.conf")
+        os.system(f"echo 'luks_root '{args[1]}' /etc/crypto_keyfile.bin luks' >> /mnt/etc/crypttab")
+        os.system(f"update-initramfs -u")
 
 def strap(pkg, ARCH, RELEASE):
-    #excl = subprocess.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
-    subprocess.check_output(f"sed 's/RELEASE/{RELEASE}/g' {installer_dir}/src/distros/{distro}/sources.list | sudo tee tmp_sources.list", shell=True)
-    subprocess.check_output(f"sudo SECURITY_MISC_INSTALL=force DERIVATIVE_APT_REPOSITORY_OPTS=stable anon_shared_inst_tb=open mmdebstrap --skip=check/empty --arch {ARCH}  --include='{pkg}' --variant=required {RELEASE} /mnt tmp_sources.list", shell=True) ### --include={packages} ? --variant=minbase ?
-    subprocess.check_output(f"sudo rm /mnt/etc/apt/sources.list.d/*tmp_sources.list", shell=True)
+    #excl = sp.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
+    sp.check_output(f"sed 's/RELEASE/{RELEASE}/g' {installer_dir}/src/distros/{distro}/sources.list > tmp_sources.list", shell=True)
+    subprocess.check_output(f"SECURITY_MISC_INSTALL=force DERIVATIVE_APT_REPOSITORY_OPTS=stable anon_shared_inst_tb=open mmdebstrap --skip=check/empty --arch {ARCH} --include='{pkg}' --variant=required {RELEASE} /mnt tmp_sources.list", shell=True) ### --include={packages} ? --variant=minbase ?
+    sp.check_output(f"rm /mnt/etc/apt/sources.list.d/*tmp_sources.list", shell=True)
 
 main()
 

@@ -66,7 +66,7 @@ def main():
     #   4. Update hostname, hosts, locales and timezone, hosts
     os.system(f"echo {hostname} > /etc/hostname")
     os.system(f"echo 127.0.0.1 {hostname} {distro} >> /etc/hosts")
-    #os.system("localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
+    #os.system("sudo chroot /mnt sudo localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
     os.system("sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /etc/locale.gen")
     os.system("locale-gen")
     os.system("echo 'LANG=en_US.UTF-8' > /etc/locale.conf")
@@ -90,6 +90,9 @@ def main():
     deploy_to_common()
 
     #   Unmount everything and finish
+    chroot_out(cur_dir_code)
+    if is_ash_bundle:
+        bundler()
     unmounts()
 
     clear()
