@@ -6,19 +6,23 @@ import sys
 from src.installer_core import * # NOQA
 from setup import args, distro
 
-def main():
-    #   1. Define variables
-    ARCH = "x86_64"
-    RELEASE = "rawhide"
-    packages = "kernel dnf passwd sudo btrfs-progs python-anytree sqlite-tools linux-firmware \
-                glibc-langpack-en glibc-locale-source dhcpcd NetworkManager"
-    if is_efi:
-        packages += " efibootmgr"
-        if "64" in ARCH: # REVIEW not good for AARCH64/ARM64
-            packages += " shim-x64 grub2-efi-x64-modules"
-    super_group = "wheel"
-    v = "2" # GRUB version number in /boot/grubN
+#   1. Define variables
+ARCH = "x86_64"
+RELEASE = "rawhide"
+packages = "kernel dnf passwd sudo sqlite-tools linux-firmware \
+            glibc-langpack-en glibc-locale-source dhcpcd NetworkManager"
+if not is_ash_bundle:
+    packages +=  " python-anytree"
+if is_efi:
+    packages += " efibootmgr"
+    if "64" in ARCH: # REVIEW not good for AARCH64/ARM64
+        packages += " shim-x64 grub2-efi-x64-modules"
+if is_format_btrfs:
+    packages += " btrfs-progs"
+super_group = "wheel"
+v = "2" # GRUB version number in /boot/grubN
 
+def main():
     #   Pre bootstrap
     pre_bootstrap()
 
@@ -62,7 +66,7 @@ def main():
     #os.system("sudo chroot /mnt sudo locale-gen")
     os.system("echo 'LANG=en_US.UTF-8' > /etc/locale.conf")
     os.system(f"ln -sf /usr/share/zoneinfo/{tz} /etc/localtime")
-    os.system("hwclock --systohc")
+    os.system("/sbin/hwclock --systohc")
 
     #   Post bootstrap
     post_bootstrap(super_group)
@@ -77,7 +81,8 @@ def main():
     os.system('grep -qxF GRUB_ENABLE_BLSCFG="false" /etc/default/grub || \
             echo GRUB_ENABLE_BLSCFG="false" >> /etc/default/grub')
     if is_efi: # This needs to go before grub_ash otherwise map.txt entry would be empty
-        os.system(f"efibootmgr -c -d {args[2]} -p 1 -L 'Fedora' -l '\\EFI\\fedora\\shim.efi'")
+        efibootmgr = find_command("efibootmgr")
+        os.system(f"{efibootmgr} -c -d {args[2]} -p 1 -L 'Fedora' -l '\\EFI\\fedora\\shim.efi'")
     grub_ash(v)
 
     #   BTRFS snapshots

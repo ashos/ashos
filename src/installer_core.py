@@ -74,7 +74,7 @@ def bundler_advanced():
                 os.system(f"unzip {tmpdir}/anytree{ext} -d {tmpdir}/TEMP")
                 os.system(f"mv {tmpdir}/TEMP/*anytree*/anytree {tmpdir}/.python/")
             elif ext == ".tar.gz":
-                if "busybox" in os.path.realpath(which("tar")): # type: ignore
+                if "busybox" in os.path.realpath(which("tar")):
                     os.mkdir(f"{tmpdir}/TEMP")
                     os.system(f"tar x -f {tmpdir}/anytree{ext} -C {tmpdir}/TEMP")
                     os.system(f"mv {tmpdir}/TEMP/*anytree*/anytree {tmpdir}/.python/")
@@ -129,27 +129,32 @@ def clear():
     os.system("#clear")
 
 #   Users
-def create_user(u, g): # REVIEW removed "{SUDO}" from all lines below
-    if distro == "alpine": # REVIEW not generic
-        os.system(f"/usr/sbin/adduser -h /home/{u} -G {g} -s /bin/sh -D {u}")
-    else:
-        os.system(f"useradd -m -G {g} -s /bin/sh {u}")
-    os.system(f"echo '%{g} ALL=(ALL:ALL) ALL' >> /etc/sudoers")
-    os.system(f"echo 'export XDG_RUNTIME_DIR=\"/run/user/1000\"' >> /home/{u}/.$(echo $0)rc")
+def create_user(u, g):
+  # Get path to useradd/adduser even if not in PATH (e.g. Fedora)
+    uau = find_command("useradd") or find_command("adduser")
+    if 'busybox' in os.path.realpath(uau):
+        os.system(f"{uau} -h /home/{u} -G {g} -s /bin/sh -D {u}")
+    else: # util-linx (non-Alpine)
+        os.system(f"{uau} -m -G {g} -s /bin/sh {u}")
+    open("/etc/sudoers", "a").write(f"%{g} ALL=(ALL:ALL) ALL")
+  # Get true name of target OS shell # NOT $(echo $0) or os.environ.get('SHELL')
+    sh = os.path.basename(os.path.realpath(which('sh')))
+    open(f"/home/{u}/.{sh}rc", "a").write('export XDG_RUNTIME_DIR="/run/user/1000"')
 
 #   BTRFS snapshots
 def deploy_base_snapshot(): # REVIEW removed "{SUDO}" from all lines below
-    os.system(f"btrfs sub snap {'' if is_mutable else '-r'} / /.snapshots/rootfs/snapshot-0")
-    os.system("btrfs sub create /.snapshots/boot/boot-deploy")
-    os.system("btrfs sub create /.snapshots/etc/etc-deploy")
+    btrfs = find_command("btrfs")
+    os.system(f"{btrfs} sub snap {'' if is_mutable else '-r'} / /.snapshots/rootfs/snapshot-0")
+    os.system(f"{btrfs} sub create /.snapshots/boot/boot-deploy")
+    os.system(f"{btrfs} sub create /.snapshots/etc/etc-deploy")
     os.system("cp -r --reflink=auto /boot/. /.snapshots/boot/boot-deploy")
     os.system("cp -r --reflink=auto /etc/. /.snapshots/etc/etc-deploy")
-    os.system(f"btrfs sub snap {'' if is_mutable else '-r'} /.snapshots/boot/boot-deploy /.snapshots/boot/boot-0")
-    os.system(f"btrfs sub snap {'' if is_mutable else '-r'} /.snapshots/etc/etc-deploy /.snapshots/etc/etc-0")
+    os.system(f"{btrfs} sub snap {'' if is_mutable else '-r'} /.snapshots/boot/boot-deploy /.snapshots/boot/boot-0")
+    os.system(f"{btrfs} sub snap {'' if is_mutable else '-r'} /.snapshots/etc/etc-deploy /.snapshots/etc/etc-0")
     if is_mutable: # Mark base snapshot as mutable
             os.system("touch /.snapshots/rootfs/snapshot-0/usr/share/ash/mutable")
-    os.system("btrfs sub snap /.snapshots/rootfs/snapshot-0 /.snapshots/rootfs/snapshot-deploy")
-    os.system("btrfs sub set-default /.snapshots/rootfs/snapshot-deploy")
+    os.system(f"{btrfs} sub snap /.snapshots/rootfs/snapshot-0 /.snapshots/rootfs/snapshot-deploy")
+    os.system(f"{btrfs} sub set-default /.snapshots/rootfs/snapshot-deploy")
     os.system("cp -r /root/. /.snapshots/root/")
     os.system("cp -r /tmp/. /.snapshots/tmp/")
     rmrf("/root", "/*")
@@ -245,6 +250,9 @@ def get_item_from_path(thing, a_path):
 
 #   GRUB and EFI
 def grub_ash(v): # REVIEW removed "{SUDO}" from all lines below
+    grub_install = find_command(f"grub{v}-install")
+    grub_mkconfig = find_command(f"grub{v}-mkconfig")
+    grub_mkimage = find_command(f"grub{v}-mkimage")
     os.system(f"sed -i 's/^GRUB_DISTRIBUTOR.*$/GRUB_DISTRIBUTOR=\"{distro_name}\"/' /etc/default/grub")
     if is_luks:
         os.system("sed -i 's/^#GRUB_ENABLE_CRYPTODISK.*$/GRUB_ENABLE_CRYPTODISK=y/' /etc/default/grub")
@@ -254,24 +262,25 @@ def grub_ash(v): # REVIEW removed "{SUDO}" from all lines below
   # grub-install rewrites default core.img, so run grub-mkimage AFTER!
     if distro != "fedora": # https://bugzilla.redhat.com/show_bug.cgi?id=1917213
         if is_efi:
-            os.system(f'grub{v}-install {bp if is_boot_external else args[2]} --bootloader-id={distro} --modules="{luks_grub_args}" --target=x86_64-efi') # --efi-directory=/boot/efi # REVIEW
+            os.system(f'{grub_install} {bp if is_boot_external else args[2]} --bootloader-id={distro} --modules="{luks_grub_args}" --target=x86_64-efi') # --efi-directory=/boot/efi # REVIEW
         else:
-            os.system(f'grub{v}-install {bp if is_boot_external else args[2]} --bootloader-id={distro} --modules="{luks_grub_args}"') # REVIEW: --target needed for non-uefi?
+            os.system(f'{grub_install} {bp if is_boot_external else args[2]} --bootloader-id={distro} --modules="{luks_grub_args}"') # REVIEW: --target needed for non-uefi?
     if is_luks: # make LUKS2-compatible grub image
         if is_efi:
-            os.system(f'grub{v}-mkimage -p "(crypto0)/@boot_{distro}/grub{v}" -O x86_64-efi -c /etc/grub_luks2.conf -o /boot/efi/EFI/{distro}/grubx64.efi {luks_grub_args}') # without '/grub' gives error normal.mod not found (maybe only one of these here and grub_luks2.conf is enough?!)
+            os.system(f'{grub_mkimage} -p "(crypto0)/@boot_{distro}/grub{v}" -O x86_64-efi -c /etc/grub_luks2.conf -o /boot/efi/EFI/{distro}/grubx64.efi {luks_grub_args}') # without '/grub' gives error normal.mod not found (maybe only one of these here and grub_luks2.conf is enough?!)
         else:
-            os.system(f'grub{v}-mkimage -p "(crypto0)/@boot_{distro}/grub{v}" -O i386-pc -c /etc/grub_luks2.conf -o /boot/grub{v}/i386-pc/core_luks2.img {luks_grub_args}') # 'biosdisk' module not needed eh?
+            os.system(f'{grub_mkimage} -p "(crypto0)/@boot_{distro}/grub{v}" -O i386-pc -c /etc/grub_luks2.conf -o /boot/grub{v}/i386-pc/core_luks2.img {luks_grub_args}') # 'biosdisk' module not needed eh?
             os.system(f'dd oflag=seek_bytes seek=512 if=/boot/grub{v}/i386-pc/core_luks2.img of={bp if is_boot_external else args[2]}') # REVIEW
-    os.system(f"grub{v}-mkconfig {bp if is_boot_external else args[2]} -o /boot/grub{v}/grub.cfg")
+    os.system(f"{grub_mkconfig} {bp if is_boot_external else args[2]} -o /boot/grub{v}/grub.cfg")
     os.system(f"mkdir -p /boot/grub{v}/BAK") # Folder for backing up grub configs created by ashpk
     os.system(f"sed -i 's|subvol=@{distro_suffix}|subvol=@.snapshots{distro_suffix}/rootfs/snapshot-deploy|g' /boot/grub{v}/grub.cfg")
     # Create a mapping of "distro" <=> "BootOrder number". Ash reads from this file to switch between distros.
     if is_efi:
+        efibootmgr = find_command("efibootmgr")
         if is_boot_external:
-            os.system(f"efibootmgr -c -d {bp} -p 1 -L {distro_name} -l '\\EFI\\{distro}\\grubx64.efi'")
+            os.system(f"{efibootmgr} -c -d {bp} -p 1 -L {distro_name} -l '\\EFI\\{distro}\\grubx64.efi'")
         ex = os.path.exists("/boot/efi/EFI/map.txt")
-        boot_num = sp.check_output(f'efibootmgr -v | grep -i {distro} | awk "{{print $1}}" | sed "s|[^0-9]*||g"', encoding='UTF-8', shell=True)
+        boot_num = sp.check_output(f'{efibootmgr} -v | grep -i {distro} | awk "{{print $1}}" | sed "s|[^0-9]*||g"', encoding='UTF-8', shell=True)
         with open("/boot/efi/EFI/map.txt", "a") as m:
             if not ex: m.write("DISTRO,BootOrder\n")
             if boot_num: m.write(distro + ',' + boot_num)
@@ -420,11 +429,13 @@ def set_password(u, s="sudo"): # REVIEW Use super_group?
             continue
 
 def to_uuid(part):
-    if 'busybox' in os.path.realpath(which('blkid')): # type: ignore
-        u = sp.check_output(f"blkid {part}", shell=True).decode('utf-8').strip()
+  # Get path to blkid even if not in PATH (e.g. Fedora)
+    blkid = find_command("blkid")
+    if 'busybox' in os.path.realpath(blkid):
+        u = sp.check_output(f"{blkid} {part}", shell=True).decode('utf-8').strip()
         return search('UUID="(.+?)"' , u).group(1)
     else: # util-linx (non-Alpine)
-        return sp.check_output(f"blkid -s UUID -o value {part}", shell=True).decode('utf-8').strip()
+        return sp.check_output(f"{blkid} -s UUID -o value {part}", shell=True).decode('utf-8').strip()
 
 #   Unmount everything
 def unmounts(install=""): # REVIEW at least for Arch, {SUDO} is not needed
@@ -437,6 +448,10 @@ def unmounts(install=""): # REVIEW at least for Arch, {SUDO} is not needed
     os.system(f"{SUDO} umount --recursive /mnt")
     if is_luks:
         os.system(f"{SUDO} cryptsetup close luks_root")
+
+#   Find a command stubbornly
+def find_command(cmd):
+    return which(cmd) or which(f"/sbin/{cmd}") or which("/usr/sbin/{cmd}")
 
 #   Generic yes no prompt
 def yes_no(msg):

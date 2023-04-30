@@ -12,16 +12,6 @@ from setup import args, distro
 from urllib.error import URLError, HTTPError
 from urllib.request import urlopen
 
-#1
-# /dev/sda1 btrfs
-# /dev/sda boot
-
-#2
-# /dev/sda1 ash
-# /dev/sda2 btrfs
-# /dev/sda
-#setup /dev/sda2 /dev/sda args[1] args[2]
-
 #   1. Define variables
 ARCH = "x86_64"
 RELEASE = "edge"

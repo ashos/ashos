@@ -7,9 +7,9 @@ from src import detect_os
 
 installer_dir = os.path.dirname(os.path.abspath(__file__))
 is_efi = os.path.exists("/sys/firmware/efi")
-use_other_iso = "" # e.g. "arch" if using Arch iso to install different OS like Fedora
+use_other_iso = "" # e.g. "arch" if using Arch iso to install different OS like Fedora # TODO remove
 
-try:
+try: # if using iso to install another OS, two extra args should be passed
     if is_efi:
         args = list(sys.argv[0:4]) # just first 3 arguments (exclude distro arguments)
         distro = sys.argv[4]

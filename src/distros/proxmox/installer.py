@@ -78,7 +78,7 @@ def main():
     os.system("sudo chroot /mnt sudo locale-gen")
     os.system("echo 'LANG=en_US.UTF-8' | sudo tee /mnt/etc/locale.conf")
     os.system(f"sudo ln -sf /mnt/usr/share/zoneinfo/{tz} /mnt/etc/localtime")
-    os.system("sudo chroot /mnt sudo hwclock --systohc")
+    os.system("/sbin/hwclock --systohc")
 
     #   Post bootstrap
     post_bootstrap(super_group)

@@ -368,14 +368,14 @@ def deploy(snap, secondary=False):
             os.system(f"sed -i '0,/snapshot-{tmp}/ s|,ro||' /.snapshots/rootfs/snapshot-{tmp}/etc/fstab") ### ,rw
       # Add special user-defined mutable directories as bind-mounts into fstab
         if mtbl_dirs:
-            for mnt_path in mtbl_dirs: # type: ignore
+            for mnt_path in mtbl_dirs:
                 src_path = f"/.snapshots/mutable_dirs/snapshot-{snap}/{mnt_path}"
                 os.system(f"mkdir -p /.snapshots/mutable_dirs/snapshot-{snap}/{mnt_path}")
                 os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mnt_path}")
                 os.system(f"echo '{src_path} /{mnt_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
       # Same thing but for shared directories
         if mtbl_dirs_shared:
-            for mnt_path in mtbl_dirs_shared: # type: ignore
+            for mnt_path in mtbl_dirs_shared:
                 src_path = f"/.snapshots/mutable_dirs/{mnt_path}"
                 os.system(f"mkdir -p /.snapshots/mutable_dirs/{mnt_path}")
                 os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mnt_path}")
@@ -622,7 +622,7 @@ def install_profile(prof, snap, force=False, secondary=False, section_only=None)
         pkgs = ""
         profconf = ConfigParser(allow_no_value=True, delimiters=("==="), strict=False)
 #        profconf.optionxform = lambda option: option # preserve case for letters
-        profconf.optionxform = str # type: ignore
+        profconf.optionxform = str
         try:
             if os.path.exists(f"/.snapshots/tmp/{prof}.conf") and not force:
                 profconf.read(f"/.snapshots/tmp/{prof}.conf")
@@ -746,10 +746,10 @@ def post_transactions(snap):
     mtbl_dirs = options["mutable_dirs"].split(',').remove('')
     mtbl_dirs_shared = options["mutable_dirs_shared"].split(',').remove('')
     if mtbl_dirs:
-        for mnt_path in mtbl_dirs: # type: ignore
+        for mnt_path in mtbl_dirs:
             os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}{DEBUG}")
     if mtbl_dirs_shared:
-        for mnt_path in mtbl_dirs_shared: # type: ignore
+        for mnt_path in mtbl_dirs_shared:
             os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}{DEBUG}")
   # ---------------------- fix for hollow functionality ---------------------- #
     chr_delete(snap)
@@ -818,12 +818,12 @@ def prepare(snap):
     mtbl_dirs = options["mutable_dirs"].split(',').remove('')
     mtbl_dirs_shared = options["mutable_dirs_shared"].split(',').remove('')
     if mtbl_dirs:
-        for mnt_path in mtbl_dirs: # type: ignore
+        for mnt_path in mtbl_dirs:
             os.system(f"mkdir -p /.snapshots/mutable_dirs/snapshot-{snap}/{mnt_path}")
             os.system(f"mkdir -p /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}")
             os.system(f"mount --bind /.snapshots/mutable_dirs/snapshot-{snap}/{mnt_path} /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}")
     if mtbl_dirs_shared:
-        for mnt_path in mtbl_dirs_shared: # type: ignore
+        for mnt_path in mtbl_dirs_shared:
             os.system(f"mkdir -p /.snapshots/mutable_dirs/{mnt_path}")
             os.system(f"mkdir -p /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}")
             os.system(f"mount --bind /.snapshots/mutable_dirs/{mnt_path} /.snapshots/rootfs/snapshot-chr{snap}/{mnt_path}")
@@ -1096,7 +1096,7 @@ def tmp_delete(secondary=False):
 #   Print out tree with descriptions
 def tree_print(tree):
     csnap = get_current_snapshot()
-    for pre, fill, node in RenderTree(tree, style=AsciiStyle()): # simpler tree style # type: ignore
+    for pre, fill, node in RenderTree(tree, style=AsciiStyle()): # simpler tree style
         if os.path.isfile(f"/.snapshots/ash/snapshots/{node.name}-desc"):
             with open(f"/.snapshots/ash/snapshots/{node.name}-desc", "r") as descfile:
                 desc = descfile.readline()
@@ -1326,7 +1326,7 @@ else:
     sys.exit("F: Operating system could not be detected!")
 GRUB = sp.check_output("ls /boot | grep grub", encoding='utf-8', shell=True).strip()
 USERNAME = os.getenv("SUDO_USER") or os.getenv("USER")
-HOME = os.path.expanduser('~'+ USERNAME) # type: ignore
+HOME = os.path.expanduser('~'+ USERNAME)
 
 #   Main function
 def main():
@@ -1336,7 +1336,7 @@ def main():
     elif sys.platform.startswith("cosmo") and os.getuid() != 0: ### TODO use geteuid when fixed
         exit("F: Run ash with super user privileges!")
     elif sys.platform.startswith("windows"):
-        from ctypes import windll # type: ignore ### REVIEW 2023
+        from ctypes import windll # TODO
         if windll.shell32.IsUserAnAdmin() != 0:
             exit("F: Run ash with admin privileges!")
     elif sys.platform.startswith("darwin"):
