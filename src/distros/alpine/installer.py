@@ -41,10 +41,13 @@ def main():
     #   Pre bootstrap
     pre_bootstrap()
 
+    #   Mount-points for chrooting
+    ashos_mounts()
+
     #   2. Bootstrap and install packages in chroot
     while True:
         try:
-            strap(packages)
+            strap()
         except (sp.CalledProcessError, HTTPError, URLError, FileNotFoundError, tarfile.ExtractError) as e:
             print(e)
             if not yes_no("F: Failed to strap package(s). Retry?"):
@@ -53,8 +56,7 @@ def main():
         else: # success
             break
 
-    #   Mount-points for chrooting
-    ashos_mounts()
+    #   Go inside chroot
     cur_dir_code = chroot_in("/mnt")
 
     #   3. Package manager database and config files
@@ -69,12 +71,12 @@ def main():
     #os.system(f"{SUDO} sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
     #os.system(f"{SUDO} chroot /mnt {SUDO} locale-gen")
     #os.system(f"echo 'LANG=en_US.UTF-8' | {SUDO} tee /mnt/etc/locale.conf")
-    os.system(f"ln -sf /usr/share/zoneinfo/{tz} /etc/localtime") # removed /mnt/XYZ from both paths (and from all lines above)
+    os.system(f"ln -sf /usr/share/zoneinfo/{tz} /etc/localtime")
     os.system("/sbin/hwclock --systohc")
 
     #   Post bootstrap
     post_bootstrap(super_group)
-    if yes_no("Replace Busybox's ash with Ash? (NOT recommended yet!)"): # REVIEW removed "{SUDO}" from all lines below (and all {SUDO}'s)
+    if yes_no("Replace Busybox's ash with Ash? (NOT recommended yet!)"):
         os.system("mv /bin/ash /bin/busyash")
         #os.system(f"{SUDO} mv /mnt/bin/ash /mnt/usr/bin/ash")
         #os.system(f"{SUDO} mv /mnt/usr/bin/ash /mnt/bin/ash")
@@ -83,30 +85,22 @@ def main():
         os.system("mv /usr/bin/ash /usr/bin/asd")
         print("Use asd instead of ash!")
 
-    #   5. Services (init, network, etc.) # REVIEW removed {SUDO} chroot /mnt /bin/bash -c '{SUDO} from all lines
+    #   5. Services (init, network, etc.)
     os.system("/sbin/setup-interfaces")
     os.system(f"/usr/sbin/adduser {username} plugdev")
-    os.system("/sbin/rc-update add devfs sysinit")
-    os.system("/sbin/rc-update add dmesg sysinit")
-    os.system("/sbin/rc-update add mdev sysinit")
-    os.system("/sbin/rc-update add hwdrivers sysinit")
-    os.system("/sbin/rc-update add cgroups sysinit")
-    os.system("/sbin/rc-update add hwclock boot")
-    os.system("/sbin/rc-update add modules boot")
-    os.system("/sbin/rc-update add sysctl boot")
-    os.system("/sbin/rc-update add hostname boot")
-    os.system("/sbin/rc-update add bootmisc boot")
-    os.system("/sbin/rc-update add syslog boot")
-    os.system("/sbin/rc-update add swap boot")
-    os.system("/sbin/rc-update add networking boot")
-    os.system("/sbin/rc-update add seedrng boot")
-    os.system("/sbin/rc-update add mount-ro shutdown")
-    os.system("/sbin/rc-update add killprocs shutdown")
-    os.system("/sbin/rc-update add savecache shutdown")
+
+    rc_update = find_command(["rc-update"])
+    tuples = ["devfs sysinit", "dmesg sysinit", "mdev sysinit", "hwdrivers sysinit", "cgroups sysinit", 
+              "hwclock boot", "modules boot", "sysctl boot", "hostname boot", "bootmisc boot", "syslog boot", "swap boot", "networking boot", "seedrng boot", 
+              "mount-ro shutdown", "killprocs shutdown", "savecache shutdown"]
+    for i in tuples:
+        os.system(f"{rc_update} add {i}")
     #os.system(f"{SUDO} chroot /mnt /bin/bash -c '/sbin/rc-service networkmanager start'")
 
     #   6. Boot and EFI
-    os.system('echo GRUB_CMDLINE_LINUX_DEFAULT=\\"modules=sd-mod,usb-storage,btrfs quiet rootfstype=btrfs\\" >> /etc/default/grub') # should be before initram create otherwise canonical error in grub-probe
+    # should be before initram create otherwise canonical error in grub-probe
+    with open("/etc/default/grub", "a") as f:
+        f.write('GRUB_CMDLINE_LINUX_DEFAULT="modules=sd-mod,usb-storage,btrfs quiet rootfstype=btrfs"')
     initram_update()
     grub_ash(v)
 
@@ -132,7 +126,7 @@ def get_apk_ver():
     minor = search('pkgrel=(.+?)\n', temp).group(1)
     return f"{major}-r{minor}"
 
-def initram_update(): # REVIEW removed "{SUDO}" from all lines below
+def initram_update():
     if is_luks:
         os.system("dd bs=512 count=4 if=/dev/random of=/etc/crypto_keyfile.bin iflag=fullblock")
         os.system("chmod 000 /etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
@@ -161,7 +155,7 @@ def initram_update(): # REVIEW removed "{SUDO}" from all lines below
                         print(f"F: Creating initfs with kernel {kv} failed!")
                         continue
 
-def strap(packages):
+def strap():
     APK = get_apk_ver() # e.g. 2.14.0_rc1-r0
     with TemporaryDirectory(dir="/tmp", prefix="ash.") as tmpdir:
         apk_file = urlopen(f"{URL}/{ARCH}/apk-tools-static-{APK}.apk").read() # curl -LO

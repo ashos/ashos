@@ -6,38 +6,49 @@ import sys
 from src.installer_core import * # NOQA
 from setup import args, distro
 
-def main():
-    #   1. Define variables
-    ARCH = "amd64"
-    RELEASE = "bullseye" # for both proxmox and its debian base
-    KERNEL = "5.15" # options: stable like "5.15" (recommended) or opt-in like "6.2"
-    packages = f"open-iscsi postfix btrfs-progs sudo curl python3 python3-anytree dhcpcd5 locales nano" # network-manager firmware-linux firmware-linux-nonfree os-prober
-    if is_efi:
-        packages += " grub-efi"  # includes efibootmgr
-    else:
-        packages += " grub-pc"
-    if is_luks:
-        packages += " cryptsetup cryptsetup-initramfs cryptsetup-run"
-    note2s = "Note on 2-stage setup: If you choose Yes (recommended), after first \
-        reboot, make a new snapshot, install 'proxmox-ve' in it, deploy & reboot. \
-        If you choose No, setup will finish but with errors as some packages like \
-        'apparmor' depend on specific kernel compile flags that need live Proxmox \
-        VE kernel. Proxmox can still work but may have issues (untested).\n Would \
-        you like to install proxmox-ve in two stages?"
-    if yes_no(note2s):
-        packages += f" pve-kernel-{KERNEL}"
-    else:
-        packages += " proxmox-ve"
-    super_group = "sudo"
-    v = "" # GRUB version number in /boot/grubN
+#   1. Define variables
+ARCH = "amd64"
+URL1 = "https://git.proxmox.com/?p=proxmox-ve.git;a=blob_plain;f=Makefile;hb=HEAD"
+URL2 = "https://git.proxmox.com/?p=proxmox-ve.git;a=blob_plain;f=debian/control;hb=HEAD"
+temp = urlopen(URL1).read().decode('utf-8')
+RELEASE = search('--dist (.+) --arch', temp).group(1) # "bullseye" # for both proxmox and its debian base
+packages = f"open-iscsi postfix btrfs-progs sudo curl dhcpcd5 locales nano"
+            # network-manager firmware-linux firmware-linux-nonfree os-prober
+if not is_ash_bundle:
+    packages +=  " python3 python3-anytree"
+if is_efi:
+    packages += " grub-efi"  # includes efibootmgr
+else:
+    packages += " grub-pc"
+if is_luks:
+    packages += " cryptsetup cryptsetup-initramfs cryptsetup-run"
+note2s = "Note on 2-stage setup: If you choose Yes (recommended), after first \
+    reboot, make a new snapshot, install 'proxmox-ve' in it, deploy & reboot. \
+    If you choose No, setup will finish but with errors as some packages like \
+    'apparmor' depend on specific kernel compile flags that need live Proxmox \
+    VE kernel. Proxmox can still work but may have issues (untested).\n Would \
+    you like to install proxmox-ve in two stages?"
+temp = urlopen(URL2).read().decode('utf-8') # options: stable like "5.15" (recommended) or opt-in like "6.2"
+KERNEL = search('Depends: pve-headers-(.+)', temp).group(1)
+if yes_no(note2s):
+    packages += f" pve-kernel-{KERNEL}"
+else:
+    packages += " proxmox-ve"
+super_group = "sudo"
+v = "" # GRUB version number in /boot/grubN
 
+def main():
     #   Pre bootstrap
     pre_bootstrap()
 
+    #   Mount-points for chrooting
+    ashos_mounts()
+
     #   2. Bootstrap and install packages in chroot
+    os.system("systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
     while True:
         try:
-            strap(packages, ARCH, RELEASE)
+            strap()
         except sp.CalledProcessError as e:
             print(e)
             if not yes_no("F: Failed to strap package(s). Retry?"):
@@ -46,45 +57,50 @@ def main():
         else: # success
             break
 
-    #   Mount-points for chrooting
-    ashos_mounts()
+    #   Go inside chroot
+    cur_dir_code = chroot_in("/mnt")
 
     # Install anytree and necessary packages in chroot
-    os.system("sudo systemctl start ntp && sleep 30s && ntpq -p") # Sync time in the live iso
-    os.system(f"echo 'deb [arch=amd64] http://download.proxmox.com/debian/pve {RELEASE} pve-no-subscription' | sudo tee -a /mnt/etc/apt/sources.list.d/pve-install-repo.list{DEBUG}")
-    #os.system(f"echo 'deb [arch=amd64] https://enterprise.proxmox.com/debian/pve {RELEASE} pve-enterprise' | sudo tee -a /mnt/etc/apt/sources.list.d/pve-enterprise.list{DEBUG}")
-    os.system(f"sudo wget http://download.proxmox.com/debian/proxmox-release-{RELEASE}.gpg -O /mnt/etc/apt/trusted.gpg.d/proxmox-release-{RELEASE}.gpg")
-    os.system(f"sudo chmod +r /mnt/etc/apt/trusted.gpg.d/proxmox-release-{RELEASE}.gpg") # optional: in case of a non-default umask
-    os.system(f"echo 'deb [trusted=yes] http://www.deb-multimedia.org {RELEASE} main' | sudo tee -a /mnt/etc/apt/sources.list.d/multimedia.list{DEBUG}")
-    os.system("sudo chmod 1777 /mnt/tmp") # Otherwise error "Couldn't create temporary file /tmp/apt.conf.XYZ"
-    os.system("sudo chroot /mnt apt-get -y update -oAcquire::AllowInsecureRepositories=true")
-    os.system("sudo chroot /mnt apt-get -y -f install deb-multimedia-keyring --allow-unauthenticated")
-    os.system("sudo chroot /mnt apt-get -y full-upgrade --allow-unauthenticated") ### REVIEW_LATER necessary?
-    excode = os.system(f"sudo chroot /mnt apt-get -y install --fix-broken {packages}")
-    os.system("sudo chroot /mnt apt-get -y remove os-prober") # proxmox-ve installs os-prober, grub-pc and stable pve-kernel-X.YZ
-    if excode != 0:
+    try:
+        os.system(f"echo 'deb [arch=amd64] http://download.proxmox.com/debian/pve {RELEASE} pve-no-subscription' | sudo tee -a /mnt/etc/apt/sources.list.d/pve-install-repo.list{DEBUG}")
+        #os.system(f"echo 'deb [arch=amd64] https://enterprise.proxmox.com/debian/pve {RELEASE} pve-enterprise' | sudo tee -a /mnt/etc/apt/sources.list.d/pve-enterprise.list{DEBUG}")
+        os.system(f"sudo wget http://download.proxmox.com/debian/proxmox-release-{RELEASE}.gpg -O /mnt/etc/apt/trusted.gpg.d/proxmox-release-{RELEASE}.gpg")
+        os.system(f"sudo chmod +r /mnt/etc/apt/trusted.gpg.d/proxmox-release-{RELEASE}.gpg") # optional: in case of a non-default umask
+        open("/etc/apt/sources.list.d/multimedia.list", "a").write(f"deb [trusted=yes] https://www.deb-multimedia.org {RELEASE} main")
+        os.chmod("/tmp", 0o1777)
+        # REVIEW /tmp Otherwise error "Couldn't create temporary file /tmp/apt.conf.XYZ" # REVIEW necessary after switching to chroot_in and chroot_out? third line below necessary?
+        commands = f'''
+        apt-get -y update -oAcquire::AllowInsecureRepositories=true
+        apt-get -y -f install deb-multimedia-keyring --allow-unauthenticated
+        apt-get -y full-upgrade --allow-unauthenticated
+        apt-get -y install --fix-broken {packages}
+        apt-get -y remove os-prober
+        '''
+        sp.check_call(commands, shell=True)
+        # REVIEW proxmox-ve installs os-prober, grub-pc and stable pve-kernel-X.YZ
+    except (Exception, sp.CalledProcessError, FileNotFoundError):
         sys.exit("Failed to download packages!")
 
     #   3. Package manager database and config files
-    os.system("sudo mv /mnt/var/lib/dpkg /mnt/usr/share/ash/db/")
-    os.system("sudo ln -sf /mnt/usr/share/ash/db/dpkg /mnt/var/lib/dpkg")
+    os.system("mv /var/lib/dpkg /usr/share/ash/db/")
+    os.system("ln -sf /usr/share/ash/db/dpkg /var/lib/dpkg")
 
     #   4. Update hostname, hosts, locales and timezone, hosts
-    os.system(f"echo {hostname} | sudo tee /mnt/etc/hostname")
-    os.system("echo 127.0.0.1 localhost | sudo tee -a /mnt/etc/hosts")
-    os.system(f"echo {get_ip()} {hostname}.proxmox.com {hostname} | sudo tee -a /mnt/etc/hosts") ### REVIEW_LATER
+    os.system(f"echo {hostname} > /etc/hostname")
+    os.system("echo 127.0.0.1 localhost >> /etc/hosts")
+    os.system(f"echo {get_ip()} {hostname}.proxmox.com {hostname} >> /etc/hosts") # REVIEW
     #os.system("sudo chroot /mnt sudo localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
-    os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
-    os.system("sudo chroot /mnt sudo locale-gen")
-    os.system("echo 'LANG=en_US.UTF-8' | sudo tee /mnt/etc/locale.conf")
-    os.system(f"sudo ln -sf /mnt/usr/share/zoneinfo/{tz} /mnt/etc/localtime")
+    os.system("sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /etc/locale.gen")
+    os.system("locale-gen")
+    os.system("echo 'LANG=en_US.UTF-8' > /etc/locale.conf")
+    os.system(f"ln -sf /usr/share/zoneinfo/{tz} /etc/localtime")
     os.system("/sbin/hwclock --systohc")
 
     #   Post bootstrap
     post_bootstrap(super_group)
 
     #   5. Services (init, network, etc.)
-    #os.system("sudo chroot /mnt systemctl enable NetworkManager")
+    #os.system("systemctl enable NetworkManager")
 
     #   6. Boot and EFI
     initram_update()
@@ -97,6 +113,9 @@ def main():
     deploy_to_common()
 
     #   Unmount everything and finish
+    chroot_out(cur_dir_code)
+    if is_ash_bundle:
+        bundler()
     unmounts()
 
     clear()
@@ -105,17 +124,21 @@ def main():
 
 def initram_update():
     if is_luks:
-        os.system("sudo dd bs=512 count=4 if=/dev/random of=/mnt/etc/crypto_keyfile.bin iflag=fullblock")
-        os.system("sudo chmod 000 /mnt/etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
-        os.system(f"sudo cryptsetup luksAddKey {args[1]} /mnt/etc/crypto_keyfile.bin")
-        os.system("sudo sed -i -e 's|^#KEYFILE_PATTERN=|KEYFILE_PATTERN='/etc/crypto_keyfile.bin'|' /mnt/etc/cryptsetup-initramfs/conf-hook")
-        os.system("sudo echo UMASK=0077 >> /mnt/etc/initramfs-tools/initramfs.conf")
-        os.system(f"sudo echo 'luks_root '{args[1]}'  /etc/crypto_keyfile.bin luks' | sudo tee -a /mnt/etc/crypttab")
-        os.system(f"sudo chroot /mnt update-initramfs -u") # REVIEW: Need sudo inside? What about kernel variants?
+        os.system("dd bs=512 count=4 if=/dev/random of=/etc/crypto_keyfile.bin iflag=fullblock")
+        os.system("chmod 000 /etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
+        os.system(f"cryptsetup luksAddKey {args[1]} /etc/crypto_keyfile.bin")
+        os.system("sed -i -e 's|^#KEYFILE_PATTERN=|KEYFILE_PATTERN='/etc/crypto_keyfile.bin'|' /etc/cryptsetup-initramfs/conf-hook")
+        os.system("echo UMASK=0077 >> /etc/initramfs-tools/initramfs.conf")
+        os.system(f"echo 'luks_root '{args[1]}' /etc/crypto_keyfile.bin luks' >> /etc/crypttab")
+        os.system(f"update-initramfs -u") # REVIEW: What about kernel variants?
 
-def strap(pkg, ARCH, RELEASE):
+def find_kernel():
+    temp = urlopen("https://git.proxmox.com/?p=proxmox-ve.git;a=blob_plain;f=debian/control;hb=HEAD").read().decode('utf-8')
+    return search('Depends: pve-headers-(.+)', temp).group(1)
+
+def strap():
     excl = sp.check_output("dpkg-query -f '${binary:Package} ${Priority}\n' -W | grep -v 'required\\|important' | awk '{print $1}'", shell=True).decode('utf-8').strip().replace("\n",",")
-    sp.check_output(f"sudo debootstrap --arch {ARCH} --exclude={excl} {RELEASE} /mnt http://ftp.debian.org/debian", shell=True) # REVIEW --include={packages} ? --variant=minbase ?
+    sp.check_call(f"debootstrap --arch {ARCH} --exclude={excl} {RELEASE} /mnt http://ftp.debian.org/debian", shell=True) # REVIEW --include={packages} ? --variant=minbase ?
 
 main()
 

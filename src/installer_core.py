@@ -113,13 +113,13 @@ def bundler_advanced():
             #csmp_file.close() # REVIEW redundant
             print("Bundle created!")
 
-def chroot_in(path): # REVIEW remove later
+def chroot_in(path):
     real_root = os.open("/", os.O_RDONLY) # or "." ?
-    os.chroot(path) # can be placed after next line too
+    os.chroot(path) # can switch places with next line?
     os.chdir(path)
     return real_root
 
-def chroot_out(rr): # REVIEW remove later
+def chroot_out(rr):
     os.fchdir(rr)
     os.chroot(".") # or "/" ?
     os.close(rr) # Back to old root
@@ -131,7 +131,7 @@ def clear():
 #   Users
 def create_user(u, g):
   # Get path to useradd/adduser even if not in PATH (e.g. Fedora)
-    uau = find_command("useradd") or find_command("adduser")
+    uau = find_command(["useradd", "adduser"])
     if 'busybox' in os.path.realpath(uau):
         os.system(f"{uau} -h /home/{u} -G {g} -s /bin/sh -D {u}")
     else: # util-linx (non-Alpine)
@@ -139,11 +139,14 @@ def create_user(u, g):
     open("/etc/sudoers", "a").write(f"%{g} ALL=(ALL:ALL) ALL")
   # Get true name of target OS shell # NOT $(echo $0) or os.environ.get('SHELL')
     sh = os.path.basename(os.path.realpath(which('sh')))
-    open(f"/home/{u}/.{sh}rc", "a").write('export XDG_RUNTIME_DIR="/run/user/1000"')
+    if sh == "busybox":
+        sh = "ash" # REVIEW not generic # ~/.profile ?
+    user_id = sp.check_output(f"id -u {u}", encoding='UTF-8', shell=True).strip() # usually 1000
+    open(f"/home/{u}/.{sh}rc", "a").write(f'export XDG_RUNTIME_DIR="/run/user/{user_id}"')
 
 #   BTRFS snapshots
 def deploy_base_snapshot(): # REVIEW removed "{SUDO}" from all lines below
-    btrfs = find_command("btrfs")
+    btrfs = find_command(["btrfs"])
     os.system(f"{btrfs} sub snap {'' if is_mutable else '-r'} / /.snapshots/rootfs/snapshot-0")
     os.system(f"{btrfs} sub create /.snapshots/boot/boot-deploy")
     os.system(f"{btrfs} sub create /.snapshots/etc/etc-deploy")
@@ -177,6 +180,27 @@ def deploy_to_common():
     os.system("cp -r --reflink=auto /.snapshots/etc/etc-deploy/. /etc/")
     os.system("cp -r --reflink=auto /.snapshots/boot/boot-0/. /.snapshots/rootfs/snapshot-deploy/boot/")
     os.system("cp -r --reflink=auto /.snapshots/etc/etc-0/. /.snapshots/rootfs/snapshot-deploy/etc/")
+
+#   Find a command stubbornly
+def find_command(cmds):
+    r = None
+    for cmd in cmds:
+        a = which(cmd)
+        b = which(f"/sbin/{cmd}")
+        c = which(f"/usr/sbin/{cmd}")
+        if a:
+            r = a
+        elif b: # to solve issue of blkid not found when os-prober is run
+            r = b
+            os.symlink(f"/sbin/{cmd}", f"/bin/{cmd}")
+        elif c:
+            r = c
+            os.symlink(f"/usr/sbin/{cmd}", f"/bin/{cmd}")
+    if r:
+        return r
+    else:
+        sys.exit(f"F: Command {cmds} not found!")
+#    return which(cmd) or which(f"/sbin/{cmd}") or which("/usr/sbin/{cmd}")
 
 def get_external_partition(thing):
     clear()
@@ -250,9 +274,11 @@ def get_item_from_path(thing, a_path):
 
 #   GRUB and EFI
 def grub_ash(v): # REVIEW removed "{SUDO}" from all lines below
-    grub_install = find_command(f"grub{v}-install")
-    grub_mkconfig = find_command(f"grub{v}-mkconfig")
-    grub_mkimage = find_command(f"grub{v}-mkimage")
+    grub_install = find_command([f"grub{v}-install"])
+    grub_mkconfig = find_command([f"grub{v}-mkconfig"])
+    grub_mkimage = find_command([f"grub{v}-mkimage"])
+    if is_format_btrfs:
+        find_command(["btrfs"]) # REVIEW symlink to prevent error in os-prober
     os.system(f"sed -i 's/^GRUB_DISTRIBUTOR.*$/GRUB_DISTRIBUTOR=\"{distro_name}\"/' /etc/default/grub")
     if is_luks:
         os.system("sed -i 's/^#GRUB_ENABLE_CRYPTODISK.*$/GRUB_ENABLE_CRYPTODISK=y/' /etc/default/grub")
@@ -276,7 +302,7 @@ def grub_ash(v): # REVIEW removed "{SUDO}" from all lines below
     os.system(f"sed -i 's|subvol=@{distro_suffix}|subvol=@.snapshots{distro_suffix}/rootfs/snapshot-deploy|g' /boot/grub{v}/grub.cfg")
     # Create a mapping of "distro" <=> "BootOrder number". Ash reads from this file to switch between distros.
     if is_efi:
-        efibootmgr = find_command("efibootmgr")
+        efibootmgr = find_command(["efibootmgr"])
         if is_boot_external:
             os.system(f"{efibootmgr} -c -d {bp} -p 1 -L {distro_name} -l '\\EFI\\{distro}\\grubx64.efi'")
         ex = os.path.exists("/boot/efi/EFI/map.txt")
@@ -397,9 +423,9 @@ def pre_bootstrap(): # REVIEW removed {SUDO} from all lines below
         os.system("mkdir -p /mnt/boot/efi")
         os.system(f"mount {args[3]} /mnt/boot/efi")
   # files operations (part 1) - copy to chroot, as still accessible (inside host)
-    if not os.path.exists("/mnt/etc/profile.d"):
-        os.mkdir("/mnt/etc/profile.d")
-    os.system(f"cp -a {installer_dir}/src/prep/env_path.sh /mnt/etc/profile.d/ashos.sh") # REVIEW
+#    if not os.path.exists("/mnt/etc/profile.d"):
+#        os.mkdir("/mnt/etc/profile.d")
+#    os.system(f"cp -a {installer_dir}/src/prep/env_path.sh /mnt/etc/profile.d/ashos.sh") # REVIEW
     if is_luks:
         os.system(f"cp -a {installer_dir}/src/prep/grub_luks2.conf /mnt/tmp/")
     if not is_ash_bundle: # else: post function will handle
@@ -433,12 +459,12 @@ def set_password(u, s="sudo"): # REVIEW Use super_group?
 
 def to_uuid(part):
   # Get path to blkid even if not in PATH (e.g. Fedora)
-    blkid = find_command("blkid")
+    blkid = find_command(["blkid"])
     if 'busybox' in os.path.realpath(blkid):
-        u = sp.check_output(f"{blkid} {part}", shell=True).decode('utf-8').strip()
-        return search('UUID="(.+?)"' , u).group(1)
+        u = sp.check_output(f"{blkid} {part}", encoding='UTF-8', shell=True).strip()
+        return search('UUID="(.+?)"', u).group(1)
     else: # util-linx (non-Alpine)
-        return sp.check_output(f"{blkid} -s UUID -o value {part}", shell=True).decode('utf-8').strip()
+        return sp.check_output(f"{blkid} -s UUID -o value {part}", encoding='UTF-8', shell=True).strip()
 
 #   Unmount everything
 def unmounts(install=""): # REVIEW at least for Arch, {SUDO} is not needed
@@ -451,25 +477,6 @@ def unmounts(install=""): # REVIEW at least for Arch, {SUDO} is not needed
     os.system(f"{SUDO} umount --recursive /mnt")
     if is_luks:
         os.system(f"{SUDO} cryptsetup close luks_root")
-
-#   Find a command stubbornly
-def find_command(cmd):
-    return which(cmd) or which(f"/sbin/{cmd}") or which("/usr/sbin/{cmd}")
-    #a = which(cmd)
-    #b = which(f"/sbin/{cmd}")
-    #c = which(f"/usr/sbin/{cmd}")
-    #if a:
-    #    r = a
-    #elif b:
-    #    r = b
-    #    os.symlink(f"/sbin/{cmd}", f"/bin/{cmd}")
-    #    #add_to_path(os.path.basename(b)) # add /sbin to path
-    #elif c:
-    #    r = c
-    #    #add_to_path(os.path.basename(b)) # add /usr/sbin to path
-    #else:
-    #    sys.exit(f"F: Command {cmd} not found!")
-    #return r
 
 #   Generic yes no prompt
 def yes_no(msg):

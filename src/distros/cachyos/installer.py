@@ -24,14 +24,13 @@ def main():
     #   Pre bootstrap
     pre_bootstrap()
 
-    #   2. Bootstrap and install packages in chroot
-    excode = strap(packages)
-    if excode != 0:
-        sys.exit("F: Install failed!")
+    #   Mount-points for chrooting
+    ashos_mounts()
 
+    #   2. Bootstrap and install packages in chroot
     while True:
         try:
-            strap(packages)
+            strap()
         except sp.CalledProcessError as e:
             print(e)
             if not yes_no("F: Failed to strap package(s). Retry?"):
@@ -40,8 +39,7 @@ def main():
         else: # success
             break
 
-    #   Mount-points for chrooting
-    ashos_mounts()
+    #   Go inside chroot
     cur_dir_code = chroot_in("/mnt")
 
     #   3. Package manager database and config files
@@ -56,7 +54,7 @@ def main():
     os.system("locale-gen")
     os.system("echo 'LANG=en_US.UTF-8' > /etc/locale.conf")
     os.system(f"ln -sf /usr/share/zoneinfo/{tz} /etc/localtime") # removed /mnt/XYZ from both paths (and from all lines above)
-    os.system("hwclock --systohc")
+    os.system("/sbin/hwclock --systohc")
 
     #   Post bootstrap
     post_bootstrap(super_group)
@@ -66,7 +64,7 @@ def main():
     os.system("systemctl enable NetworkManager")
 
     #   6. Boot and EFI
-    initram_update(KERNEL)
+    initram_update()
     grub_ash(v)
 
     #   BTRFS snapshots
@@ -85,7 +83,7 @@ def main():
     print("Installation complete!")
     print("You can reboot now :)")
 
-def initram_update(KERNEL): # REVIEW removed "{SUDO}" from all lines below
+def initram_update(): # REVIEW removed "{SUDO}" from all lines below
     if is_luks:
         os.system("dd bs=512 count=4 if=/dev/random of=/etc/crypto_keyfile.bin iflag=fullblock") # removed /mnt/XYZ from output (and from lines below)
         os.system("chmod 000 /etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
@@ -97,8 +95,8 @@ def initram_update(KERNEL): # REVIEW removed "{SUDO}" from all lines below
     if is_luks or is_format_btrfs: # REVIEW mkinitcpio needed to run without these conditions too?
         os.system(f"mkinitcpio -p linux{KERNEL}")
 
-def strap(pkg):
-    sp.check_output(f"{SUDO} pacstrap /mnt --needed {pkg}", shell=True)
+def strap():
+    sp.check_call(f"pacstrap /mnt --needed {packages}", shell=True)
 
 main()
 

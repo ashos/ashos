@@ -155,19 +155,19 @@ def chr_delete(snap):
     except sp.CalledProcessError:
         print(f"F: Failed to delete chroot snapshot {snap}.")
 #    else:
-#        print(f"Snapshot chroot {snap} deleted.") ### just when debugging
+#        print(f"Snapshot chroot {snap} deleted.") # REVIEW just when debugging
 
 #   Chroot into snapshot and optionally run command(s)
 def chroot(snap, cmd=""): # TODO change cmd to cmds - IMPORTANT for install_profile
     if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap}"):
         print(f"F: Cannot chroot as snapshot {snap} doesn't exist.")
     elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}"): # Make sure snapshot is not in use by another ash process
-        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.") ### REMOVE_ALL_THESE_LINES
+        print(f"F: Snapshot {snap} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {snap}'.") # REVIEW remove all these lines
     elif snap == 0:
         print("F: Changing base snapshot is not allowed.")
     else:
         prepare(snap)
-        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {' '.join(cmd)}") ### TODO if you chroot, then run 'dua' and exit, it makes excode non-zero!
+        excode = os.system(f"chroot /.snapshots/rootfs/snapshot-chr{snap} {' '.join(cmd)}") # TODO if you chroot, then run 'dua' and exit, it makes excode non-zero!
         if excode:
             chr_delete(snap)
             print("F: Chroot failed and changes discarded!")

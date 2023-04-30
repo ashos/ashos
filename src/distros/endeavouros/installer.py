@@ -26,7 +26,13 @@ def main():
     #   Pre bootstrap
     pre_bootstrap()
 
+    #   Mount-points for chrooting
+    ashos_mounts()
+
     #   2. Bootstrap and install packages in chroot
+    # If using EOS iso (# before: in section 3.)
+    os.system(f"cp -a /etc/pacman.d/{distro}-mirrorlist /mnt/etc/pacman.d/")
+    os.system("cp -a /etc/pacman.conf /mnt/etc/pacman.conf")
     if KERNEL not in ("-hardened", "-lts", "-zen"): # AUR required
         sp.call(f'{installer_dir}/src/distros/{distro}/aur/aurutils.sh', shell=True)
     while True:
@@ -40,11 +46,7 @@ def main():
         else: # success
             break
 
-    #   Mount-points for chrooting
-    ashos_mounts()
-    # If using EOS iso (# before: in section 3.)
-    os.system(f"sudo cp -a /etc/pacman.d/{distro}-mirrorlist /mnt/etc/pacman.d/")
-    os.system("sudo cp -a /etc/pacman.conf /mnt/etc/pacman.conf")
+    #   Go inside chroot
     cur_dir_code = chroot_in("/mnt")
 
     #   3. Package manager database and config files
@@ -62,7 +64,7 @@ def main():
     os.system("locale-gen")
     os.system("echo 'LANG=en_US.UTF-8' > /etc/locale.conf")
     os.system(f"ln -sf /usr/share/zoneinfo/{tz} /etc/localtime") # removed /mnt/XYZ from both paths (and from all lines above)
-    os.system("hwclock --systohc")
+    os.system("/sbin/hwclock --systohc")
 
     #   Post bootstrap
     post_bootstrap(super_group)
@@ -91,9 +93,9 @@ clear()
 print("Installation complete!")
 print("You can reboot now :)")
 
-def initram_update(): # REVIEW removed "{SUDO}" from all lines below
+def initram_update():
     if is_luks:
-        os.system("dd bs=512 count=4 if=/dev/random of=/etc/crypto_keyfile.bin iflag=fullblock") # removed /mnt/XYZ from output (and from lines below)
+        os.system("dd bs=512 count=4 if=/dev/random of=/etc/crypto_keyfile.bin iflag=fullblock")
         os.system("chmod 000 /etc/crypto_keyfile.bin") # Changed from 600 as even root doesn't need access
         os.system(f"cryptsetup luksAddKey {args[1]} /etc/crypto_keyfile.bin")
         os.system("sed -i -e '/^HOOKS/ s/filesystems/encrypt filesystems/' \
@@ -103,8 +105,8 @@ def initram_update(): # REVIEW removed "{SUDO}" from all lines below
     if is_luks or is_format_btrfs: # REVIEW mkinitcpio needed to run without these conditions too?
         os.system(f"mkinitcpio -p linux{KERNEL}")
 
-def strap(pkg):
-    sp.check_output(f"{SUDO} pacstrap /mnt --needed {pkg}", shell=True)
+def strap():
+    sp.check_output(f"pacstrap /mnt --needed {packages}", shell=True)
 
 main()
 

@@ -24,12 +24,15 @@ def main():
     #   Pre bootstrap
     pre_bootstrap()
 
+    #   Mount-points for chrooting
+    ashos_mounts()
+
     #   2. Bootstrap and install packages in chroot
     if KERNEL not in ("-hardened", "-lts", "-zen"): # AUR required
         sp.call(f'{installer_dir}/src/distros/{distro}/aur/aurutils.sh', shell=True)
     while True:
         try:
-            strap(packages)
+            strap()
         except sp.CalledProcessError as e:
             print(e)
             if not yes_no("F: Failed to strap package(s). Retry?"):
@@ -38,8 +41,7 @@ def main():
         else: # success
             break
 
-    #   Mount-points for chrooting
-    ashos_mounts()
+    #   Go inside chroot
     cur_dir_code = chroot_in("/mnt")
 
     #   3. Package manager database and config files
@@ -95,8 +97,8 @@ def initram_update(): # REVIEW removed "{SUDO}" from all lines below
     if is_luks or is_format_btrfs: # REVIEW mkinitcpio needed to run without these conditions too?
         os.system(f"mkinitcpio -p linux{KERNEL}")
 
-def strap(pkg):
-    sp.check_output(f"{SUDO} pacstrap /mnt --needed {pkg}", shell=True)
+def strap():
+    sp.check_call(f"pacstrap /mnt --needed {packages}", shell=True)
 
 main()
 

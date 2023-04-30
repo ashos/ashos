@@ -26,6 +26,9 @@ def main():
     #   Pre bootstrap
     pre_bootstrap()
 
+    #   Mount-points for chrooting
+    ashos_mounts()
+
     #   2. Bootstrap and install packages in chroot
     while True:
         try:
@@ -38,8 +41,7 @@ def main():
         else: # success
             break
 
-    #   Mount-points for chrooting
-    ashos_mounts()
+    #   Go inside chroot
     cur_dir_code = chroot_in("/mnt")
 
     #   3. Package manager database and config files
@@ -61,12 +63,12 @@ def main():
     #   4. Update hostname, hosts, locales and timezone, hosts
     os.system(f"echo {hostname} > /etc/hostname")
     os.system(f"echo 127.0.0.1 {hostname} {distro} >> /etc/hosts")
-    os.system(f"{find_command('localedef')} -v -c -i en_US -f UTF-8 en_US.UTF-8")
+    os.system(f"{find_command(['localedef'])} -v -c -i en_US -f UTF-8 en_US.UTF-8")
     #os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
     #os.system("sudo chroot /mnt sudo locale-gen")
     os.system("echo 'LANG=en_US.UTF-8' > /etc/locale.conf")
     os.system(f"ln -sf /usr/share/zoneinfo/{tz} /etc/localtime")
-    os.system(f"{find_command('hwclock')} --systohc")
+    os.system(f"{find_command(['hwclock'])} --systohc")
 
     #   Post bootstrap
     post_bootstrap(super_group)
@@ -81,7 +83,7 @@ def main():
     os.system('grep -qxF GRUB_ENABLE_BLSCFG="false" /etc/default/grub || \
             echo GRUB_ENABLE_BLSCFG="false" >> /etc/default/grub')
     if is_efi: # This needs to go before grub_ash otherwise map.txt entry would be empty
-        efibootmgr = find_command("efibootmgr")
+        efibootmgr = find_command(["efibootmgr"])
         os.system(f"{efibootmgr} -c -d {args[2]} -p 1 -L 'Fedora' -l '\\EFI\\fedora\\shim.efi'")
     grub_ash(v)
 
