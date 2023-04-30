@@ -28,6 +28,8 @@ configs() {
     #echo "alias p='curl -F "'"sprunge=<-"'" sprunge.us'" >> $HOME/.zshrc
     echo "alias p='curl -F "'"f:1=<-"'" ix.io'" >> $HOME/.zshrc
     echo "alias d='df -h | grep -v sda'" >> $HOME/.zshrc
+    echo "bind '"\e[A": history-search-backward'" >> $HOME/.zshrc
+    echo "bind '"\e[B": history-search-forward'" >> $HOME/.zshrc
     echo "setw -g mode-keys vi" >> $HOME/.tmux.conf
     echo "set -g history-limit 999999" >> $HOME/.tmux.conf
 }

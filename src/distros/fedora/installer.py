@@ -22,10 +22,6 @@ def main():
     #   Pre bootstrap
     pre_bootstrap()
 
-    # Mount-points for chrooting
-    ashos_mounts()
-    cur_dir_code = chroot_in("/mnt")
-
     #   2. Bootstrap and install packages in chroot
     while True:
         try:
@@ -37,6 +33,10 @@ def main():
                 sys.exit("F: Install failed!")
         else: # success
             break
+
+    # Mount-points for chrooting
+    ashos_mounts()
+    cur_dir_code = chroot_in("/mnt")
 
     #   3. Package manager database and config files
     os.system('echo "kernel.printk=4" >> /etc/sysctl.d/10-kernel-printk.conf') # https://github.com/coreos/fedora-coreos-tracker/issues/220
@@ -106,7 +106,7 @@ def initram_update():
         #os.system(f"mkinitcpio -p linux{KERNEL}") # TODO
 
 def strap(pkg, ARCH, RELEASE):
-    sp.check_output(f"dnf -c {installer_dir}/src/distros/fedora/base.repo --installroot=/mnt install -y {pkg} --releasever={RELEASE} --forcearch={ARCH}", shell=True)
+    sp.check_call(f"dnf -c {installer_dir}/src/distros/fedora/base.repo --installroot=/mnt install -y {pkg} --releasever={RELEASE} --forcearch={ARCH}", shell=True)
 
 main()
 

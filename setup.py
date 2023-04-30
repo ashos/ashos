@@ -7,7 +7,7 @@ from src import detect_os
 
 installer_dir = os.path.dirname(os.path.abspath(__file__))
 is_efi = os.path.exists("/sys/firmware/efi")
-use_other_iso = "" # if using different iso to install target OS, use its id
+use_other_iso = "" # e.g. "arch" if using Arch iso to install different OS like Fedora
 
 try:
     if is_efi:
@@ -24,14 +24,14 @@ except IndexError:
 
 if distro:
     if use_other_iso != "":
-        use_distro = use_other_iso
+        distro_for_prep = use_other_iso
     else:
-        use_distro = distro
+        distro_for_prep = distro
 #    try: # CAUTION: comment lines 30-37 & unindent line 38 if prepared manually
 #        if is_efi:
-#            sp.check_output([f'./src/prep/{use_distro}_live.sh', f'{args[1]}', f'{args[2]}', f'{args[3]}'])
+#            sp.check_output([f'./src/prep/{distro_for_prep}_live.sh', f'{args[1]}', f'{args[2]}', f'{args[3]}'])
 #        else:
-#            sp.check_output([f'./src/prep/{use_distro}_live.sh', f'{args[1]}', f'{args[2]}'])
+#            sp.check_output([f'./src/prep/{distro_for_prep}_live.sh', f'{args[1]}', f'{args[2]}'])
 #    except sp.CalledProcessError as e:
 #        print(f"F: There was an error in prep steps! {e.output.decode('utf-8')}")
 #    else:
