@@ -351,39 +351,39 @@ def post_bootstrap(super_group): # REVIEW removed "{SUDO}" from all lines below
     os.system(f"sed -i 's|^PRETTY_NAME=.*$|PRETTY_NAME=\"{distro_name}\"|' /etc/os-release")
 
 #   Common steps before bootstrapping
-def pre_bootstrap():
+def pre_bootstrap(): # REVIEW removed {SUDO} from all lines below
   # Prep (format partition, etc.)
     if is_luks and choice != "2":
-        os.system(f"{SUDO} modprobe dm-crypt")
+        os.system("modprobe dm-crypt")
         print("--- Create LUKS partition --- ")
-        os.system(f"{SUDO} cryptsetup -y -v -c aes-xts-plain64 -s 512 --hash sha512 --pbkdf pbkdf2 --type luks2 luksFormat {args[1]}")
+        os.system(f"cryptsetup -y -v -c aes-xts-plain64 -s 512 --hash sha512 --pbkdf pbkdf2 --type luks2 luksFormat {args[1]}")
         print("--- Open LUKS partition --- ")
-        os.system(f"{SUDO} cryptsetup --allow-discards --persistent --type luks2 open {args[1]} luks_root")
+        os.system(f"cryptsetup --allow-discards --persistent --type luks2 open {args[1]} luks_root")
   # Mount and create necessary sub-volumes and directories
     if is_format_btrfs:
         if not os.path.exists("/dev/btrfs-control"): # recommended for Alpine (optional)
-            os.system(f"{SUDO} btrfs rescue create-control-device")
+            os.system("btrfs rescue create-control-device")
         if choice == "1":
-            os.system(f"{SUDO} mkfs.btrfs -L LINUX -f {os_root}")
-            os.system(f"{SUDO} mount -t btrfs {os_root} /mnt")
+            os.system(f"mkfs.btrfs -L LINUX -f {os_root}")
+            os.system(f"mount -t btrfs {os_root} /mnt")
         elif choice == "2":
-            os.system(f"{SUDO} mount -o subvolid=5 {os_root} /mnt")
+            os.system(f"mount -o subvolid=5 {os_root} /mnt")
         for btrdir in btrdirs: # common entries
-            os.system(f"{SUDO} btrfs sub create /mnt/{btrdir}")
+            os.system(f"btrfs sub create /mnt/{btrdir}")
         if is_boot_external:
-            os.system(f"{SUDO} btrfs sub create /mnt/@boot{distro_suffix}")
+            os.system(f"btrfs sub create /mnt/@boot{distro_suffix}")
         if is_home_external:
-            os.system(f"{SUDO} btrfs sub create /mnt/@home{distro_suffix}")
-        os.system(f"{SUDO} umount /mnt")
+            os.system(f"btrfs sub create /mnt/@home{distro_suffix}")
+        os.system("umount /mnt")
         for mntdir in mntdirs: # common entries
-            os.system(f"{SUDO} mkdir -p /mnt/{mntdir}") # -p to ignore /mnt exists complaint
-            os.system(f"{SUDO} mount {os_root} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
+            os.system(f"mkdir -p /mnt/{mntdir}") # -p to ignore /mnt exists complaint
+            os.system(f"mount {os_root} -o subvol={btrdirs[mntdirs.index(mntdir)]},compress=zstd,noatime /mnt/{mntdir}")
     if is_boot_external:
-        os.system(f"{SUDO} mkdir /mnt/boot")
-        os.system(f"{SUDO} mount -m {bp} -o compress=zstd,noatime /mnt/boot")
+        os.system("mkdir /mnt/boot")
+        os.system(f"mount -m {bp} -o compress=zstd,noatime /mnt/boot")
     if is_home_external:
-        os.system(f"{SUDO} mkdir /mnt/home")
-        os.system(f"{SUDO} mount -m {hp} -o compress=zstd,noatime /mnt/home")
+        os.system("mkdir /mnt/home")
+        os.system(f"mount -m {hp} -o compress=zstd,noatime /mnt/home")
     for i in ("tmp", "root"):
         os.system(f"mkdir -p /mnt/{i}")
     for i in ("ash", "boot", "etc", "root", "rootfs", "tmp"): # REVIEW "var" missing here?
@@ -392,17 +392,20 @@ def pre_bootstrap():
         os.system(f"mkdir -p /mnt/.snapshots/ash/{i}")
     if is_ash_bundle and not is_efi:
         os.system(f"mkdir -p /mnt/.snapshots/ash/bundle") # REVIEW /mnt/boot/bundle better?
-    os.system(f"{SUDO} mkdir -p /mnt/usr/share/ash/db") # REVIEW was in step "Database and config files" before (better to create after bootstrap for aesthetics)
+    os.system("mkdir -p /mnt/usr/share/ash/db") # REVIEW was in step "Database and config files" before (better to create after bootstrap for aesthetics)
     if is_efi:
-        os.system(f"{SUDO} mkdir -p /mnt/boot/efi")
-        os.system(f"{SUDO} mount {args[3]} /mnt/boot/efi")
+        os.system("mkdir -p /mnt/boot/efi")
+        os.system(f"mount {args[3]} /mnt/boot/efi")
   # files operations (part 1) - copy to chroot, as still accessible (inside host)
+    if not os.path.exists("/mnt/etc/profile.d"):
+        os.mkdir("/mnt/etc/profile.d")
+    os.system(f"cp -a {installer_dir}/src/prep/env_path.sh /mnt/etc/profile.d/ashos.sh") # REVIEW
     if is_luks:
-        os.system(f"{SUDO} cp -a {installer_dir}/src/prep/grub_luks2.conf /mnt/tmp/")
+        os.system(f"cp -a {installer_dir}/src/prep/grub_luks2.conf /mnt/tmp/")
     if not is_ash_bundle: # else: post function will handle
-        os.system(f"{SUDO} cat {installer_dir}/src/ashpk_core.py {installer_dir}/src/distros/{distro}/ashpk.py > /mnt/.snapshots/ash/ash")
-        os.system(f"{SUDO} cp -a {installer_dir}/src/detect_os.py /mnt/.snapshots/ash/")
-        os.system("chmod +x /.snapshots/ash/ash")
+        os.system(f"cat {installer_dir}/src/ashpk_core.py {installer_dir}/src/distros/{distro}/ashpk.py > /mnt/.snapshots/ash/ash")
+        os.system("chmod +x /mnt/.snapshots/ash/ash")
+        os.system(f"cp -a {installer_dir}/src/detect_os.py /mnt/.snapshots/ash/")
 
 #   Pythonic rm -rf (for both deleting just contents and everything)
 def rmrf(a_path, contents=""): # REVIEW remove later
@@ -452,6 +455,21 @@ def unmounts(install=""): # REVIEW at least for Arch, {SUDO} is not needed
 #   Find a command stubbornly
 def find_command(cmd):
     return which(cmd) or which(f"/sbin/{cmd}") or which("/usr/sbin/{cmd}")
+    #a = which(cmd)
+    #b = which(f"/sbin/{cmd}")
+    #c = which(f"/usr/sbin/{cmd}")
+    #if a:
+    #    r = a
+    #elif b:
+    #    r = b
+    #    os.symlink(f"/sbin/{cmd}", f"/bin/{cmd}")
+    #    #add_to_path(os.path.basename(b)) # add /sbin to path
+    #elif c:
+    #    r = c
+    #    #add_to_path(os.path.basename(b)) # add /usr/sbin to path
+    #else:
+    #    sys.exit(f"F: Command {cmd} not found!")
+    #return r
 
 #   Generic yes no prompt
 def yes_no(msg):
@@ -472,7 +490,7 @@ def yes_no(msg):
 
 # ---------------------------------------------------------------------------- #
 
-print("Welcome to the AshOS installer!\n")
+print(f"Welcome to the AshOS installer for {distro_name}!\n")
 with open(f'{installer_dir}/res/logos/logo.txt', 'r') as f:
     print(f.read())
 

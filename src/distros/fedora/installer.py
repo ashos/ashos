@@ -38,7 +38,7 @@ def main():
         else: # success
             break
 
-    # Mount-points for chrooting
+    #   Mount-points for chrooting
     ashos_mounts()
     cur_dir_code = chroot_in("/mnt")
 
@@ -61,12 +61,12 @@ def main():
     #   4. Update hostname, hosts, locales and timezone, hosts
     os.system(f"echo {hostname} > /etc/hostname")
     os.system(f"echo 127.0.0.1 {hostname} {distro} >> /etc/hosts")
-    os.system("localedef -v -c -i en_US -f UTF-8 en_US.UTF-8")
+    os.system(f"{find_command('localedef')} -v -c -i en_US -f UTF-8 en_US.UTF-8")
     #os.system("sudo sed -i 's|^#en_US.UTF-8|en_US.UTF-8|g' /mnt/etc/locale.gen")
     #os.system("sudo chroot /mnt sudo locale-gen")
     os.system("echo 'LANG=en_US.UTF-8' > /etc/locale.conf")
     os.system(f"ln -sf /usr/share/zoneinfo/{tz} /etc/localtime")
-    os.system("/sbin/hwclock --systohc")
+    os.system(f"{find_command('hwclock')} --systohc")
 
     #   Post bootstrap
     post_bootstrap(super_group)
