@@ -1,3 +1,5 @@
+from src.ashpk_core import *
+
 # ---------------------------- SPECIFIC FUNCTIONS ---------------------------- #
 
 #   Check if AUR is setup right
@@ -147,15 +149,15 @@ def fix_package_db(snap = 0):
 #   Delete init system files (Systemd, OpenRC, etc.)
 def init_system_clean(snap, FROM):
     if FROM == "prepare":
-        rmrf(f"/.snapshots/rootfs/snapshot-chr{snap}/var/lib/systemd", "/*")
+        rmrf_star(f"/.snapshots/rootfs/snapshot-chr{snap}/var/lib/systemd")
     elif FROM == "deploy":
-        rmrf("/var/lib/systemd", "/*")
-        rmrf(f"/.snapshots/rootfs/snapshot-{snap}/var/lib/systemd/", "/*")
+        rmrf_star("/var/lib/systemd")
+        rmrf_star(f"/.snapshots/rootfs/snapshot-{snap}/var/lib/systemd")
 
 #   Copy init system files (Systemd, OpenRC, etc.) to shared
 def init_system_copy(snap, FROM):
     if FROM == "post_transactions":
-        rmrf("/var/lib/systemd", "/*")
+        rmrf_star("/var/lib/systemd")
         os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{snap}/var/lib/systemd/. /var/lib/systemd/{DEBUG}")
 
 #   Install atomic-operation

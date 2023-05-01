@@ -5,10 +5,10 @@ import stat
 import socket
 import subprocess as sp
 import sys
+from glob import glob
 from re import search
 from setup import args, installer_dir, distro, distro_name
 from shutil import copy, which, rmtree # REVIEW remove rmtree later
-#from src.ashpk_core import chroot_in, chroot_out, rmrf # TODO Error as it reads whole file
 from tempfile import TemporaryDirectory
 from urllib.error import URLError, HTTPError
 from urllib.request import urlopen
@@ -34,7 +34,7 @@ def bundler():
         open(f"{tmpdir}/python.com", "wb").write(csmp_file)
         open(f"{tmpdir}/.args", "w").write("/zip/ash\n...")
         os.system(f"cat {installer_dir}/src/ashpk_core.py {installer_dir}/src/distros/{distro}/ashpk.py > {tmpdir}/ash")
-        os.system(f"zip {tmpdir}/python.com {tmpdir}/ash {tmpdir}/.args")
+        os.system(f"zip -j {tmpdir}/python.com {tmpdir}/ash {tmpdir}/.args")
       # Make it executable
         mode = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
         os.chmod(f"{tmpdir}/python.com", mode)
@@ -94,7 +94,7 @@ def bundler_advanced():
             print(f"F: Failed to bundle ash.")
         else:
             os.system(f"cat {installer_dir}/src/ashpk_core.py {installer_dir}/src/distros/{distro}/ashpk.py > {tmpdir}/ash")
-            os.system(f"zip -ur {tmpdir}/python.com {tmpdir}/.python {tmpdir}/ash {tmpdir}/.args")
+            os.system(f"cd {tmpdir} && zip -ur python.com .python ash .args")
           # Make it executable
             mode = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
             os.chmod(f"{tmpdir}/python.com", mode)
@@ -160,8 +160,8 @@ def deploy_base_snapshot(): # REVIEW removed "{SUDO}" from all lines below
     os.system(f"{btrfs} sub set-default /.snapshots/rootfs/snapshot-deploy")
     os.system("cp -r /root/. /.snapshots/root/")
     os.system("cp -r /tmp/. /.snapshots/tmp/")
-    rmrf("/root", "/*")
-    rmrf("/tmp", "/*")
+    rmrf_star("/root")
+    rmrf_star("/tmp")
 
 # deploy_to_common_in_chroot()
 #   Copy boot and etc: deployed snapshot <---> common
@@ -433,19 +433,18 @@ def pre_bootstrap(): # REVIEW removed {SUDO} from all lines below
         os.system("chmod +x /mnt/.snapshots/ash/ash")
         os.system(f"cp -a {installer_dir}/src/detect_os.py /mnt/.snapshots/ash/")
 
-#   Pythonic rm -rf (for both deleting just contents and everything)
-def rmrf(a_path, contents=""): # REVIEW remove later
-    if contents == "/*": # just delete a_path/*
-        for root, dirs, files in os.walk(a_path):
-            for f in files:
-                os.unlink(os.path.join(root, f))
-            for d in dirs:
-                rmtree(os.path.join(root, d))
-    else: # delete everything
-        if os.path.isfile(a_path):
-            os.unlink(a_path)
-        elif os.path.isdir(a_path):
-            rmtree(a_path)
+#   rm -rf for deleting everything recursively (even top folder)
+def rmrf(*item):
+    for f in item:
+        if os.path.isdir(f):
+            rmtree(f)
+        else:
+            os.unlink(f)
+
+#   rm -rf for just deleting contents
+def rmrf_star(a_path):
+    files = glob(f"{a_path}/*")
+    rmrf(*files)
 
 def set_password(u, s="sudo"): # REVIEW Use super_group?
     clear()

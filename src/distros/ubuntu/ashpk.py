@@ -1,3 +1,5 @@
+from src.ashpk_core import *
+
 # ---------------------------- SPECIFIC FUNCTIONS ---------------------------- #
 
 #   Noninteractive update
@@ -25,15 +27,15 @@ def fix_package_db(snapshot = "0"):
 #   Delete init system files (Systemd, OpenRC, etc.)
 def init_system_clean(snapshot, FROM):
     if FROM == "prepare":
-        os.system(f"rm -rf /.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/systemd/*{DEBUG}")
+        rmrf_star(f"/.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/systemd")
     elif FROM == "deploy":
-        os.system(f"rm -rf /var/lib/systemd/*{DEBUG}")
-        os.system(f"rm -rf /.snapshots/rootfs/snapshot-{snapshot}/var/lib/systemd/*{DEBUG}")
+        rmrf_star(f"/var/lib/systemd")
+        rmrf_star(f"/.snapshots/rootfs/snapshot-{snapshot}/var/lib/systemd")
 
 #   Copy init system files (Systemd, OpenRC, etc.) to shared
 def init_system_copy(snapshot, FROM):
     if FROM == "post_transactions":
-        os.system(f"rm -rf /var/lib/systemd/*{DEBUG}")
+        rmrf_star(f"/var/lib/systemd")
         os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{snapshot}/var/lib/systemd/. /var/lib/systemd/{DEBUG}")
 
 #   Install atomic-operation

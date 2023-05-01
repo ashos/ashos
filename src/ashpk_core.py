@@ -12,11 +12,16 @@ from argparse import ArgumentParser
 from ast import literal_eval
 from configparser import ConfigParser, NoOptionError, NoSectionError
 from filecmp import cmp
+from glob import glob
 from re import sub
 from shutil import copy, rmtree
 from tempfile import TemporaryDirectory
 from urllib.error import URLError, HTTPError
 from urllib.request import urlopen
+try:
+    from src.distros._empty import *
+except ImportError:
+    pass # ignore
 
 # Directories
 # All snapshots share one /var
@@ -60,25 +65,25 @@ def ash_mounts(i, CHR=""):
     os.system(f"mount --bind --make-slave /etc /.snapshots/rootfs/snapshot-{CHR}{i}/etc{DEBUG}")
     os.system(f"mount --bind --make-slave /home /.snapshots/rootfs/snapshot-{CHR}{i}/home{DEBUG}")
     os.system(f"mount --types proc /proc /.snapshots/rootfs/snapshot-{CHR}{i}/proc{DEBUG}")
-    #os.system(f"mount --rbind --make-rslave /proc /.snapshots/rootfs/snapshot-{CHR}{i}/proc{DEBUG}") ### REVIEW 2023 USE THIS INSTEAD?
-    #os.system(f"mount --bind --make-slave /root /.snapshots/rootfs/snapshot-{CHR}{i}/root{DEBUG}") ### REVIEW 2023 ADD THIS TOO?
+    #os.system(f"mount --rbind --make-rslave /proc /.snapshots/rootfs/snapshot-{CHR}{i}/proc{DEBUG}") # REVIEW use this instead?
+    #os.system(f"mount --bind --make-slave /root /.snapshots/rootfs/snapshot-{CHR}{i}/root{DEBUG}") # REVIEW add this too?
     os.system(f"mount --bind --make-slave /run /.snapshots/rootfs/snapshot-{CHR}{i}/run{DEBUG}")
-    #os.system(f"mount --rbind --make-rslave /run /.snapshots/rootfs/snapshot-chr{i}/run{DEBUG}") ### REVIEW 2023 USE THIS INSTEAD?
+    #os.system(f"mount --rbind --make-rslave /run /.snapshots/rootfs/snapshot-chr{i}/run{DEBUG}") # REVIEW use this instead?
     os.system(f"mount --rbind --make-rslave /sys /.snapshots/rootfs/snapshot-{CHR}{i}/sys{DEBUG}")
     os.system(f"mount --bind --make-slave /tmp /.snapshots/rootfs/snapshot-{CHR}{i}/tmp{DEBUG}")
-    #os.system(f"mount --rbind --make-rslave /tmp /.snapshots/rootfs/snapshot-{CHR}{i}/tmp{DEBUG}") ### REVIEW 2023 USE THIS INSTEAD?
+    #os.system(f"mount --rbind --make-rslave /tmp /.snapshots/rootfs/snapshot-{CHR}{i}/tmp{DEBUG}") # REVIEW use this instead?
     os.system(f"mount --bind --make-slave /var /.snapshots/rootfs/snapshot-{CHR}{i}/var{DEBUG}")
     if is_efi():
         os.system(f"mount --rbind --make-rslave /sys/firmware/efi/efivars /.snapshots/rootfs/snapshot-{CHR}{i}/sys/firmware/efi/efivars{DEBUG}")
-    os.system(f"cp --dereference /etc/resolv.conf /.snapshots/rootfs/snapshot-{CHR}{i}/etc/{DEBUG}") ### REVIEW Maybe not needed?
+    os.system(f"cp --dereference /etc/resolv.conf /.snapshots/rootfs/snapshot-{CHR}{i}/etc/{DEBUG}") # REVIEW maybe not needed?
 
-###   Lock ash (no longer needed) REVIEW 2023
-###def ash_lock():
-###    os.system("touch /.snapshots/ash/lock-disable")
+#   Lock ash # REVIEW no longer needed
+#def ash_lock():
+#    os.system("touch /.snapshots/ash/lock-disable")
 
-###   Unlock ash (no longer needed) REVIEW 2023
-###def ash_unlock():
-###    os.system("rm -rf /.snapshots/ash/lock")
+#   Unlock ash # REVIEW no longer needed
+#def ash_unlock():
+#    os.system("rm -rf /.snapshots/ash/lock")
 
 #   Update ash itself
 def ash_update(dbg):
@@ -358,7 +363,6 @@ def deploy(snap, secondary=False):
 ###2023        os.system(f"btrfs sub create /.snapshots/var/var-{tmp} >/dev/null 2>&1") # REVIEW pretty sure not needed
         os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/boot{DEBUG}")
         os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
-        ###TODEL os.system(f"rm -rf /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}")
         rmrf(f"/.snapshots/rootfs/snapshot-{tmp}/var")
         os.system(f"cp -r --reflink=auto /.snapshots/boot/boot-{snap}/. /.snapshots/rootfs/snapshot-{tmp}/boot{DEBUG}")
         os.system(f"cp -r --reflink=auto /.snapshots/etc/etc-{snap}/. /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
@@ -713,9 +717,9 @@ def post_transactions(snap):
   # Some operations were moved below to fix hollow functionality ### IMPORTANT REVIEW 2023
   # File operations in snapshot-chr
 #    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snap}{DEBUG}") ### REVIEW # Moved to a few lines below ### GOOD_TO_DELETE_2023
-    rmrf(f"/.snapshots/boot/boot-chr{snap}", "/*")
+    rmrf_star(f"/.snapshots/boot/boot-chr{snap}")
     os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snap}/boot/. /.snapshots/boot/boot-chr{snap}{DEBUG}")
-    rmrf(f"/.snapshots/etc/etc-chr{snap}", "/*")
+    rmrf_star(f"/.snapshots/etc/etc-chr{snap}")
     os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snap}/etc/. /.snapshots/etc/etc-chr{snap}{DEBUG}")
   # Keep package manager's cache after installing packages. This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
     cache_copy(snap, "post_transactions")
@@ -899,19 +903,18 @@ def return_children(tree, id):
         children.remove(id)
     return children
 
-#   Pythonic rm -rf (for both deleting just contents and everything)
-def rmrf(a_path, contents=""):
-    if contents == "/*": # just delete a_path/*
-        for root, dirs, files in os.walk(a_path):
-            for f in files:
-                os.unlink(os.path.join(root, f))
-            for d in dirs:
-                rmtree(os.path.join(root, d))
-    else: # delete everything
-        if os.path.isfile(a_path):
-            os.unlink(a_path)
-        elif os.path.isdir(a_path):
-            rmtree(a_path)
+#   rm -rf for deleting everything recursively (even top folder)
+def rmrf(*item):
+    for f in item:
+        if os.path.isdir(f):
+            rmtree(f)
+        else:
+            os.unlink(f)
+
+#   rm -rf for just deleting contents
+def rmrf_star(a_path):
+    files = glob(f"{a_path}/*")
+    rmrf(*files)
 
 #   Rollback last booted deployment
 def rollback():
@@ -1171,24 +1174,24 @@ def tree_sync(tree, tname, force_offline, live):
                 tree_sync_helper("chr", snap_from, snap_to) # Pre-sync
                 if live and snap_to == get_current_snapshot(): # Live sync
                     tree_sync_helper("", snap_from, get_tmp()) # Post-sync
-                post_transactions(snap_to) ### IMPORTANT REVIEW 2023 - Moved here from the line immediately after first tree_sync_helper
+                post_transactions(snap_to) # REVIEW important - Moved here from the line immediately after first tree_sync_helper
         print(f"Tree {tname} synced.")
 
-#   Sync tree helper function ### REVIEW might need to put it in distribution-specific ashpk.py
+#   Sync tree helper function # REVIEW might need to put it in distribution-specific ashpk.py
 def tree_sync_helper(CHR, s_f, s_t):
     os.system("mkdir -p /.snapshots/tmp-db/local/") ### REVIEW Still resembling Arch pacman folder structure!
-    rmrf("/.snapshots/tmp-db/local", "/*") ### REVIEW
+    rmrf_star("/.snapshots/tmp-db/local")
     pkg_list_from = pkg_list(s_f, "")
     pkg_list_to = pkg_list(s_t, CHR)
   # Get packages to be inherited
     pkg_list_from = [j for j in pkg_list_from if j not in pkg_list_to]
     os.system(f"cp -r /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/. /.snapshots/tmp-db/local/") ### REVIEW
     os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-{s_f}/. /.snapshots/rootfs/snapshot-{CHR}{s_t}/{DEBUG}")
-    rmrf(f"/.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local", "/*") ### REVIEW
+    rmrf_star(f"/.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local")
     os.system(f"cp -r /.snapshots/tmp-db/local/. /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/") ### REVIEW
     for entry in pkg_list_from:
         os.system(f"bash -c 'cp -r /.snapshots/rootfs/snapshot-{s_f}/usr/share/ash/db/local/{entry}-[0-9]* /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/'") ### REVIEW
-    rmrf("/.snapshots/tmp-db/local", "/*")
+    rmrf_star("/.snapshots/tmp-db/local")
 
 #   Recursively run an update in tree
 def tree_upgrade(tree, tname):

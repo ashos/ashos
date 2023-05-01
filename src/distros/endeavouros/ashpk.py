@@ -1,3 +1,5 @@
+from src.ashpk_core import *
+
 # ---------------------------- SPECIFIC FUNCTIONS ---------------------------- #
 
 #   Check if AUR is setup right
@@ -205,7 +207,7 @@ def install_package_live(snapshot, tmp, pkg):
     else:
         #ash_mounts(tmp) ### REVIEW If issues to have this in ashpk_core.py, uncomment this
         excode = os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite '*' --noconfirm {pkg}{DEBUG}") ### ERROR Sep 28, 2018 GPGME invalid crypto engine!!! ### REVIEW Maybe just do this in try section and remove else section!
-    return excode
+    return excode # type: ignore
 
 #   Get list of packages installed in a snapshot
 def pkg_list(CHR, snap):
@@ -222,7 +224,7 @@ def snapshot_diff(snap1, snap2):
     elif not os.path.exists(f"/.snapshots/rootfs/snapshot-{snap2}"):
         print(f"Snapshot {snap2} not found.")
     else:
-        os.system(f"bash -c \"diff <(ls /.snapshots/rootfs/snapshot-{snap1}/usr/share/ash/db/local) <(ls /.snapshots/rootfs/snapshot-{snap2}/usr/share/ash/db/local) | grep '^>\|^<' | sort\"")
+        os.system(f"bash -c \"diff <(ls /.snapshots/rootfs/snapshot-{snap1}/usr/share/ash/db/local) <(ls /.snapshots/rootfs/snapshot-{snap2}/usr/share/ash/db/local) | grep '^>\\|^<' | sort\"") # before: '^>\|^<'
 
 #   Uninstall package(s) atomic-operation
 def uninstall_package_helper(snapshot, pkg):
