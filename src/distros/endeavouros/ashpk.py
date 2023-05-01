@@ -1,4 +1,7 @@
-from src.ashpk_core import *
+try:
+    from src.ashpk_core import *
+except ImportError:
+    pass # ignore
 
 # ---------------------------- SPECIFIC FUNCTIONS ---------------------------- #
 

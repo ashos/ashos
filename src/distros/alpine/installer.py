@@ -90,8 +90,8 @@ def main():
     os.system(f"/usr/sbin/adduser {username} plugdev")
 
     rc_update = find_command(["rc-update"])
-    tuples = ["devfs sysinit", "dmesg sysinit", "mdev sysinit", "hwdrivers sysinit", "cgroups sysinit", 
-              "hwclock boot", "modules boot", "sysctl boot", "hostname boot", "bootmisc boot", "syslog boot", "swap boot", "networking boot", "seedrng boot", 
+    tuples = ["devfs sysinit", "dmesg sysinit", "mdev sysinit", "hwdrivers sysinit", "cgroups sysinit",
+              "hwclock boot", "modules boot", "sysctl boot", "hostname boot", "bootmisc boot", "syslog boot", "swap boot", "networking boot", "seedrng boot",
               "mount-ro shutdown", "killprocs shutdown", "savecache shutdown"]
     for i in tuples:
         os.system(f"{rc_update} add {i}")

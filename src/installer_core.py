@@ -434,7 +434,15 @@ def pre_bootstrap(): # REVIEW removed {SUDO} from all lines below
         os.system(f"cp -a {installer_dir}/src/detect_os.py /mnt/.snapshots/ash/")
 
 #   rm -rf for deleting everything recursively (even top folder)
-def rmrf(*item):
+def rmrf(a_path):
+    os.system(f"rm -rf {a_path}")
+
+#   rm -rf for just deleting contents
+def rmrf_star(a_path):
+    os.system(f"rm -rf {a_path}/*")
+
+#   rm -rf for deleting everything recursively (even top folder)
+def rmrf_ERRORS(*item): # TODO
     for f in item:
         if os.path.isdir(f):
             rmtree(f)
@@ -442,7 +450,7 @@ def rmrf(*item):
             os.unlink(f)
 
 #   rm -rf for just deleting contents
-def rmrf_star(a_path):
+def rmrf_star_ERROR(a_path): # TODO
     files = glob(f"{a_path}/*")
     rmrf(*files)
 
