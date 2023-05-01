@@ -1,3 +1,8 @@
+try:
+    from src.ashpk_core import *
+except ImportError:
+    pass # ignore
+
 # ---------------------------- SPECIFIC FUNCTIONS ---------------------------- #
 
 #   Noninteractive update
@@ -25,15 +30,15 @@ def fix_package_db(snapshot = "0"):
 #   Delete init system files (Systemd, OpenRC, etc.)
 def init_system_clean(snapshot, FROM):
     if FROM == "prepare":
-        os.system(f"rm -rf /.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/systemd/*{DEBUG}")
+        rmrf_star(f"/.snapshots/rootfs/snapshot-chr{snapshot}/var/lib/systemd")
     elif FROM == "deploy":
-        os.system(f"rm -rf /var/lib/systemd/*{DEBUG}")
-        os.system(f"rm -rf /.snapshots/rootfs/snapshot-{snapshot}/var/lib/systemd/*{DEBUG}")
+        rmrf_star(f"/var/lib/systemd")
+        rmrf_star(f"/.snapshots/rootfs/snapshot-{snapshot}/var/lib/systemd")
 
 #   Copy init system files (Systemd, OpenRC, etc.) to shared
 def init_system_copy(snapshot, FROM):
     if FROM == "post_transactions":
-        os.system(f"rm -rf /var/lib/systemd/*{DEBUG}")
+        rmrf_star(f"/var/lib/systemd")
         os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{snapshot}/var/lib/systemd/. /var/lib/systemd/{DEBUG}")
 
 #   Install atomic-operation
@@ -44,12 +49,12 @@ def install_package(snapshot, pkg):
 #   Install atomic-operation in live snapshot
 def install_package_live(snapshot, tmp, pkg):
     #options = snapshot_config_get(tmp)
-    #ash_chroot_mounts(tmp) ### REVIEW If issues to have this in ashpk_core.py, uncomment this
+    #ash_mounts(tmp) ### REVIEW If issues to have this in ashpk_core.py, uncomment this
     return os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} apt-get install -y {pkg}{DEBUG}") ### apt-get --reinstall install TODO: --overwrite '*'
 
 #   Get list of packages installed in a snapshot
 def pkg_list(CHR, snap):
-    return subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} dpkg -l | grep '^.i' | awk '{{print $2}}'", encoding='utf-8', shell=True).strip().split("\n")
+    return sp.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} dpkg -l | grep '^.i' | awk '{{print $2}}'", encoding='utf-8', shell=True).strip().split("\n")
 
 #   Refresh snapshot atomic-operation
 def refresh_helper(snapshot):

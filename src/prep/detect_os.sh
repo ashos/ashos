@@ -35,7 +35,7 @@ case $1 in
 esac
 
 #if [ -z "${temp}" ]; then
-#    echo "Your operating system/distro could not be detected" >/dev/null 2>&1
+#    echo "F: Your operating system/distro could not be detected!" >/dev/null 2>&1
 #    break
 #fi
 

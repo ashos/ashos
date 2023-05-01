@@ -1,3 +1,8 @@
+try:
+    from src.ashpk_core import *
+except ImportError:
+    pass # ignore
+
 # ---------------------------- SPECIFIC FUNCTIONS ---------------------------- #
 
 #   Noninteractive update
@@ -44,12 +49,12 @@ def install_package(snapshot, pkg):
 #   Install atomic-operation in live snapshot
 def install_package_live(snapshot, tmp, pkg):
     #options = snapshot_config_get(tmp)
-    #ash_chroot_mounts(tmp) ### REVIEW If issues to have this in ashpk_core.py, uncomment this
+    #ash_mounts(tmp) ### REVIEW If issues to have this in ashpk_core.py, uncomment this
     return os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} sudo dnf -y reinstall {pkg}{DEBUG}") ### TODO: --overwrite '*'
 
 #   Get list of packages installed in a snapshot
 def pkg_list(CHR, snap):
-    return subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} sudo dnf list installed", encoding='utf-8', shell=True).strip().split("\n")
+    return sp.check_output(f"chroot /.snapshots/rootfs/snapshot-{CHR}{snap} sudo dnf list installed", encoding='utf-8', shell=True).strip().split("\n")
 
 #   Refresh snapshot atomic-operation
 def refresh_helper(snapshot):

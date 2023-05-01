@@ -8,7 +8,7 @@
 
 # AshOS (Any Snapshot Hierarchical OS)
 ### An immutable tree-shaped meta-distribution using snapshots
-###### (for mere mortals!)
+###### (No, this is not yet another skin/themed "distro"!)
 
 ---
 

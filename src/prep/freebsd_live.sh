@@ -3,7 +3,7 @@
 main() {
     if [ -z "$HOME" ]; then HOME=~ ; fi
     network="em0"
-    prep_packages=(dialog git)
+    prep_packages=(dialog git zip unzip tar)
 
     su
 
@@ -28,12 +28,12 @@ main() {
 # Configurations
 configs() {
     setfont ter-132n # /usr/share/kbd/consolefonts/ter-120n.psf.gz
-    echo "export LC_ALL=C LC_CTYPE=C LANGUAGE=C" | tee -a $HOME/.zshrc
-    #echo "alias p='curl -F "'"sprunge=<-"'" sprunge.us'" | tee -a $HOME/.zshrc
-    echo "alias p='curl -F "'"f:1=<-"'" ix.io'" | tee -a $HOME/.zshrc
-    echo "alias d='df -h | grep -v sda'" | tee -a $HOME/.zshrc
-    echo "setw -g mode-keys vi" | tee -a $HOME/.tmux.conf
-    echo "set -g history-limit 999999" | tee -a $HOME/.tmux.conf
+    echo "export LC_ALL=C LC_CTYPE=C LANGUAGE=C" >> $HOME/.zshrc
+    #echo "alias p='curl -F "'"sprunge=<-"'" sprunge.us'" >> $HOME/.zshrc
+    echo "alias p='curl -F "'"f:1=<-"'" ix.io'" >> $HOME/.zshrc
+    echo "alias d='df -h | grep -v sda'" >> $HOME/.zshrc
+    echo "setw -g mode-keys vi" >> $HOME/.tmux.conf
+    echo "set -g history-limit 999999" >> $HOME/.tmux.conf
 }
 
 main "$@"; exit
