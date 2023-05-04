@@ -258,22 +258,6 @@ pub fn return_children(id: &str) -> Vec<String> {
     children
 }
 
-//#   Sync tree helper function ### REVIEW might need to put it in distro-specific ashpk.py
-//def sync_tree_helper(CHR, s_f, s_t):
-    //os.system("mkdir -p /.snapshots/tmp-db/local/") ### REVIEW Still resembling Arch pacman folder structure!
-    //os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW
-    //pkg_list_to = pkg_list(CHR, s_t)
-    //pkg_list_from = pkg_list("", s_f)
-  //# Get packages to be inherited
-    //pkg_list_from = [j for j in pkg_list_from if j not in pkg_list_to]
-    //os.system(f"cp -r /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/. /.snapshots/tmp-db/local/") ### REVIEW
-    //os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-{s_f}/. /.snapshots/rootfs/snapshot-{CHR}{s_t}/{DEBUG}")
-    //os.system(f"rm -rf /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/*") ### REVIEW
-    //os.system(f"cp -r /.snapshots/tmp-db/local/. /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/") ### REVIEW
-    //for entry in pkg_list_from:
-        //os.system(f"bash -c 'cp -r /.snapshots/rootfs/snapshot-{s_f}/usr/share/ash/db/local/{entry}-[0-9]* /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/'") ### REVIEW
-    //os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW (originally inside the loop, but I took it out)
-
 // Save tree to file
 pub fn write_tree() -> Result<(), std::io::Error> {
     let gil = Python::acquire_gil();
