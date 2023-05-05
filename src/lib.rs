@@ -1,16 +1,13 @@
 mod detect_distro;
-mod distros_pkg_manager;
+mod distros;
 mod tree;
 
 use tree::*;
 use crate::detect_distro as detect;
-use std::fs::{File, read_dir, read_to_string};
-use std::io::{BufRead, BufReader};
+use std::fs::{File, OpenOptions, read_dir, read_to_string};
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-
-//#[cfg(target_os = "arch")]
-use distros_pkg_manager::arch_pkg::*;
 
 // Ash version
 //pub fn ash_version() {
@@ -69,6 +66,12 @@ pub fn ash_version() {
     println!("{}", version);
 }
 
+// Check if snapshot is mutable
+pub fn check_mutability(snapshot: &str) -> bool {
+    Path::new(&format!(".snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snapshot))
+        .try_exists().unwrap()
+}
+
 // Check if last update was successful
 pub fn check_update() {
     let upstate = File::open("/.snapshots/ash/upstate").unwrap();
@@ -82,6 +85,21 @@ pub fn check_update() {
     if line.contains("0") {
         print!("Last update on {} completed successfully.", data)
     }
+}
+
+// Clean chroot mount directories for a snapshot
+pub fn chr_delete(snapshot: &str) {
+    if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        Command::new("btrfs").args(["sub", "del"])
+                             .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
+                             .output().expect(&format!("Failed to delete chroot snapshot {}", snapshot));
+        Command::new("btrfs").args(["sub", "del"])
+                             .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
+                             .output().expect(&format!("Failed to delete chroot snapshot {}", snapshot));
+        Command::new("btrfs").args(["sub", "del"])
+                             .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                             .output().expect(&format!("Failed to delete chroot snapshot {}", snapshot));
+        }
 }
 
 // Check if inside chroot
@@ -335,12 +353,34 @@ pub fn find_new() -> i32 {
     }
 }
 
+// Get current snapshot
+pub fn get_current_snapshot() -> String {
+    let csnapshot = read_to_string("/usr/share/ash/snap").unwrap();
+    csnapshot.trim_end().to_string()
+}
+
 // This function returns either empty string or underscore plus name of distro if it was appended to sub-volume names to distinguish
 pub fn get_distro_suffix(distro: &str) -> String {
     if distro.contains("ashos") {
         return format!("_{}", distro.replace("_ashos", ""));
     } else {
         std::process::exit(1);
+    }
+}
+
+// Get tmp partition state
+pub fn get_tmp() -> &'static str {
+    // By default just return which deployment is running
+    let mount_exec = Command::new("cat")
+        .args(["/proc/mounts", "|", "grep", "' / btrfs'"])
+        .output().unwrap();
+    let mount = String::from_utf8_lossy(&mount_exec.stdout).to_string();
+    if mount.contains("deploy-aux") {
+        let r = "deploy-aux";
+        return r;
+    } else {
+        let r = "deploy";
+        return r;
     }
 }
 
@@ -442,3 +482,14 @@ pub fn update_etc() {
         println!("Tree {} updated.", treename)
     }
 }*/
+
+// Write new description (default) or append to an existing one (i.e. toggle immutability)
+pub fn write_desc(snapshot: &str, desc: &str) -> std::io::Result<()> {
+    let mut descfile = OpenOptions::new().create_new(true)
+                                         .read(true)
+                                         .write(true)
+                                         .open(format!("/.snapshots/ash/snapshots/{}-desc", snapshot))
+                                         .unwrap();
+    descfile.write_all(desc.as_bytes()).unwrap();
+    Ok(())
+}

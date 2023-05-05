@@ -6,7 +6,7 @@ use lib::*;
 use nix::unistd::Uid;
 // Directexplicitories
 // All snapshots share one /var
-// global boot is always at @boot
+// Global boot is always at @boot
 // *-deploy and *-deploy-aux         : temporary directories used to boot deployed snapshot
 // *-chr                             : temporary directories used to chroot into snapshot or copy snapshots around
 // /.snapshots/ash/ash               : symlinked to /usr/sbin/ash

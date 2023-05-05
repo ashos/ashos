@@ -1,4 +1,5 @@
 use cpython::{NoArgs, ObjectProtocol, PyDict, Python};
+use crate::{get_current_snapshot};
 use std::fs::{File, OpenOptions, read_to_string};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -94,12 +95,6 @@ fn fstree() -> Result<cpython::PyObject, cpython::PyErr> {
     // Call import_ function with tree_file argument
     let fstree = importer_instance.call_method(py, "import_", (tree_file,), None);
     fstree
-}
-
-// Get current snapshot
-pub fn get_current_snapshot() -> String {
-    let csnapshot = read_to_string("/usr/share/ash/snap").unwrap();
-    csnapshot.trim_end().to_string()
 }
 
 // Get parent

@@ -1,15 +1,15 @@
 use std::collections::HashMap;
-use std::fmt::format;
-use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::Command;
+use crate::{check_mutability, chr_delete, get_tmp, write_desc};
 
 // Check if AUR is setup right //REVIEW
-//pub fn aur_check() -> bool {
-    //let aur_check = Path::new(&format!("/.snapshots/rootfs/snapshot-{}/usr/bin/paru", snap())).try_exists().unwrap();
-    //aur_check
-//}
+pub fn aur_check() -> bool {
+    let aur_check = Path::new(&format!("/.snapshots/rootfs/snapshot-{}/usr/bin/paru", snap())).try_exists().unwrap();
+    aur_check
+}
 
 // Noninteractive update  //REVIEW
 //pub fn auto_upgrade(snapshot: &str) {
@@ -49,27 +49,6 @@ use std::process::Command;
                       //.arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg/.", snapshot))
                       //.arg("/var/cache/pacman/pkg/").status().unwrap();
 //}
-
-// Check if snapshot is mutable
-pub fn check_mutability(snapshot: &str) -> bool {
-    Path::new(&format!(".snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snapshot))
-        .try_exists().unwrap()
-}
-
-// Clean chroot mount directories for a snapshot
-pub fn chr_delete(snapshot: &str) {
-    if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
-        Command::new("btrfs").args(["sub", "del"])
-                             .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
-                             .output().expect(&format!("Failed to delete chroot snapshot {}", snapshot));
-        Command::new("btrfs").args(["sub", "del"])
-                             .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
-                             .output().expect(&format!("Failed to delete chroot snapshot {}", snapshot));
-        Command::new("btrfs").args(["sub", "del"])
-                             .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                             .output().expect(&format!("Failed to delete chroot snapshot {}", snapshot));
-        }
-}
 
 // Fix signature invalid error //This's ugly code //REVIEW
 //pub fn fix_package_db(snapshot: &str) {
@@ -157,22 +136,6 @@ pub fn chr_delete(snapshot: &str) {
 //        }
 //    }
 //}
-
-// Get tmp partition state
-pub fn get_tmp() -> &'static str {
-    // By default just return which deployment is running
-    let mount_exec = Command::new("cat")
-        .args(["/proc/mounts", "|", "grep", "' / btrfs'"])
-        .output().unwrap();
-    let mount = String::from_utf8_lossy(&mount_exec.stdout).to_string();
-    if mount.contains("deploy-aux") {
-        let r = "deploy-aux";
-        return r;
-    } else {
-        let r = "deploy";
-        return r;
-    }
-}
 
 // Make a node mutable //REVIEW
 //pub fn immutability_disable(snapshot: &str) {
@@ -427,15 +390,15 @@ pub fn get_tmp() -> &'static str {
 //}
 
 // Read snap file //REVIEW
-//pub fn snap() -> String {
-    //let source_dep = get_tmp();
-    //let sfile = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", source_dep)).unwrap();
-    //let mut buf_read = BufReader::new(sfile);
-    //let mut snap_value = String::new();
-    //buf_read.read_line(&mut snap_value).unwrap();
-    //let snap = snap_value.replace(" ", "").replace("\n", "");
-    //snap
-//}
+pub fn snap() -> String {
+    let source_dep = get_tmp();
+    let sfile = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", source_dep)).unwrap();
+    let mut buf_read = BufReader::new(sfile);
+    let mut snap_value = String::new();
+    buf_read.read_line(&mut snap_value).unwrap();
+    let snap = snap_value.replace(" ", "").replace("\n", "");
+    snap
+}
 
 // Get per-snapshot configuration options //REVIEW
 //pub fn snapshot_config_get() -> HashMap<String, String> {
@@ -524,14 +487,3 @@ pub fn get_tmp() -> &'static str {
                                            //.args(["su", "aur", "-c", "'paru", "-Syyu'"]).status().unwrap().to_string();
     //}
 //}
-
-// Write new description (default) or append to an existing one (i.e. toggle immutability)
-pub fn write_desc(snapshot: &str, desc: &str) -> std::io::Result<()> {
-    let mut descfile = OpenOptions::new().create_new(true)
-                                         .read(true)
-                                         .write(true)
-                                         .open(format!("/.snapshots/ash/snapshots/{}-desc", snapshot))
-                                         .unwrap();
-    descfile.write_all(desc.as_bytes()).unwrap();
-    Ok(())
-}
