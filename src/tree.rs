@@ -1,5 +1,5 @@
 use cpython::{NoArgs, ObjectProtocol, PyDict, Python};
-use crate::{get_current_snapshot};
+use crate::get_current_snapshot;
 use std::fs::{File, OpenOptions, read_to_string};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
