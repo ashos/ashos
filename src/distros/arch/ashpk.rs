@@ -5,10 +5,18 @@ use std::path::Path;
 use std::process::Command;
 use crate::{check_mutability, chr_delete, get_tmp, write_desc};
 
-// Check if AUR is setup right //REVIEW
+// Check if AUR is setup right
 pub fn aur_check() -> bool {
-    let aur_check = Path::new(&format!("/.snapshots/rootfs/snapshot-{}/usr/bin/paru", snap())).try_exists().unwrap();
-    aur_check
+    let options = snapshot_config_get();
+    if options["aur"] == "True" {
+        let aur = true;
+        return aur;
+    } else if options["aur"] == "False" {
+        let aur = false;
+        return aur;
+    } else {
+        panic!("Please insert valid value for aur in /.snapshots/etc/etc-{}/ash.conf", snap());
+    }
 }
 
 // Noninteractive update  //REVIEW
@@ -389,7 +397,7 @@ pub fn aur_check() -> bool {
                           //.args(["pacman", "-Syy"]).status().unwrap();
 //}
 
-// Read snap file //REVIEW
+// Read snap file
 pub fn snap() -> String {
     let source_dep = get_tmp();
     let sfile = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", source_dep)).unwrap();
@@ -400,34 +408,37 @@ pub fn snap() -> String {
     snap
 }
 
-// Get per-snapshot configuration options //REVIEW
-//pub fn snapshot_config_get() -> HashMap<String, String> {
+// Get per-snapshot configuration options
+pub fn snapshot_config_get() -> HashMap<String, String> {
     // defaults here
-    //let mut options = HashMap::new();
-    //options.insert(String::from("aur"), String::from("False"));
-    //options.insert(String::from("mutable_dirs"), String::new());
-    //options.insert(String::from("mutable_dirs_shared"), String::new());
+    let mut options = HashMap::new();
+    options.insert(String::from("aur"), String::from("False"));
+    options.insert(String::from("mutable_dirs"), String::new());
+    options.insert(String::from("mutable_dirs_shared"), String::new());
 
-    //if !Path::new(&format!("/.snapshots/etc/etc-{}/ash.conf", snap())).try_exists().unwrap() {
-        //return options;
-    //} else {
-        //let optfile = File::open(format!("/.snapshots/etc/etc-{}/ash.conf", snap())).unwrap();
-        //let reader = BufReader::new(optfile);
+    if !Path::new(&format!("/.snapshots/etc/etc-{}/ash.conf", snap())).try_exists().unwrap() {
+        return options;
+    } else {
+        let optfile = File::open(format!("/.snapshots/etc/etc-{}/ash.conf", snap())).unwrap();
+        let reader = BufReader::new(optfile);
 
-        //for line in reader.lines() {
-            //let line = line.unwrap();
-            //if line.contains('#') {
-                //let comment_index = line.find('#').unwrap();
-                //let (line, _) = line.split_at(comment_index);
-                //if line.contains("::") {
-                    //let (left, right) = line.split_once("::").unwrap();
-                    //options.insert(left.to_string(), right.trim_end().to_string());
-                //}
-            //}
-       // }
-        //return options;
-    //}
-//}
+        for line in reader.lines() {
+            let line = line.unwrap();
+            if line.contains('#') {
+                // Everything after '#' is a comment
+                line.split('#').next().unwrap();
+            }
+            // Skip line if there's no option set
+            if line.contains("::") {
+                // Split options with '::'
+                let (left, right) = line.split_once("::").unwrap();
+                // Remove newline here
+                options.insert(left.to_string(), right.trim_end().to_string());
+            }
+        }
+        return options;
+    }
+}
 
 // Show diff of packages between 2 snapshots //REVIEW
 //pub fn snapshot_diff(snap1: &str, snap2: &str) {
