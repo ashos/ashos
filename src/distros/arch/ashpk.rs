@@ -58,6 +58,16 @@ pub fn aur_check() -> bool {
                       //.arg("/var/cache/pacman/pkg/").status().unwrap();
 //}
 
+// Everything after '#' is a comment
+fn comment_after_hash(line: &mut String) -> &str {
+    if line.contains("#") {
+        let line = line.split("#").next().unwrap();
+        return line;
+    } else {
+        return line;
+    }
+}
+
 // Fix signature invalid error //This's ugly code //REVIEW
 //pub fn fix_package_db(snapshot: &str) {
     //if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
@@ -410,30 +420,26 @@ pub fn snap() -> String {
 
 // Get per-snapshot configuration options
 pub fn snapshot_config_get() -> HashMap<String, String> {
-    // defaults here
     let mut options = HashMap::new();
-    options.insert(String::from("aur"), String::from("False"));
-    options.insert(String::from("mutable_dirs"), String::new());
-    options.insert(String::from("mutable_dirs_shared"), String::new());
 
     if !Path::new(&format!("/.snapshots/etc/etc-{}/ash.conf", snap())).try_exists().unwrap() {
+        // defaults here
+        options.insert(String::from("aur"), String::from("False"));
+        options.insert(String::from("mutable_dirs"), String::new());
+        options.insert(String::from("mutable_dirs_shared"), String::new());
         return options;
     } else {
         let optfile = File::open(format!("/.snapshots/etc/etc-{}/ash.conf", snap())).unwrap();
         let reader = BufReader::new(optfile);
 
         for line in reader.lines() {
-            let line = line.unwrap();
-            if line.contains('#') {
-                // Everything after '#' is a comment
-                line.split('#').next().unwrap();
-            }
+            let mut line = line.unwrap();
             // Skip line if there's no option set
-            if line.contains("::") {
+            if comment_after_hash(&mut line).contains("::") {
                 // Split options with '::'
                 let (left, right) = line.split_once("::").unwrap();
                 // Remove newline here
-                options.insert(left.to_string(), right.trim_end().to_string());
+                options.insert(left.to_string(), right.trim_end().to_string().split("#").next().unwrap().to_string());
             }
         }
         return options;
