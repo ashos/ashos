@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::Command;
-use crate::{check_mutability, chr_delete, get_tmp, write_desc};
+use crate::{check_mutability, chr_delete, get_tmp, immutability_disable, immutability_enable, prepare, write_desc};
 
 // Check if AUR is setup right
 pub fn aur_check() -> bool {
@@ -51,12 +51,12 @@ pub fn aur_check() -> bool {
     //}
 //}
 
-// Copy cache of downloaded packages to shared //REVIEW
-//pub fn cache_copy(snapshot: &str) {
-    //Command::new("cp").args(["-n", "-r", "--reflink=auto"])
-                      //.arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg/.", snapshot))
-                      //.arg("/var/cache/pacman/pkg/").status().unwrap();
-//}
+// Copy cache of downloaded packages to shared
+pub fn cache_copy(snapshot: &str) {
+    Command::new("cp").args(["-n", "-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg/.", snapshot))
+                      .arg("/var/cache/pacman/pkg/").status().unwrap();
+}
 
 // Everything after '#' is a comment
 fn comment_after_hash(line: &mut String) -> &str {
@@ -155,80 +155,32 @@ fn comment_after_hash(line: &mut String) -> &str {
 //    }
 //}
 
-// Make a node mutable //REVIEW
-//pub fn immutability_disable(snapshot: &str) {
-    //if snapshot != "0" {
-        //if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-            //eprintln!("Snapshot {} doesn't exist.", snapshot);
-        //} else {
-            //if check_mutability(snapshot) {
-                //println!("Snapshot {} is already mutable.", snapshot);
-            //} else {
-                //Command::new("btrfs").args(["property", "set", "-ts"])
-                                     //.arg(format!("/.snapshots/rootfs/snapshot-{} ro false", snapshot))
-                                     //.status().unwrap();
-                //Command::new("touch").arg(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snapshot))
-                                 //.status().unwrap();
-                //println!("Snapshot {} successfully made mutable.", snapshot);
-                //write_desc(snapshot, "MUTABLE");
-            //}
-        //}
-    //} else {
-        //eprintln!("Snapshot 0 (base) should not be modified.");
-    //}
-//}
+// Delete init system files (Systemd, OpenRC, etc.)
+pub fn init_system_clean(snapshot: &str, from: &str) {
+    if from == "prepare"{
+        Command::new("rm").arg("-rf")
+                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/*", snapshot))
+                          .status().unwrap();
+    } else if from == "deploy" {
+        Command::new("rm").args(["-rf", "/var/lib/systemd/*"])
+                          .status().unwrap();
+        Command::new("rm").arg("-rf")
+                          .arg(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/*", snapshot))
+                          .status().unwrap();
+    }
+}
 
-//Make a node immutable //REVIEW
-//pub fn immutability_enable(snapshot: &str) {
-   // if snapshot != "0" {
-        //if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-            //eprintln!("Snapshot {} doesn't exist.", snapshot);
-        //} else {
-            //if check_mutability(snapshot) {
-                //println!("Snapshot {} is already mutable.", snapshot);
-            //} else {
-                //Command::new("btrfs").args(["property", "set", "-ts"])
-                                     //.arg(format!("/.snapshots/rootfs/snapshot-{} ro false", snapshot))
-                                     //.status().unwrap();
-                //Command::new("touch").arg(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snapshot))
-                                 //.status().unwrap();
-                //println!("Snapshot {} successfully made mutable.", snapshot);
-                //Command::new("sed").args(["-i", "'s|", "MUTABLE", "||g'"])
-                                   //.arg(format!("/.snapshots/ash/snapshots/{}-desc", snapshot))
-                                   //.status().unwrap();
-            //}
-        //}
-    //} else {
-        //eprintln!("Snapshot 0 (base) should not be modified.");
-    //}
-//}
-
-// Delete init system files (Systemd, OpenRC, etc.) //REVIEW
-//pub fn init_system_clean(snapshot: &str, from: &str) {
-    //if from == "prepare"{
-        //Command::new("rm").arg("-rf")
-                          //.arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/*", snapshot))
-                          //.status().unwrap();
-    //} else if from == "deploy" {
-        //Command::new("rm").args(["-rf", "/var/lib/systemd/*"])
-                          //.status().unwrap();
-        //Command::new("rm").arg("-rf")
-                          //.arg(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/*", snapshot))
-                          //.status().unwrap();
-    //}
-//}
-
-// Copy init system files (Systemd, OpenRC, etc.) to shared //REVIEW
-//pub fn init_system_copy(snapshot: &str, from: &str) {
-    //if from == "post_transactions" {
-        //Command::new("rm").args(["-rf" ,"/var/lib/systemd/*"])
-                          //.status().unwrap();
-        //Command::new("cp").args(["-r", "--reflink=auto",])
-                          //.arg(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/.", snapshot))
-                          //.arg("/var/lib/systemd/")
-                          //.status().unwrap();
-    //}
-//}
+// Copy init system files (Systemd, OpenRC, etc.) to shared
+pub fn init_system_copy(snapshot: &str, from: &str) {
+    if from == "post_transactions" {
+        Command::new("rm").args(["-rf" ,"/var/lib/systemd/*"])
+                          .status().unwrap();
+        Command::new("cp").args(["-r", "--reflink=auto",])
+                          .arg(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/.", snapshot))
+                          .arg("/var/lib/systemd/")
+                          .status().unwrap();
+    }
+}
 
 // Install atomic-operation //REVIEW
 //pub fn install_package(snapshot:&str, pkg: &str) {
@@ -313,46 +265,6 @@ fn comment_after_hash(line: &mut String) -> &str {
     //excode.to.strip().split("\n");
 //}
 
-// Prepare snapshot to chroot dir to install or chroot into
-//pub fn prepare(snapshot: &str) {
-    //chr_delete(snapshot)
-    //os.system(f"btrfs sub snap /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-chr{snapshot}{DEBUG}")
-  //# Pacman gets weird when chroot directory is not a mountpoint, so the following mount is necessary ### REVIEW
-    //os.system(f"mount --bind --make-slave /.snapshots/rootfs/snapshot-chr{snapshot} /.snapshots/rootfs/snapshot-chr{snapshot}{DEBUG}")
-    //os.system(f"mount --rbind --make-rslave /dev /.snapshots/rootfs/snapshot-chr{snapshot}/dev{DEBUG}")
-    //os.system(f"mount --bind --make-slave /home /.snapshots/rootfs/snapshot-chr{snapshot}/home{DEBUG}")
-    //os.system(f"mount --rbind --make-rslave /proc /.snapshots/rootfs/snapshot-chr{snapshot}/proc{DEBUG}")
-    //os.system(f"mount --bind --make-slave /root /.snapshots/rootfs/snapshot-chr{snapshot}/root{DEBUG}")
-    //os.system(f"mount --rbind --make-rslave /run /.snapshots/rootfs/snapshot-chr{snapshot}/run{DEBUG}")
-    //os.system(f"mount --rbind --make-rslave /sys /.snapshots/rootfs/snapshot-chr{snapshot}/sys{DEBUG}")
-    //os.system(f"mount --rbind --make-rslave /tmp /.snapshots/rootfs/snapshot-chr{snapshot}/tmp{DEBUG}")
-    //os.system(f"mount --bind --make-slave /var /.snapshots/rootfs/snapshot-chr{snapshot}/var{DEBUG}")
-  //# File operations for snapshot-chr
-    //os.system(f"btrfs sub snap /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-chr{snapshot}{DEBUG}")
-    //os.system(f"btrfs sub snap /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-chr{snapshot}{DEBUG}")
-    //os.system(f"cp -r --reflink=auto /.snapshots/boot/boot-chr{snapshot}/. /.snapshots/rootfs/snapshot-chr{snapshot}/boot{DEBUG}")
-    //os.system(f"cp -r --reflink=auto /.snapshots/etc/etc-chr{snapshot}/. /.snapshots/rootfs/snapshot-chr{snapshot}/etc{DEBUG}") ### btrfs sub snap etc-{snapshot} to etc-chr-{snapshot} not needed before this?
-    //init_system_clean(snapshot, "prepare")
-    //os.system(f"cp /etc/machine-id /.snapshots/rootfs/snapshot-chr{snapshot}/etc/machine-id")
-    //os.system(f"mkdir -p /.snapshots/rootfs/snapshot-chr{snapshot}/.snapshots/ash && cp -f /.snapshots/ash/fstree /.snapshots/rootfs/snapshot-chr{snapshot}/.snapshots/ash/")
-  //# Special mutable directories
-    //options = snapshot_config_get(snapshot)
-    //mutable_dirs = options["mutable_dirs"].split(',').remove('')
-    //mutable_dirs_shared = options["mutable_dirs_shared"].split(',').remove('')
-    //if mutable_dirs:
-        //for mount_path in mutable_dirs:
-            //os.system(f"mkdir -p /.snapshots/mutable_dirs/snapshot-{snapshot}/{mount_path}")
-            //os.system(f"mkdir -p /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path}")
-            //os.system(f"mount --bind /.snapshots/mutable_dirs/snapshot-{snapshot}/{mount_path} /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path}")
-    //if mutable_dirs_shared:
-        //for mount_path in mutable_dirs_shared:
-            //os.system(f"mkdir -p /.snapshots/mutable_dirs/{mount_path}")
-            //os.system(f"mkdir -p /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path}")
-            //os.system(f"mount --bind /.snapshots/mutable_dirs/{mount_path} /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path}")
-//  # Important: Do not move the following line above (otherwise error)
-    //os.system(f"mount --bind --make-slave /etc/resolv.conf /.snapshots/rootfs/snapshot-chr{snapshot}/etc/resolv.conf{DEBUG}")
-//}
-
 // Post transaction function, copy from chroot dirs back to read only snapshot dir
 //pub fn post_transactions(snapshot: &str) {
     //tmp = get_tmp()
@@ -401,11 +313,11 @@ fn comment_after_hash(line: &mut String) -> &str {
     //chr_delete(snapshot)
 //}
 
-// Refresh snapshot atomic-operation //REVIEW
-//pub fn refresh_helper(snapshot: &str) {
-    //Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                          //.args(["pacman", "-Syy"]).status().unwrap();
-//}
+// Refresh snapshot atomic-operation
+pub fn refresh_helper(snapshot: &str) {
+    Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                          .args(["pacman", "-Syy"]).status().unwrap();
+}
 
 // Read snap file
 pub fn snap() -> String {
@@ -446,61 +358,48 @@ pub fn snapshot_config_get() -> HashMap<String, String> {
     }
 }
 
-// Show diff of packages between 2 snapshots //REVIEW
-//pub fn snapshot_diff(snap1: &str, snap2: &str) {
-    //if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap1)).try_exists().unwrap() {
-        //println!("Snapshot {} not found.", snap1);
-    //} else if !Path::new(format!("/.snapshots/rootfs/snapshot-{}", snap2)).try_exists().unwrap() {
-        //println!("Snapshot {} not found.", snap2);
-    //} else {
-        //Command::new("bash").args(["-c", "\'diff", "<(ls"])
-                            //.arg(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local", snap1))
-                            //.arg("<(ls")
-                            //.arg(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local", snap2))
-                            //.args(["|", "grep",])
-                            //.arg(format!("'^>\|^<'"))
-                            //.args(["|", "sort\'"]).status().unwrap();
-    //}
-//}
+// Show diff of packages between 2 snapshots
+pub fn snapshot_diff(snap1: &str, snap2: &str) {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap1)).try_exists().unwrap() {
+        println!("Snapshot {} not found.", snap1);
+    } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap2)).try_exists().unwrap() {
+        println!("Snapshot {} not found.", snap2);
+    } else {
+        Command::new("bash")
+                .arg("-c")
+                .arg(format!("diff <(ls /.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local)\\
+ <(ls /.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local) | grep '^>\\|^<' | sort", snap1, snap2))
+                .status().unwrap();
+    }
+}
 
-// Sync time //REVIEW
-//pub fn sync_time() {
-    //Command::new("sudo")
-        //.arg("date")
-        //.arg("-s")
-        //.arg(format!("{}Z",String::from_utf8(Command::new("curl")
-                                             //.args(&["--tlsv1.3",
-                                                     //"--proto",
-                                                     //"=https",
-                                                     //"-I",
-                                                     //"https://google.com"
-                                             //])
-                                             //.output()
-                                             //.unwrap()
-                                             //.stderr
-                                             //.split(|&x| x == b'\n')
-                                             //.find(|line| line.starts_with(b"Date:"))
-                                             //.unwrap_or(&[])
-                                             //[6..25]
-                                             //.to_vec(),).unwrap())).status().unwrap();
-//}
+// Sync time
+pub fn sync_time() {
+    Command::new("sh")
+        .arg("-c")
+        .arg("date -s \"$(curl --tlsv1.3 --proto =https -I https://google.com 2>&1 | grep Date: | cut -d\" \" -f3-6)Z\"")
+        .status().unwrap();
+}
 
-// Uninstall package(s) atomic-operation //REVIEW
-//pub fn uninstall_package_helper(snapshot: &str, pkg: &str) {
-    //Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                          //.args(["pacman", "--noconfirm", "-Rns"])
-                          //.arg(format!("{}", pkg)).status().unwrap();
-//}
+// Uninstall package(s) atomic-operation
+pub fn uninstall_package_helper(snapshot: &str, pkg: &str) {
+    Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                          .args(["pacman", "--noconfirm", "-Rns"])
+                          .arg(format!("{}", pkg)).status().unwrap();
+}
 
-// Upgrade snapshot atomic-operation //REVIEW
-//pub fn upgrade_helper(snapshot: &str) -> String {
-    //prepare(snapshot);
-    //if !aur_check() {
-        //let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                           //.args(["pacman", "-Syyu"])
-                                           //.status().unwrap().to_string();
-    //} else {
-        //let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                           //.args(["su", "aur", "-c", "'paru", "-Syyu'"]).status().unwrap().to_string();
-    //}
-//}
+// Upgrade snapshot atomic-operation
+pub fn upgrade_helper(snapshot: &str) -> String {
+    prepare(snapshot);
+    if !aur_check() {
+        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                           .args(["pacman", "-Syyu"])
+                                           .status().unwrap().to_string();
+        excode
+    } else {
+        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                           .args(["su", "aur", "-c", "paru -Syyu"])
+                                           .status().unwrap().to_string();
+        excode
+    }
+}
