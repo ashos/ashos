@@ -483,12 +483,129 @@ pub fn live_unlock() {
     Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp)).status().unwrap();
 }
 
+// Post transaction function, copy from chroot dirs back to read only snapshot dir
+pub fn post_transactions(snapshot: &str) {
+    let tmp = get_tmp();
+    // Some operations were moved below to fix hollow functionality ###
+    //File operations in snapshot-chr
+    Command::new("rm").arg("-rf")
+                      .arg(format!("/.snapshots/boot/boot-chr{}/*", snapshot))
+                      .status().unwrap();
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/boot/.", snapshot))
+                      .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
+                      .status().unwrap();
+    Command::new("rm").arg("-rf")
+                      .arg(format!("/.snapshots/etc/etc-chr{}/*", snapshot))
+                      .status().unwrap();
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/.", snapshot))
+                      .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
+                      .status().unwrap();
+    // Keep package manager's cache after installing packages. This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
+    cache_copy(snapshot);
+    Command::new("btrfs").args(["sub", "del"])
+                         .arg(format!("/.snapshots/boot/boot-{}", snapshot))
+                         .status().unwrap();
+    Command::new("btrfs").args(["sub", "del"])
+                         .arg(format!("/.snapshots/etc/etc-{}", snapshot))
+                         .status().unwrap();
+    Command::new("btrfs").args(["sub", "del"])
+                         .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
+                         .status().unwrap();
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/usr/share/ash/mutable", snapshot)).try_exists().unwrap() {
+        let immutability = "";
+        Command::new("btrfs").args(["sub", "snap"])
+                             .arg(format!("{}", immutability))
+                             .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
+                             .arg(format!("/.snapshots/boot/boot-{}", snapshot)).status().unwrap();
+        Command::new("btrfs").args(["sub", "snap"])
+                             .arg(format!("{}", immutability))
+                             .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
+                             .arg(format!("/.snapshots/etc/etc-{}", snapshot)).status().unwrap();
+        // Copy init system files to shared
+        init_system_copy(tmp, "post_transactions");
+        Command::new("btrfs").args(["sub", "snap"])
+                             .arg(format!("{}", immutability))
+                             .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                             .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
+                             .status().unwrap();
+    } else {
+        let immutability = "-r";
+        Command::new("btrfs").args(["sub", "snap"])
+                             .arg(format!("{}", immutability))
+                             .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
+                             .arg(format!("/.snapshots/boot/boot-{}", snapshot)).status().unwrap();
+        Command::new("btrfs").args(["sub", "snap"])
+                             .arg(format!("{}", immutability))
+                             .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
+                             .arg(format!("/.snapshots/etc/etc-{}", snapshot)).status().unwrap();
+        // Copy init system files to shared
+        init_system_copy(tmp, "post_transactions");
+        Command::new("btrfs").args(["sub", "snap"])
+                             .arg(format!("{}", immutability))
+                             .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                             .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
+                             .status().unwrap();
+    }
+    // fix for hollow functionality
+    // Unmount in reverse order
+    Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/resolv.conf", snapshot))
+                          .status().unwrap();
+    Command::new("umount").arg("-R")
+                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/dev", snapshot))
+                          .status().unwrap();
+    Command::new("umount").arg("-R")
+                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/home", snapshot))
+                          .status().unwrap();
+    Command::new("umount").arg("-R")
+                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/proc", snapshot))
+                          .status().unwrap();
+    Command::new("umount").arg("-R")
+                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/root", snapshot))
+                          .status().unwrap();
+    Command::new("umount").arg("-R")
+                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/run", snapshot))
+                          .status().unwrap();
+    Command::new("umount").arg("-R")
+                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/sys", snapshot))
+                          .status().unwrap();
+    Command::new("umount").arg("-R")
+                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                          .status().unwrap();
+    // Special mutable directories
+    let options = snapshot_config_get();
+    let mutable_dirs: Vec<&str> = options.get("mutable_dirs")
+                                         .map(|dirs| dirs.split(',').filter(|dir| !dir.is_empty()).collect())
+                                         .unwrap_or_else(|| Vec::new());
+    let mutable_dirs_shared: Vec<&str> = options.get("mutable_dirs_shared")
+                                         .map(|dirs| dirs.split(',').filter(|dir| !dir.is_empty()).collect())
+                                         .unwrap_or_else(|| Vec::new());
+    if !mutable_dirs.is_empty() {
+        for mount_path in mutable_dirs {
+            Command::new("umount").arg("-R")
+                                  .arg(format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))
+                                  .status().unwrap();
+        }
+    }
+    if !mutable_dirs_shared.is_empty() {
+        for mount_path in mutable_dirs_shared {
+            Command::new("umount").arg("-R")
+                                  .arg(format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))
+                                  .status().unwrap();
+        }
+    }
+    // fix for hollow functionality
+    chr_delete(snapshot);
+}
+
 // Prepare snapshot to chroot dir to install or chroot into
 pub fn prepare(snapshot: &str) {
     chr_delete(snapshot);
     Command::new("btrfs").args(["sub", "snap"])
                          .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).status().unwrap();
+                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                         .status().unwrap();
     // Pacman gets weird when chroot directory is not a mountpoint, so the following mount is necessary
     Command::new("mount").args(["--bind", "--make-slave"])
                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
@@ -518,6 +635,10 @@ pub fn prepare(snapshot: &str) {
     Command::new("mount").args(["--bind", "--make-slave", "/var"])
                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var", snapshot))
                          .status().unwrap();
+    Command::new("mount").args(["--bind", "--make-slave"])
+                         .arg("/etc/resolv.conf")
+                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/resolv.conf", snapshot))
+                         .status().unwrap();
     // File operations for snapshot-chr
     Command::new("btrfs").args(["sub", "snap"])
                          .arg(format!("/.snapshots/boot/boot-{}", snapshot))
@@ -525,12 +646,13 @@ pub fn prepare(snapshot: &str) {
                          .status().unwrap();
     Command::new("btrfs").args(["sub", "snap"])
                          .arg(format!("/.snapshots/etc/etc-{}", snapshot))
-                         .arg(format!("/.snapshots/etc/etc-chr{}", snapshot)).status().unwrap();
+                         .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
+                         .status().unwrap();
     Command::new("cp").args(["-r", "--reflink=auto"])
                       .arg(format!("/.snapshots/boot/boot-chr{}/.", snapshot))
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/boot", snapshot))
                       .status().unwrap();
-    Command::new("cp").args(["-r", "--reflink=auto"]) // btrfs sub snap etc-{snapshot} to etc-chr-{snapshot} not needed before this?
+    Command::new("cp").args(["-r", "--reflink=auto"])
                       .arg(format!("/.snapshots/etc/etc-chr{}/.", snapshot))
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc", snapshot)).status().unwrap();
     init_system_clean(snapshot, "prepare");
@@ -538,11 +660,11 @@ pub fn prepare(snapshot: &str) {
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/machine-id", snapshot))
                       .status().unwrap();
     Command::new("mkdir").arg("-p")
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}/.snapshots/ash", snapshot))
-                         .arg("&&")
-                         .arg("cp -f /.snapshots/ash/fstree")
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}/.snapshots/ash/", snapshot))
-                         .status().unwrap();
+                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}/.snapshots/ash", snapshot)).status().unwrap();
+    Command::new("cp").arg("-f")
+                      .arg("/.snapshots/ash/fstree")
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/.snapshots/ash/", snapshot))
+                      .status().unwrap();
     // Special mutable directories
     let options = snapshot_config_get();
     let mutable_dirs: Vec<&str> = options.get("mutable_dirs")
@@ -579,11 +701,6 @@ pub fn prepare(snapshot: &str) {
                                  .status().unwrap();
         }
     }
-    // Important: Do not move the following line above (otherwise error)
-    Command::new("mount").args(["--bind", "--make-slave"])
-                         .arg("/etc/resolv.conf")
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/resolv.conf", snapshot))
-                         .status().unwrap();
 }
 
 // Clear all temporary snapshots

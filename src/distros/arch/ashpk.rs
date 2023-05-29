@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::Command;
-use crate::{check_mutability, chr_delete, get_tmp, immutability_disable, immutability_enable, prepare, write_desc};
+use crate::{check_mutability, chr_delete, get_tmp, immutability_disable, immutability_enable, prepare, post_transactions, write_desc};
 
 // Check if AUR is setup right
 pub fn aur_check() -> bool {
@@ -19,37 +19,37 @@ pub fn aur_check() -> bool {
     }
 }
 
-// Noninteractive update  //REVIEW
-//pub fn auto_upgrade(snapshot: &str) {
-    //sync_time(); // Required in virtualbox, otherwise error in package db update
-    //prepare(snapshot);
-    //if !aur_check() {
-        //let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                           //.args(["pacman", "--noconfirm", "-Syyu"]).output().unwrap();
-        //if excode.status.success() {
-            //post_transactions(snapshot);
-            //Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").output().unwrap();
-            //Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").output().unwrap();
-        //} else {
-            //chr_delete(snapshot);
-            //Command::new("echo").args(["1", ">"]).arg("/.snapshots/ash/upstate").output().unwrap();
-            //Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").output().unwrap();
-        //}
-    //} else {
-        //let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                           //.args(["su", "aur", "-c", "paru", "--noconfirm", "-Syy"])
-                                           //.output().unwrap();
-        //if excode.status.success() {
-            //post_transactions(snapshot);
-            //Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").output().unwrap();
-            //Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").output().unwrap();
-        //} else {
-            //chr_delete(snapshot);
-            //Command::new("echo").args(["1", ">"]).arg("/.snapshots/ash/upstate").output().unwrap();
-            //Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").output().unwrap();
-        //}
-    //}
-//}
+// Noninteractive update
+pub fn auto_upgrade(snapshot: &str) {
+    sync_time(); // Required in virtualbox, otherwise error in package db update
+    prepare(snapshot);
+    if !aur_check() {
+        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                           .args(["pacman", "--noconfirm", "-Syyu"]).status().unwrap();
+        if excode.success() {
+            post_transactions(snapshot);
+            Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").status().unwrap();
+            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").status().unwrap();
+        } else {
+            chr_delete(snapshot);
+            Command::new("echo").args(["1", ">"]).arg("/.snapshots/ash/upstate").status().unwrap();
+            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").status().unwrap();
+        }
+    } else {
+        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                           .args(["su", "aur", "-c", "paru --noconfirm -Syy"])
+                                           .status().unwrap();
+        if excode.success() {
+            post_transactions(snapshot);
+            Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").status().unwrap();
+            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").status().unwrap();
+        } else {
+            chr_delete(snapshot);
+            Command::new("echo").args(["1", ">"]).arg("/.snapshots/ash/upstate").status().unwrap();
+            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").status().unwrap();
+        }
+    }
+}
 
 // Copy cache of downloaded packages to shared
 pub fn cache_copy(snapshot: &str) {
@@ -257,61 +257,14 @@ pub fn init_system_copy(snapshot: &str, from: &str) {
         //return excode
 //}
 
-// Get list of packages installed in a snapshot //REVIEW
-//pub fn pkg_list(chr: &str, snap: &str) {
-    //let excode = String::from_utf8::new(Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}{}", chr,snap))
-                          //.args(["pacman", "-Qq"])
-                          //.status().unwrap().to_string());
-    //excode.to.strip().split("\n");
-//}
-
-// Post transaction function, copy from chroot dirs back to read only snapshot dir
-//pub fn post_transactions(snapshot: &str) {
-    //tmp = get_tmp()
-  //# Some operations were moved below to fix hollow functionality ###
-  //# File operations in snapshot-chr
-//#    os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}") ### REVIEW # Moved to a few lines below
-    //os.system(f"rm -rf /.snapshots/boot/boot-chr{snapshot}/*{DEBUG}")
-    //os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/boot/. /.snapshots/boot/boot-chr{snapshot}{DEBUG}")
-    //os.system(f"rm -rf /.snapshots/etc/etc-chr{snapshot}/*{DEBUG}")
-    //os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-chr{snapshot}/etc/. /.snapshots/etc/etc-chr{snapshot}{DEBUG}")
-  //# Keep package manager's cache after installing packages. This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
-    //cache_copy(snapshot, "post_transactions")
-    //os.system(f"btrfs sub del /.snapshots/boot/boot-{snapshot}{DEBUG}")
-    //os.system(f"btrfs sub del /.snapshots/etc/etc-{snapshot}{DEBUG}")
-    //os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}")
-    //if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}/usr/share/ash/mutable"):
-        //immutability = ""
-    //else:
-        //immutability = "-r"
-    //os.system(f"btrfs sub snap {immutability} /.snapshots/boot/boot-chr{snapshot} /.snapshots/boot/boot-{snapshot}{DEBUG}")
-    //os.system(f"btrfs sub snap {immutability} /.snapshots/etc/etc-chr{snapshot} /.snapshots/etc/etc-{snapshot}{DEBUG}")
-  //# Copy init system files to shared
-    //init_system_copy(tmp, "post_transactions")
-    //os.system(f"btrfs sub snap {immutability} /.snapshots/rootfs/snapshot-chr{snapshot} /.snapshots/rootfs/snapshot-{snapshot}{DEBUG}")
-  //# ---------------------- fix for hollow functionality ---------------------- #
-  //# Unmount in reverse order
-    //os.system(f"umount /.snapshots/rootfs/snapshot-chr{snapshot}/etc/resolv.conf{DEBUG}")
-    //os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/dev{DEBUG}")
-    //os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/home{DEBUG}")
-    //os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/proc{DEBUG}")
-    //os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/root{DEBUG}")
-    //os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/run{DEBUG}")
-    //os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/sys{DEBUG}")
-    //os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}{DEBUG}")
-  //# Special mutable directories
-    //options = snapshot_config_get(snapshot)
-    //mutable_dirs = options["mutable_dirs"].split(',').remove('')
-    //mutable_dirs_shared = options["mutable_dirs_shared"].split(',').remove('')
-    //if mutable_dirs:
-        //for mount_path in mutable_dirs:
-            //os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path}{DEBUG}")
-    //if mutable_dirs_shared:
-        //for mount_path in mutable_dirs_shared:
-            //os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{snapshot}/{mount_path}{DEBUG}")
-  //# ---------------------- fix for hollow functionality ---------------------- #
-    //chr_delete(snapshot)
-//}
+// Get list of packages installed in a snapshot
+pub fn pkg_list(chr: &str, snap: &str) -> Vec<String> {
+    let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}{}", chr,snap))
+                          .args(["pacman", "-Qq"])
+                          .output().unwrap();
+    let stdout = String::from_utf8_lossy(&excode.stdout).trim().to_string();
+    stdout.split('\n').map(|s| s.to_string()).collect()
+}
 
 // Refresh snapshot atomic-operation
 pub fn refresh_helper(snapshot: &str) {
