@@ -1,9 +1,9 @@
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
-use std::process::Command;
-use crate::{check_mutability, chr_delete, get_tmp, immutability_disable, immutability_enable, prepare, post_transactions, write_desc};
+use std::process::{Command, ExitStatus};
+use crate::{check_mutability, chr_delete, get_tmp, immutability_disable, immutability_enable, prepare, post_transactions,
+            snap, snapshot_config_get, sync_time, write_desc};
 
 // Check if AUR is setup right
 pub fn aur_check() -> bool {
@@ -56,16 +56,6 @@ pub fn cache_copy(snapshot: &str) {
     Command::new("cp").args(["-n", "-r", "--reflink=auto"])
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg/.", snapshot))
                       .arg("/var/cache/pacman/pkg/").status().unwrap();
-}
-
-// Everything after '#' is a comment
-fn comment_after_hash(line: &mut String) -> &str {
-    if line.contains("#") {
-        let line = line.split("#").next().unwrap();
-        return line;
-    } else {
-        return line;
-    }
 }
 
 // Fix signature invalid error //This's ugly code //REVIEW
@@ -182,32 +172,42 @@ pub fn init_system_copy(snapshot: &str, from: &str) {
     }
 }
 
-// Install atomic-operation //REVIEW
-//pub fn install_package(snapshot:&str, pkg: &str) {
+// Install atomic-operation
+pub fn install_package(snapshot:&str, pkg: &str) -> i32 {
     // This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
-    //let excode = Command::new("pacman").arg("-Si")
-                                       //.arg(format!("{}", pkg))
-                                       //.status().unwrap(); // --sysroot
-    //if !excode.success() {
-        //prepare(snapshot);
-        //if aur_check() {
-            //Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                  //.args(["su", "aur", "-c", "\'paru", "-S"])
-                                  //.arg(format!("{}", pkg))
-                                  //.args(["--needed", "--overwrite", "'/var/*''"])
-                                  //.status().unwrap();
-        //} else {
-            //eprintln!("AUR is not enabled!");
-        //}
-    //} else {
-        //prepare(snapshot);
-        //Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                              //.args(["pacman", "-S"])
-                              //.arg(format!("{}", pkg))
-                              //.args(["--needed", "--overwrite", "'/var/*'"])
-                              //.status().unwrap();
-    //}
-//}
+    let excode = Command::new("pacman").arg("-Si")
+                                       .arg(format!("{}", pkg))
+                                       .status().unwrap(); // --sysroot
+    if !excode.success() {
+        prepare(snapshot);
+        if aur_check() {
+            let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                               .args(["su", "aur", "-c"])
+                                               .arg(format!("\'paru -S {} --needed --overwrite '/var/*''\'", pkg))
+                                               .status().unwrap();
+            if excode.success() {
+                return 0;
+            } else {
+                return 1;
+            }
+        } else {
+            eprintln!("AUR is not enabled!");
+            return 1;
+        }
+    } else {
+        prepare(snapshot);
+        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                           .args(["pacman", "-S"])
+                                           .arg(format!("{}", pkg))
+                                           .args(["--needed", "--overwrite", "'/var/*'"])
+                                           .status().unwrap();
+        if excode.success() {
+            return 0;
+        } else {
+            return 1;
+        }
+    }
+}
 
 // Install atomic-operation in live snapshot //REVIEW
 //pub fn install_package_live(snapshot: &str, pkg: &str) {
@@ -267,48 +267,9 @@ pub fn pkg_list(chr: &str, snap: &str) -> Vec<String> {
 }
 
 // Refresh snapshot atomic-operation
-pub fn refresh_helper(snapshot: &str) {
+pub fn refresh_helper(snapshot: &str) -> ExitStatus {
     Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                          .args(["pacman", "-Syy"]).status().unwrap();
-}
-
-// Read snap file
-pub fn snap() -> String {
-    let source_dep = get_tmp();
-    let sfile = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", source_dep)).unwrap();
-    let mut buf_read = BufReader::new(sfile);
-    let mut snap_value = String::new();
-    buf_read.read_line(&mut snap_value).unwrap();
-    let snap = snap_value.replace(" ", "").replace("\n", "");
-    snap
-}
-
-// Get per-snapshot configuration options
-pub fn snapshot_config_get() -> HashMap<String, String> {
-    let mut options = HashMap::new();
-
-    if !Path::new(&format!("/.snapshots/etc/etc-{}/ash.conf", snap())).try_exists().unwrap() {
-        // defaults here
-        options.insert(String::from("aur"), String::from("False"));
-        options.insert(String::from("mutable_dirs"), String::new());
-        options.insert(String::from("mutable_dirs_shared"), String::new());
-        return options;
-    } else {
-        let optfile = File::open(format!("/.snapshots/etc/etc-{}/ash.conf", snap())).unwrap();
-        let reader = BufReader::new(optfile);
-
-        for line in reader.lines() {
-            let mut line = line.unwrap();
-            // Skip line if there's no option set
-            if comment_after_hash(&mut line).contains("::") {
-                // Split options with '::'
-                let (left, right) = line.split_once("::").unwrap();
-                // Remove newline here
-                options.insert(left.to_string(), right.trim_end().to_string().split("#").next().unwrap().to_string());
-            }
-        }
-        return options;
-    }
+                          .args(["pacman", "-Syy"]).status().unwrap()
 }
 
 // Show diff of packages between 2 snapshots
@@ -326,33 +287,26 @@ pub fn snapshot_diff(snap1: &str, snap2: &str) {
     }
 }
 
-// Sync time
-pub fn sync_time() {
-    Command::new("sh")
-        .arg("-c")
-        .arg("date -s \"$(curl --tlsv1.3 --proto =https -I https://google.com 2>&1 | grep Date: | cut -d\" \" -f3-6)Z\"")
-        .status().unwrap();
-}
-
 // Uninstall package(s) atomic-operation
-pub fn uninstall_package_helper(snapshot: &str, pkg: &str) {
-    Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                          .args(["pacman", "--noconfirm", "-Rns"])
-                          .arg(format!("{}", pkg)).status().unwrap();
+pub fn uninstall_package_helper(snapshot: &str, pkg: &str) -> ExitStatus {
+    let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                       .args(["pacman", "--noconfirm", "-Rns"])
+                                       .arg(format!("{}", pkg)).status().unwrap();
+    excode
 }
 
 // Upgrade snapshot atomic-operation
-pub fn upgrade_helper(snapshot: &str) -> String {
+pub fn upgrade_helper(snapshot: &str) -> ExitStatus {
     prepare(snapshot);
     if !aur_check() {
         let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                                            .args(["pacman", "-Syyu"])
-                                           .status().unwrap().to_string();
+                                           .status().unwrap();
         excode
     } else {
         let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                                            .args(["su", "aur", "-c", "paru -Syyu"])
-                                           .status().unwrap().to_string();
+                                           .status().unwrap();
         excode
     }
 }
