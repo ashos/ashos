@@ -890,7 +890,7 @@ pub fn post_transactions(snapshot: &str) {
                           .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                           .status().unwrap();
     // Special mutable directories
-    let options = snapshot_config_get();
+    let options = snapshot_config_get(snapshot);
     let mutable_dirs: Vec<&str> = options.get("mutable_dirs")
                                          .map(|dirs| dirs.split(',').filter(|dir| !dir.is_empty()).collect())
                                          .unwrap_or_else(|| Vec::new());
@@ -982,7 +982,7 @@ pub fn prepare(snapshot: &str) {
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/.snapshots/ash/", snapshot))
                       .status().unwrap();
     // Special mutable directories
-    let options = snapshot_config_get();
+    let options = snapshot_config_get(snapshot);
     let mutable_dirs: Vec<&str> = options.get("mutable_dirs")
                                          .map(|dirs| dirs.split(',').filter(|dir| !dir.is_empty()).collect())
                                          .unwrap_or_else(|| Vec::new());
@@ -1129,15 +1129,15 @@ pub fn show_fstree() {
 }
 
 // Read snap file
-pub fn snap() -> String {
-    let source_dep = get_tmp();
-    let sfile = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", source_dep)).unwrap();
-    let mut buf_read = BufReader::new(sfile);
-    let mut snap_value = String::new();
-    buf_read.read_line(&mut snap_value).unwrap();
-    let snap = snap_value.replace(" ", "").replace("\n", "");
-    snap
-}
+//pub fn snap() -> String {
+    //let source_dep = get_tmp();
+    //let sfile = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", source_dep)).unwrap();
+    //let mut buf_read = BufReader::new(sfile);
+    //let mut snap_value = String::new();
+    //buf_read.read_line(&mut snap_value).unwrap();
+    //let snap = snap_value.replace(" ", "").replace("\n", "");
+    //snap
+//}
 
 // Edit per-snapshot configuration
 pub fn snapshot_config_edit(snapshot: &str) {
@@ -1201,17 +1201,17 @@ pub fn snapshot_config_edit(snapshot: &str) {
 }
 
 // Get per-snapshot configuration options
-pub fn snapshot_config_get() -> HashMap<String, String> {
+pub fn snapshot_config_get(snap: &str) -> HashMap<String, String> {
     let mut options = HashMap::new();
 
-    if !Path::new(&format!("/.snapshots/etc/etc-{}/ash.conf", snap())).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/etc/etc-{}/ash.conf", snap)).try_exists().unwrap() {
         // defaults here
         options.insert(String::from("aur"), String::from("False"));
         options.insert(String::from("mutable_dirs"), String::new());
         options.insert(String::from("mutable_dirs_shared"), String::new());
         return options;
     } else {
-        let optfile = File::open(format!("/.snapshots/etc/etc-{}/ash.conf", snap())).unwrap();
+        let optfile = File::open(format!("/.snapshots/etc/etc-{}/ash.conf", snap)).unwrap();
         let reader = BufReader::new(optfile);
 
         for line in reader.lines() {

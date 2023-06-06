@@ -3,11 +3,11 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Command, ExitStatus};
 use crate::{check_mutability, chr_delete, get_tmp, immutability_disable, immutability_enable, prepare, post_transactions,
-            snap, snapshot_config_get, sync_time, write_desc};
+            snapshot_config_get, sync_time, write_desc};
 
 // Check if AUR is setup right
-pub fn aur_check() -> bool {
-    let options = snapshot_config_get();
+pub fn aur_check(snapshot: &str) -> bool {
+    let options = snapshot_config_get(snapshot);
     if options["aur"] == "True" {
         let aur = true;
         return aur;
@@ -15,7 +15,7 @@ pub fn aur_check() -> bool {
         let aur = false;
         return aur;
     } else {
-        panic!("Please insert valid value for aur in /.snapshots/etc/etc-{}/ash.conf", snap());
+        panic!("Please insert valid value for aur in /.snapshots/etc/etc-{}/ash.conf", snapshot);
     }
 }
 
@@ -23,7 +23,7 @@ pub fn aur_check() -> bool {
 pub fn auto_upgrade(snapshot: &str) {
     sync_time(); // Required in virtualbox, otherwise error in package db update
     prepare(snapshot);
-    if !aur_check() {
+    if !aur_check(snapshot) {
         let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                                            .args(["pacman", "--noconfirm", "-Syyu"]).status().unwrap();
         if excode.success() {
@@ -36,9 +36,9 @@ pub fn auto_upgrade(snapshot: &str) {
             Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").status().unwrap();
         }
     } else {
-        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                           .args(["su", "aur", "-c", "paru --noconfirm -Syy"])
-                                           .status().unwrap();
+        let excode = Command::new("sh").arg("-c")
+                                       .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} su aur -c 'paru --noconfirm -Syy'", snapshot))
+                                       .status().unwrap();
         if excode.success() {
             post_transactions(snapshot);
             Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").status().unwrap();
@@ -129,11 +129,11 @@ pub fn install_package(snapshot:&str, pkg: &str) -> i32 {
                                        .status().unwrap(); // --sysroot
     if !excode.success() {
         prepare(snapshot);
-        if aur_check() {
-            let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                               .args(["su", "aur", "-c"])
-                                               .arg(format!("\'paru -S {} --needed --overwrite '/var/*''\'", pkg))
-                                               .status().unwrap();
+        if aur_check(snapshot) {
+            let excode = Command::new("sh")
+                .arg("-c")
+                .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} su aur -c \'paru -S {} --needed --overwrite '/var/*''\'", snapshot,pkg))
+                .status().unwrap();
             if excode.success() {
                 return 0;
             } else {
@@ -232,15 +232,15 @@ pub fn uninstall_package_helper(snapshot: &str, pkg: &str) -> ExitStatus {
 // Upgrade snapshot atomic-operation
 pub fn upgrade_helper(snapshot: &str) -> ExitStatus {
     prepare(snapshot);
-    if !aur_check() {
+    if !aur_check(snapshot) {
         let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                                            .args(["pacman", "-Syyu"])
                                            .status().unwrap();
         excode
     } else {
-        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                           .args(["su", "aur", "-c", "paru -Syyu"])
-                                           .status().unwrap();
+        let excode = Command::new("sh").arg("-c")
+                                       .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} su aur -c 'paru -Syyu", snapshot))
+                                       .status().unwrap();
         excode
     }
 }
