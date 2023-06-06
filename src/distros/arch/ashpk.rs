@@ -51,103 +51,52 @@ pub fn auto_upgrade(snapshot: &str) {
     }
 }
 
-// Copy cache of downloaded packages to shared
-pub fn cache_copy(snapshot: &str) {
-    Command::new("cp").args(["-n", "-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg/.", snapshot))
-                      .arg("/var/cache/pacman/pkg/").status().unwrap();
+// Fix signature invalid error
+pub fn fix_package_db(snapshot: &str) {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+        eprintln!("Cannot fix package manager database as snapshot {} doesn't exist.", snapshot);
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot);
+    } else {
+        let p = if snapshot == "0" {//REVIEW // I think this is wrong. It should be check if snapshot = current-deployed-snapshot, then this.
+            "".to_string()
+        } else {
+            format!("chroot /.snapshots/rootfs/snapshot-chr{}", snapshot)
+        };
+        let flip = if check_mutability(snapshot) { // Snapshot is mutable so do not make it immutable after fixdb is done.
+            false
+        } else {
+            immutability_disable(snapshot);
+            true
+        };
+        prepare(snapshot);
+        if flip {
+            immutability_enable(snapshot);
+        }
+        // this is ugly! //REVIEW
+        let home_dir = std::env::var_os("HOME").unwrap();
+        let excode1 = Command::new("sh").arg("-c").arg(format!("{} rm -rf /etc/pacman.d/gnupg {}/.gnupg", p,home_dir.to_str().unwrap())).status().unwrap();
+        let excode2 = Command::new("sh").arg("-c").arg(format!("{} rm -r /var/lib/pacman/sync/*", p)).status().unwrap();
+        let excode3 = Command::new("sh").arg("-c").arg(format!("{} pacman -Syy", p)).status().unwrap();
+        let excode4 = Command::new("sh").arg("-c").arg(format!("{} gpg --refresh-keys", p)).status().unwrap();
+        let excode5 = Command::new("sh").arg("-c").arg(format!("{} killall gpg-agent", p)).status().unwrap();
+        let excode6 = Command::new("sh").arg("-c").arg(format!("{} pacman-key --init", p)).status().unwrap();
+        let excode7 = Command::new("sh").arg("-c").arg(format!("{} pacman-key --populate archlinux", p)).status().unwrap();
+        let excode8 = Command::new("sh").arg("-c").arg(format!("{} pacman -Syvv --noconfirm archlinux-keyring", p)).status().unwrap(); // REVIEW NEEDED? (maybe)
+        post_transactions(snapshot);
+        if excode1.success() && excode2.success() && excode3.success() && excode4.success()
+            && excode5.success() && excode6.success() && excode7.success() && excode8.success() {
+            println!("Snapshot {}'s package manager database fixed successfully.", snapshot);
+        } else {
+            chr_delete(snapshot);
+            println!("Fixing package manager database failed.");
+        }
+    }
 }
-
-// Fix signature invalid error //This's ugly code //REVIEW
-//pub fn fix_package_db(snapshot: &str) {
-    //if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        //eprintln!("Cannot fix package manager database as snapshot {} doesn't exist.", snapshot);
-    //} else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
-        //eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot, snapshot);
-    //} else if snapshot == "0" {
-        //let mut p = Command::new("chroot");
-        //while p.status().is_ok() {
-            //if check_mutability(snapshot) {
-                //immutability_disable(snapshot);
-            //}
-            //prepare(snapshot);
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                  //.args(["rm", "-rf"])
-                                  //.arg("/etc/pacman.d/gnupg")
-                                  //.arg("/home/me/.gnupg").output().expect("Fixing package manager database failed.");
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.args(["rm", "-r"])
-             //.arg("/var/lib/pacman/db.lck").output().expect("Fixing package manager database failed.");
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.args(["pacman", "-Syy"]).output().expect("Fixing package manager database failed.");
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.args(["gpg", "--refresh-keys"]).output().expect("Fixing package manager database failed.");
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.args(["killall", "gpg-agent"]).output().expect("Fixing package manager database failed.");
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.args(["pacman-key", "--init"]).output().expect("Fixing package manager database failed.");
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.args(["pacman-key", "--populate", "archlinux"])
-             //.output().expect("Fixing package manager database failed.");
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.args(["pacman", "-Syvv", "--noconfirm", "archlinux-keyring"])
-             //.output().expect("Fixing package manager database failed.");
-            //post_transactions(snapshot);
-            //if !check_mutability(snapshot) {
-                //immutability_enable(snapshot);
-            //}
-            //println!("Snapshot {}'s package manager database fixed successfully.", snapshot);
-            //break;
-        //}
-        //if p.status().is_err(){
-            //chr_delete(snapshot);
-        //}
-    //} else {
-        //let mut p = Command::new("");
-        //while p.status().is_ok() {
-            //if check_mutability(snapshot) {
-                //immutability_disable(snapshot);
-            //}
-            //prepare(snapshot);
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                  //.args(["rm", "-rf"])
-                                  //.arg("/etc/pacman.d/gnupg")
-                                  //.arg("/home/me/.gnupg").output().expect("Fixing package manager database failed.");
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.args(["rm", "-r"])
-             //.arg("/var/lib/pacman/db.lck").output().expect("Fixing package manager database failed.");
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.args(["pacman", "-Syy"]).output().expect("Fixing package manager database failed.");
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.args(["gpg", "--refresh-keys"]).output().expect("Fixing package manager database failed.");
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.args(["killall", "gpg-agent"]).output().expect("Fixing package manager database failed.");
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.args(["pacman-key", "--init"]).output().expect("Fixing package manager database failed.");
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.args(["pacman-key", "--populate", "archlinux"])
-             //.output().expect("Fixing package manager database failed.");
-            //p.arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-             //.args(["pacman", "-Syvv", "--noconfirm", "archlinux-keyring"])
-             //.output().expect("Fixing package manager database failed.");
-            //post_transactions(snapshot);
-            //if !check_mutability(snapshot) {
-                //immutability_enable(snapshot);
-            //}
-            //println!("Snapshot {}'s package manager database fixed successfully.", snapshot);
-            //break;
-        //}
-        //if p.status().is_err(){
-            //chr_delete(snapshot);
-//        }
-//    }
-//}
 
 // Delete init system files (Systemd, OpenRC, etc.)
 pub fn init_system_clean(snapshot: &str, from: &str) {
-    if from == "prepare"{
+    if from == "prepare" {
         Command::new("rm").arg("-rf")
                           .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/*", snapshot))
                           .status().unwrap();
@@ -270,21 +219,6 @@ pub fn pkg_list(chr: &str, snap: &str) -> Vec<String> {
 pub fn refresh_helper(snapshot: &str) -> ExitStatus {
     Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                           .args(["pacman", "-Syy"]).status().unwrap()
-}
-
-// Show diff of packages between 2 snapshots
-pub fn snapshot_diff(snap1: &str, snap2: &str) {
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap1)).try_exists().unwrap() {
-        println!("Snapshot {} not found.", snap1);
-    } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap2)).try_exists().unwrap() {
-        println!("Snapshot {} not found.", snap2);
-    } else {
-        Command::new("bash")
-                .arg("-c")
-                .arg(format!("diff <(ls /.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local)\\
- <(ls /.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local) | grep '^>\\|^<' | sort", snap1, snap2))
-                .status().unwrap();
-    }
 }
 
 // Uninstall package(s) atomic-operation

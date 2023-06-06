@@ -68,6 +68,13 @@ pub fn ash_version() {
     println!("{}", version);
 }
 
+// Copy cache of downloaded packages to shared
+pub fn cache_copy(snapshot: &str) {
+    Command::new("cp").args(["-n", "-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg/.", snapshot))
+                      .arg("/var/cache/pacman/pkg/").status().unwrap();
+}
+
 // Check if snapshot is mutable
 pub fn check_mutability(snapshot: &str) -> bool {
     Path::new(&format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snapshot))
@@ -827,19 +834,15 @@ pub fn post_transactions(snapshot: &str) {
                          .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
                          .status().unwrap();
     if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/usr/share/ash/mutable", snapshot)).try_exists().unwrap() {
-        let immutability = "";
         Command::new("btrfs").args(["sub", "snap"])
-                             .arg(format!("{}", immutability))
                              .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
                              .arg(format!("/.snapshots/boot/boot-{}", snapshot)).status().unwrap();
         Command::new("btrfs").args(["sub", "snap"])
-                             .arg(format!("{}", immutability))
                              .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
                              .arg(format!("/.snapshots/etc/etc-{}", snapshot)).status().unwrap();
         // Copy init system files to shared
         init_system_copy(tmp, "post_transactions");
         Command::new("btrfs").args(["sub", "snap"])
-                             .arg(format!("{}", immutability))
                              .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                              .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
                              .status().unwrap();
@@ -1222,6 +1225,21 @@ pub fn snapshot_config_get() -> HashMap<String, String> {
             }
         }
         return options;
+    }
+}
+
+// Show diff of packages between 2 snapshots
+pub fn snapshot_diff(snap1: &str, snap2: &str) {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap1)).try_exists().unwrap() {
+        println!("Snapshot {} not found.", snap1);
+    } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap2)).try_exists().unwrap() {
+        println!("Snapshot {} not found.", snap2);
+    } else {
+        Command::new("bash")
+                .arg("-c")
+                .arg(format!("diff <(ls /.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local)\\
+ <(ls /.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local) | grep '^>\\|^<' | sort", snap1, snap2))
+                .status().unwrap();
     }
 }
 
