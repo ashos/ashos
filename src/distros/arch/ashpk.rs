@@ -158,53 +158,26 @@ pub fn install_package(snapshot:&str, pkg: &str) -> i32 {
     }
 }
 
-// Install atomic-operation in live snapshot //REVIEW
-//pub fn install_package_live(snapshot: &str, pkg: &str) {
-    // This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
-    //let excode = Command::new("pacman").arg("-Si")
-                                       //.arg(format!("{}", pkg))
-                                       //.status().unwrap(); // --sysroot
-    //if !excode.success() {
-        //let options = snapshot_config_get();
-        //if options["aur"] == "True" {
-            //let aur_in_tmp = true;
-        //} else {
-            //let aur_in_tmp = false;
-            //if aur_in_tmp && aur_check {
-                //excode = aur_install_live_helper(tmp)
-            //if excode:
-                //os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
-                //os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-                //print("F: Live install failed and changes discarded!")
-                //return excode
-        //if snapshot_config_get(snapshot)["aur"] == "True":
-            //aur_in_destination_snapshot = True
-        //else:
-            //aur_in_destination_snapshot = False
-            //print("F: AUR not enabled in target snapshot!") ### REVIEW
-        //### REVIEW - error checking, handle the situation better altogether
-        //if aur_in_destination_snapshot and not aur_in_tmp:
-            //print("F: AUR is not enabled in current live snapshot, but is enabled in target.\nEnable AUR for live snapshot? (y/n)")
-            //reply = input("> ")
-            //while reply.casefold() != "y" and reply.casefold() != "n":
-                //print("Please enter 'y' or 'n':")
-                //reply = input("> ")
-            //if reply == "y":
-                //if not aur_check(tmp):
-                    //excode = aur_install_live_helper(tmp)
-                    //if excode:
-                        //os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
-                        //os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-                        //print("F: Live install failed and changes discarded!")
-                        //return excode
-            //else:
-                //print("F: Not enabling AUR for live snapshot!")
-                //excode = 1
-    //else:
-        //#ash_chroot_mounts(tmp) ### REVIEW If issues to have this in ashpk_core.py, uncomment this
-        //excode = os.system(f"chroot /.snapshots/rootfs/snapshot-{tmp} pacman -Sy --overwrite '*' --noconfirm {pkg}{DEBUG}") ### REVIEW Maybe just do this in try section and remove else section!
-        //return excode
-//}
+// Install atomic-operation in live snapshot
+pub fn install_package_live(tmp: &str, pkg: &str) -> ExitStatus {
+    let excode = Command::new("pacman").arg("-Si")
+                                       .arg(format!("{}", pkg))
+                                       .status().unwrap(); // --sysroot
+    if excode.success() {
+        let excode = Command::new("sh")
+            .arg("-c")
+            .arg(format!("chroot /.snapshots/rootfs/snapshot-{} pacman -Sy --overwrite '*' --noconfirm {}", tmp,pkg))
+            .status().unwrap();
+        return excode;
+    } else {
+        let excode = Command::new("sh")
+            .arg("-c")
+            .arg(format!("chroot /.snapshots/rootfs/snapshot-{} su aur -c 'paru -Sy --overwrite '*' --noconfirm {}'", tmp,pkg))
+
+            .status().unwrap();
+        return excode;
+    }
+}
 
 // Get list of packages installed in a snapshot
 pub fn pkg_list(chr: &str, snap: &str) -> Vec<String> {

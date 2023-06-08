@@ -670,24 +670,40 @@ pub fn install(snapshot: &str, pkg: &str) {
     }
 }
 
-//#   Install live
-//def install_live(snapshot, pkg):
-    //tmp = get_tmp()
-    //#options = get_persnap_options(tmp) ### moved this to install_package_live
-    //os.system(f"mount --bind /.snapshots/rootfs/snapshot-{tmp} /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-    //os.system(f"mount --bind /home /.snapshots/rootfs/snapshot-{tmp}/home{DEBUG}")
-    //os.system(f"mount --bind /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}")
-    //os.system(f"mount --bind /etc /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
-    //os.system(f"mount --bind /tmp /.snapshots/rootfs/snapshot-{tmp}/tmp{DEBUG}")
-    //ash_chroot_mounts(tmp) ### REVIEW Not having this was the culprit for live install to fail for Arch and derivative. Now, does having this here Ok or does it cause errors in NON-Arch distros? If so move it to ashpk.py
-    //print("Please wait as installation is finishing.")
-    //excode = install_package_live(snapshot, tmp, pkg)
-    //os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
-    //os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") ### REVIEW not safe
-    //if not excode:
-        //print(f"Package(s) {pkg} live installed in snapshot {snapshot} successfully.")
-    //else:
-        //print("F: Live installation failed!")
+// Install live
+pub fn install_live(snapshot: &str, pkg: &str) {
+    let tmp = get_tmp();
+    Command::new("mount").arg("--bind")
+                         .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
+                         .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
+                         .status().unwrap();
+    Command::new("mount").arg("--bind")
+                         .arg("/home")
+                         .arg(format!("/.snapshots/rootfs/snapshot-{}/home", tmp))
+                         .status().unwrap();
+    Command::new("mount").arg("--bind")
+                         .arg("/var")
+                         .arg(format!("/.snapshots/rootfs/snapshot-{}/var",tmp))
+                         .status().unwrap();
+    Command::new("mount").arg("--bind")
+                         .arg("/etc")
+                         .arg(format!("/.snapshots/rootfs/snapshot-{}/etc", tmp))
+                         .status().unwrap();
+    Command::new("mount").arg("--bind")
+                         .arg("/tmp")
+                         .arg(format!("/.snapshots/rootfs/snapshot-{}/tmp", tmp))
+                         .status().unwrap();
+    ash_chroot_mounts(tmp);
+    println!("Please wait as installation is finishing.");
+    let excode = install_package_live(tmp, pkg);
+    Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}/*", tmp)).status().unwrap();
+    Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp)).status().unwrap();
+    if excode.success() {
+        println!("Package(s) {} live installed in snapshot {} successfully.", pkg,snapshot);
+    } else {
+        eprintln!("Live installation failed!");
+    }
+}
 
 /*   Install a profile from a text file
 def install_profile(snapshot, profile):
