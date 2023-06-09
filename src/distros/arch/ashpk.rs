@@ -159,23 +159,27 @@ pub fn install_package(snapshot:&str, pkg: &str) -> i32 {
 }
 
 // Install atomic-operation in live snapshot
-pub fn install_package_live(tmp: &str, pkg: &str) -> ExitStatus {
+pub fn install_package_live(snapshot: &str, tmp: &str, pkg: &str) -> ExitStatus {
     let excode = Command::new("pacman").arg("-Si")
                                        .arg(format!("{}", pkg))
-                                       .status().unwrap(); // --sysroot
-    if excode.success() {
+                                       .output().unwrap(); // --sysroot
+    if excode.status.success() {
         let excode = Command::new("sh")
             .arg("-c")
             .arg(format!("chroot /.snapshots/rootfs/snapshot-{} pacman -Sy --overwrite '*' --noconfirm {}", tmp,pkg))
             .status().unwrap();
         return excode;
     } else {
-        let excode = Command::new("sh")
-            .arg("-c")
-            .arg(format!("chroot /.snapshots/rootfs/snapshot-{} su aur -c 'paru -Sy --overwrite '*' --noconfirm {}'", tmp,pkg))
-
-            .status().unwrap();
-        return excode;
+        if aur_check(snapshot) {
+            let excode = Command::new("sh")
+                .arg("-c")
+                .arg(format!("chroot /.snapshots/rootfs/snapshot-{} su aur -c 'paru -Sy --overwrite '*' --noconfirm {}'", tmp,pkg))
+                .status().unwrap();
+            return excode;
+        } else {
+            eprint!("AUR is not enabled!");
+            return excode.status;
+        }
     }
 }
 

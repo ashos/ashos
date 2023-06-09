@@ -695,7 +695,7 @@ pub fn install_live(snapshot: &str, pkg: &str) {
                          .status().unwrap();
     ash_chroot_mounts(tmp);
     println!("Please wait as installation is finishing.");
-    let excode = install_package_live(tmp, pkg);
+    let excode = install_package_live(snapshot, tmp, pkg);
     Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}/*", tmp)).status().unwrap();
     Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp)).status().unwrap();
     if excode.success() {
