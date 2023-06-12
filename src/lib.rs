@@ -404,55 +404,113 @@ pub fn delete_node(snapshots: &str, quiet: bool) {
     }
 }
 
-/*   Deploy snapshot
-def deploy(snapshot):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
-        print(f"F: Cannot deploy as snapshot {snapshot} doesn't exist.")
-    else:
-        update_boot(snapshot)
-        tmp = get_tmp()
-        os.system(f"btrfs sub set-default /.snapshots/rootfs/snapshot-{tmp}{DEBUG}") # Set default volume
-        tmp_delete()
-        if "deploy-aux" in tmp:
-            tmp = "deploy"
-        else:
-            tmp = "deploy-aux"
-      # Special mutable directories
-        options = snapshot_config_get(snapshot)
-        mutable_dirs = options["mutable_dirs"].split(',').remove('')
-        mutable_dirs_shared = options["mutable_dirs_shared"].split(',').remove('')
-      # btrfs snapshot operations
-        os.system(f"btrfs sub snap /.snapshots/boot/boot-{snapshot} /.snapshots/boot/boot-{tmp}{DEBUG}")
-        os.system(f"btrfs sub snap /.snapshots/etc/etc-{snapshot} /.snapshots/etc/etc-{tmp}{DEBUG}")
-        os.system(f"btrfs sub snap /.snapshots/rootfs/snapshot-{snapshot} /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")
-        os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/boot{DEBUG}")
-        os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
-        os.system(f"rm -rf /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}")
-        os.system(f"cp -r --reflink=auto /.snapshots/boot/boot-{snapshot}/. /.snapshots/rootfs/snapshot-{tmp}/boot{DEBUG}")
-        os.system(f"cp -r --reflink=auto /.snapshots/etc/etc-{snapshot}/. /.snapshots/rootfs/snapshot-{tmp}/etc{DEBUG}")
-      # If snapshot is mutable, modify '/' entry in fstab to read-write
-        if check_mutability(snapshot):
-            os.system(f"sed -i '0,/snapshot-{tmp}/ s|,ro||' /.snapshots/rootfs/snapshot-{tmp}/etc/fstab") ### ,rw
-      # Add special user-defined mutable directories as bind-mounts into fstab
-        if mutable_dirs:
-            for mount_path in mutable_dirs:
-                source_path = f"/.snapshots/mutable_dirs/snapshot-{snapshot}/{mount_path}"
-                os.system(f"mkdir -p /.snapshots/mutable_dirs/snapshot-{snapshot}/{mount_path}")
-                os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mount_path}")
-                os.system(f"echo '{source_path} /{mount_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
-      # Same thing but for shared directories
-        if mutable_dirs_shared:
-            for mount_path in mutable_dirs_shared:
-                source_path = f"/.snapshots/mutable_dirs/{mount_path}"
-                os.system(f"mkdir -p /.snapshots/mutable_dirs/{mount_path}")
-                os.system(f"mkdir -p /.snapshots/rootfs/snapshot-{tmp}/{mount_path}")
-                os.system(f"echo '{source_path} /{mount_path} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{tmp}/etc/fstab")
-        os.system(f"btrfs sub snap /var /.snapshots/rootfs/snapshot-{tmp}/var{DEBUG}") ### Is this needed?
-        os.system(f"echo '{snapshot}' > /.snapshots/rootfs/snapshot-{tmp}/usr/share/ash/snap")
-        switch_tmp()
-        init_system_clean(tmp, "deploy")
-        os.system(f"btrfs sub set-default /.snapshots/rootfs/snapshot-{tmp}") # Set default volume
-        print(f"Snapshot {snapshot} deployed to /.")*/
+// Deploy snapshot //REVIEW
+pub fn deploy(snapshot: &str) {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+        eprintln!("Cannot deploy as snapshot {} doesn't exist.", snapshot);
+    } else {
+        update_boot(snapshot);
+        let tmp = get_tmp();
+        Command::new("btrfs").args(["sub", "set-default"])
+                             .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
+                             .status().unwrap(); // Set default volume
+        tmp_delete();
+        let tmp = if tmp.contains("deploy-aux") {
+            "deploy"
+        } else {
+            "deploy-aux"
+        };
+        // Special mutable directories
+        let options = snapshot_config_get(snapshot);
+        let mutable_dirs: Vec<&str> = options.get("mutable_dirs")
+                                             .map(|dirs| dirs.split(',').filter(|dir| !dir.is_empty()).collect())
+                                             .unwrap_or_else(|| Vec::new());
+        let mutable_dirs_shared: Vec<&str> = options.get("mutable_dirs_shared")
+                                                    .map(|dirs| dirs.split(',').filter(|dir| !dir.is_empty()).collect())
+                                                    .unwrap_or_else(|| Vec::new());
+        // btrfs snapshot operations
+        Command::new("btrfs").args(["sub", "snap"])
+                             .arg(format!("/.snapshots/boot/boot-{}", snapshot))
+                             .arg(format!("/.snapshots/boot/boot-{}", tmp))
+                             .status().unwrap();
+        Command::new("btrfs").args(["sub", "snap"])
+                             .arg(format!("/.snapshots/etc/etc-{}", snapshot))
+                             .arg(format!("/.snapshots/etc/etc-{}", tmp))
+                             .status().unwrap();
+        Command::new("btrfs").args(["sub", "snap"])
+                             .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
+                             .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
+                             .status().unwrap();
+        Command::new("mkdir").arg("-p")
+                             .arg(format!("/.snapshots/rootfs/snapshot-{}/boot", tmp))
+                             .status().unwrap();
+        Command::new("mkdir").arg("-p")
+                             .arg(format!("/.snapshots/rootfs/snapshot-{}/etc", tmp))
+                             .status().unwrap();
+        Command::new("rm").arg("-rf")
+                          .arg(format!("/.snapshots/rootfs/snapshot-{}/var", tmp))
+                          .status().unwrap();
+        Command::new("cp").args(["-r", "--reflink=auto"])
+                          .arg(format!("/.snapshots/boot/boot-{}/.", snapshot))
+                          .arg(format!("/.snapshots/rootfs/snapshot-{}/boot", tmp))
+                          .status().unwrap();
+        Command::new("cp").args(["-r", "--reflink=auto"])
+                          .arg(format!("/.snapshots/etc/etc-{}/.", snapshot))
+                          .arg(format!("/.snapshots/rootfs/snapshot-{}/etc", tmp))
+                          .status().unwrap();
+        // If snapshot is mutable, modify '/' entry in fstab to read-write
+        if check_mutability(snapshot) {
+            Command::new("sh").arg("-c")
+                              .arg(format!("sed -i '0,/snapshot-{}/ s|,ro||' /.snapshots/rootfs/snapshot-{}/etc/fstab", tmp,tmp)) // ,rw
+                              .status().unwrap();
+        }
+        // Add special user-defined mutable directories as bind-mounts into fstab
+        if !mutable_dirs.is_empty() {
+            for mount_path in mutable_dirs {
+                let source_path = format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path);
+                Command::new("mkdir").arg("-p")
+                                     .arg(format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path))
+                                     .status().unwrap();
+                Command::new("mkdir").arg("-p")
+                                     .arg(format!("/.snapshots/rootfs/snapshot-{}/{}", tmp,mount_path))
+                                     .status().unwrap();
+                Command::new("sh")
+                    .arg("-c")
+                    .arg(format!("echo '{} /{} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{}/etc/fstab", source_path,mount_path,tmp))
+                    .status().unwrap();
+            }
+        }
+        // Same thing but for shared directories
+        if mutable_dirs_shared.is_empty() {
+            for mount_path in mutable_dirs_shared {
+                let source_path = format!("/.snapshots/mutable_dirs/{}", mount_path);
+                Command::new("mkdir").arg("-p")
+                                     .arg(format!("/.snapshots/mutable_dirs/{}", mount_path))
+                                     .status().unwrap();
+                Command::new("mkdir").arg("-p")
+                                     .arg(format!("/.snapshots/rootfs/snapshot-{}/{}", tmp,mount_path))
+                                     .status().unwrap();
+                Command::new("sh").arg("-c")
+                                  .arg(format!("echo '{} /{} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{}/etc/fstab", source_path,mount_path,tmp))
+                                  .status().unwrap();
+                Command::new("btrfs").args(["sub", "snap"])
+                                     .arg("/var")
+                                     .arg(format!("/.snapshots/rootfs/snapshot-{}/var", tmp)).status().unwrap(); // Is this needed?
+                Command::new("sh").arg("-c")
+                                  .arg(format!("echo '{}' > /.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", snapshot,tmp))
+                                  .status().unwrap();
+            }
+            switch_tmp();
+            init_system_clean(tmp, "deploy");
+            let excode = Command::new("btrfs").args(["sub", "set-default"])
+                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
+                                 .status().unwrap(); // Set default volume
+            if excode.success() {
+                println!("Snapshot {} deployed to /.", snapshot) //REVIEW
+            }
+        }
+    }
+}
 
 // Add node to branch
 pub fn extend_branch(snapshot: &str, desc: &str) {
@@ -1322,53 +1380,88 @@ def switch_distro():
             break
         else:
             print("Invalid distro!")
-            continue
+            continue*/
 
-#   Switch between /tmp deployments
-def switch_tmp():
-    distro_suffix = get_distro_suffix()
-    part = get_part()
-    tmp_boot = subprocess.check_output("mktemp -d -p /.snapshots/tmp boot.XXXXXXXXXXXXXXXX", shell=True).decode('utf-8').strip()
-    os.system(f"mount {part} -o subvol=@boot{distro_suffix} {tmp_boot}") # Mount boot partition for writing
-  # Swap deployment subvolumes: deploy <-> deploy-aux
-    if "deploy-aux" in get_tmp():
-        source_dep = "deploy-aux"
-        target_dep = "deploy"
-    else:
-        source_dep = "deploy"
-        target_dep = "deploy-aux"
-    os.system(f"cp -r --reflink=auto /.snapshots/rootfs/snapshot-{target_dep}/boot/. {tmp_boot}")
-    os.system(f"sed -i 's|@.snapshots{distro_suffix}/rootfs/snapshot-{source_dep}|@.snapshots{distro_suffix}/rootfs/snapshot-{target_dep}|g' {tmp_boot}/{GRUB}/grub.cfg") # Overwrite grub config boot subvolume
-    os.system(f"sed -i 's|@.snapshots{distro_suffix}/rootfs/snapshot-{source_dep}|@.snapshots{distro_suffix}/rootfs/snapshot-{target_dep}|g' /.snapshots/rootfs/snapshot-{target_dep}/boot/{GRUB}/grub.cfg")
-    os.system(f"sed -i 's|@.snapshots{distro_suffix}/boot/boot-{source_dep}|@.snapshots{distro_suffix}/boot/boot-{target_dep}|g' /.snapshots/rootfs/snapshot-{target_dep}/etc/fstab") # Update fstab for new deployment
-    os.system(f"sed -i 's|@.snapshots{distro_suffix}/etc/etc-{source_dep}|@.snapshots{distro_suffix}/etc/etc-{target_dep}|g' /.snapshots/rootfs/snapshot-{target_dep}/etc/fstab")
-    os.system(f"sed -i 's|@.snapshots{distro_suffix}/rootfs/snapshot-{source_dep}|@.snapshots{distro_suffix}/rootfs/snapshot-{target_dep}|g' /.snapshots/rootfs/snapshot-{target_dep}/etc/fstab")
-    with open(f"/.snapshots/rootfs/snapshot-{source_dep}/usr/share/ash/snap", "r") as sfile:
-        snap = sfile.readline().replace(" ", "").replace('\n', "")
-  # Update GRUB configurations
-    for boot_location in ["/.snapshots/rootfs/snapshot-deploy-aux/boot", tmp_boot]:
-        with open(f"{boot_location}/{GRUB}/grub.cfg", "r") as grubconf:
-            line = grubconf.readline()
-            while "BEGIN /etc/grub.d/10_linux" not in line:
-                line = grubconf.readline()
-            line = grubconf.readline()
-            gconf = str("")
-            while "}" not in line:
-                gconf = str(gconf)+str(line)
-                line = grubconf.readline()
-            if "snapshot-deploy-aux" in gconf:
-                gconf = gconf.replace("snapshot-deploy-aux", "snapshot-deploy")
-            else:
-                gconf = gconf.replace("snapshot-deploy", "snapshot-deploy-aux")
-            if distro_name in gconf:
-                gconf = sub('snapshot \d', '', gconf)
-                gconf = gconf.replace(f"{distro_name}", f"{distro_name} last booted deployment (snapshot {snap})")
-        os.system(f"sed -i '$ d' {boot_location}/{GRUB}/grub.cfg")
-        with open(f"{boot_location}/{GRUB}/grub.cfg", "a") as grubconf:
-            grubconf.write(gconf)
-            grubconf.write("}\n")
-            grubconf.write("### END /etc/grub.d/41_custom ###")
-    os.system(f"umount {tmp_boot}{DEBUG}")*/
+// Switch between /tmp deployments //REVIEW
+pub fn switch_tmp() {
+    let distro_suffix = get_distro_suffix(&detect::distro_id().as_str());
+    let grub =  String::from_utf8(Command::new("sh").arg("-c")
+                                  .arg("ls /boot | grep grub")
+                                  .output().unwrap().stdout).unwrap().trim().to_string();
+    let part = get_part();
+    let tmp_boot = String::from_utf8(Command::new("sh").arg("-c")
+                                     .arg("mktemp -d -p /.snapshots/tmp boot.XXXXXXXXXXXXXXXX")
+                                     .output().unwrap().stdout).unwrap().trim().to_string();
+    Command::new("sh").arg("-c").arg("mount").arg(format!("{} -o subvol=@boot{} {}", part,distro_suffix,tmp_boot)).status().unwrap(); // Mount boot partition for writing
+    // Swap deployment subvolumes: deploy <-> deploy-aux
+    let (source_dep, target_dep) = if get_tmp().contains("deploy-aux") {
+        ("deploy-aux", "deploy")
+    } else {
+        ("deploy", "deploy-aux")
+    };
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/boot/.", target_dep))
+                      .arg(format!("{}", tmp_boot)).status().unwrap();
+    Command::new("sed")
+        .arg("-i")
+        .arg(format!("s|@.snapshots{}/rootfs/snapshot-{}|@.snapshots{}/rootfs/snapshot-{}|g", distro_suffix,source_dep,distro_suffix,target_dep))
+        .arg(format!("{}/{}/grub.cfg", tmp_boot,grub)).status().unwrap(); // Overwrite grub config boot subvolume
+    Command::new("sed")
+        .arg("-i")
+        .arg(format!("s|@.snapshots{}/rootfs/snapshot-{}|@.snapshots{}/rootfs/snapshot-{}|g", distro_suffix,source_dep,distro_suffix,target_dep))
+        .arg(format!("/.snapshots/rootfs/snapshot-{}/boot/{}/grub.cfg", target_dep,grub)).status().unwrap();
+    Command::new("sed")
+        .arg("-i")
+        .arg(format!("s|@.snapshots{}/boot/boot-{}|@.snapshots{}/boot/boot-{}|g",distro_suffix,source_dep,distro_suffix,target_dep))
+        .arg(format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", target_dep)).status().unwrap(); // Update fstab for new deployment
+    Command::new("sed")
+        .arg("-i")
+        .arg(format!("s|@.snapshots{}/etc/etc-{}|@.snapshots{}/etc/etc-{}|g", distro_suffix,source_dep,distro_suffix,target_dep))
+        .arg(format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", target_dep)).status().unwrap();
+    Command::new("sed")
+        .arg("-i")
+        .arg(format!("s|@.snapshots{}/rootfs/snapshot-{}|@.snapshots{}/rootfs/snapshot-{}|g", distro_suffix,source_dep,distro_suffix,target_dep))
+        .arg(format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", target_dep)).status().unwrap();
+    let file = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", source_dep)).unwrap();
+    let mut reader = BufReader::new(file);
+    let mut sfile = String::new();
+    reader.read_line(&mut sfile).unwrap();
+    let snap = sfile.replace(" ", "").replace('\n', "");
+    // Update GRUB configurations
+    for boot_location in ["/.snapshots/rootfs/snapshot-deploy-aux/boot", &tmp_boot] {
+        let file = File::open(format!("{}/{}/grub.cfg", boot_location,grub)).unwrap();
+        let mut reader = BufReader::new(file);
+        let mut grubconf = String::new();
+        let line = reader.read_line(&mut grubconf).unwrap().to_string();
+        let gconf = if line.contains("}") {
+            "".to_owned() + &line
+        } else {
+            "".to_owned()
+        };
+        let gconf = if gconf.contains("snapshot-deploy-aux") {
+            gconf.replace("snapshot-deploy-aux", "snapshot-deploy")
+        } else {
+            gconf.replace("snapshot-deploy", "snapshot-deploy-aux")
+        };
+        let gconf = if gconf.contains(&detect::distro_name()) {
+            //gconf.replace(r"snapshot \d", "");
+            gconf.replace(&detect::distro_name(), &format!("{} last booted deployment (snapshot {})", detect::distro_name(), snap))
+        } else {
+            gconf
+        };
+        Command::new("sh").arg("-c")
+                          .arg(format!("sed -i '$ d' {}/{}/grub.cfg", boot_location,grub))
+                          .status().unwrap();
+        let mut grubconf_file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(format!("{}/{}/grub.cfg", boot_location,grub)).unwrap();
+        grubconf_file.write_all(gconf.as_bytes()).unwrap();
+        grubconf_file.write_all(b"}\n").unwrap();
+        grubconf_file.write_all(b"### END /etc/grub.d/41_custom ###").unwrap();
+        drop(grubconf_file);
+        Command::new("umount").arg(format!("{}", tmp_boot)).status().unwrap();
+    };
+}
 
 // Sync time
 pub fn sync_time() {
