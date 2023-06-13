@@ -650,28 +650,40 @@ pub fn get_tmp() -> &'static str {
     }
 }
 
-/*#   Make a snapshot vulnerable to be modified even further (snapshot should be deployed as mutable)
-def hollow(s):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{s}"):
-        print(f"F: Cannot make hollow as snapshot {s} doesn't exist.")
-    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{s}"): # Make sure snapshot is not in use by another ash process
-        print(f"F: Snapshot {s} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {s}'.")
-    elif s == "0":
-        print("F: Changing base snapshot is not allowed.")
-    else:
-        ### AUR step might be needed and if so make a distro_specific function with steps similar to install_package(). Call it hollow_helper and change this accordingly().
-        prepare(s)
-        os.system(f"mount --rbind --make-rslave / /.snapshots/rootfs/snapshot-chr{s}")
-        print(f"Snapshot {s} is now hollow! When done, type YES (in capital):")
-        while True:
-            reply = input("> ")
-            if reply == "YES":
-                post_transactions(s)
-                #os.system(f"umount -R /.snapshots/rootfs/snapshot-chr{s}") OR os.system(f"umount -R /") ### REVIEW NEED to unmount this a second time?! (I BELIEVE NOT NEEDED)
-                immutability_enable(s)
-                deploy(s)
-                print(f"Snapshot {s} hollow operation succeeded. Please reboot!")
-                break*/
+// Make a snapshot vulnerable to be modified even further (snapshot should be deployed as mutable) //REVIEW
+pub fn hollow(s: &str) {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", s)).try_exists().unwrap() {
+        println!("Cannot make hollow as snapshot {} doesn't exist.", s);
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", s)).try_exists().unwrap() { // Make sure snapshot is not in use by another ash process
+        println!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", s,s)
+    } else if s == "0" {
+        println!("Changing base snapshot is not allowed.");
+    } else {
+        // AUR step might be needed and if so make a distro_specific function with steps similar to install_package().
+        // Call it hollow_helper and change this accordingly().
+        prepare(s);
+        Command::new("mount").arg("--rbind")
+                             .arg("--make-rslave")
+                             .arg("/")
+                             .arg(format!("/.snapshots/rootfs/snapshot-chr{}", s)).status().unwrap();
+        println!("Snapshot {} is now hollow! When done, type YES (in capital):", s);
+        let mut answer = String::new();
+        stdin().read_line(&mut answer).unwrap();
+        let choice: String = answer.trim().parse().unwrap();
+        let replay = if choice == "YES".to_string() {
+            true
+        } else {
+            false
+        };
+        while replay == true {
+            post_transactions(s);
+            immutability_enable(s);
+            deploy(s);
+            println!("Snapshot {} hollow operation succeeded. Please reboot!", s);
+            break;
+        }
+    }
+}
 
 // Make a node mutable
 pub fn immutability_disable(snapshot: &str) {
