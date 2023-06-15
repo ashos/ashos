@@ -747,21 +747,26 @@ pub fn immutability_enable(snapshot: &str) {
 }
 
 // Install packages
-pub fn install(snapshot: &str, pkg: &str) {
+pub fn install(snapshot: &str, pkg: &str) -> i32 {
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         eprintln!("Cannot install as snapshot {} doesn't exist.", snapshot);
+        return 1;
     } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() { // Make sure snapshot is not in use by another ash process
         eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot);
+        return 1;
     } else if snapshot == "0" {
         eprintln!("Changing base snapshot is not allowed.");
+        return 1;
     } else {
         let excode = install_package(snapshot, pkg);
         if excode == 0 {
             post_transactions(snapshot);
             println!("Package(s) {} installed in snapshot {} successfully.", pkg,snapshot);
+            return 1;
         } else {
             chr_delete(snapshot);
             eprintln!("Install failed and changes discarded.");
+            return 0;
         }
     }
 }
@@ -801,54 +806,78 @@ pub fn install_live(snapshot: &str, pkg: &str) {
     }
 }
 
-/*   Install a profile from a text file
-def install_profile(snapshot, profile):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
-        print(f"F: Cannot install as snapshot {snapshot} doesn't exist.")
-    elif os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snapshot}"): # Make sure snapshot is not in use by another ash process
-        print(f"F: Snapshot {snapshot} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snapshot}'.")
-    elif snapshot == "0":
-        print("F: Changing base snapshot is not allowed.")
-    else:
-        print(f"Updating the system before installing profile {profile}.")
-        auto_upgrade(snapshot)
-        tmp_prof = subprocess.check_output("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX", shell=True, encoding='utf-8').strip()
-        subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{profile}/packages{get_distro_suffix()}.txt", shell=True)
-        prepare(snapshot)
-        try: # Ignore empty lines or ones starting with # [ % &
-            pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\[|^%|^&|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
-            install_package(snapshot, pkg)
-            service_enable(snapshot, profile, tmp_prof)
-        except subprocess.CalledProcessError:
-            chr_delete(snapshot)
-            print("F: Install failed and changes discarded.")
-            sys.exit(1)
-        else:
-            post_transactions(snapshot)
-            print(f"Profile {profile} installed in snapshot {snapshot} successfully.")
-            print(f"Deploying snapshot {snapshot}.")
-            deploy(snapshot)*/
+// Install a profile from a text file //REVIEW error handling
+fn install_profile(snapshot: &str, profile: &str) -> i32 {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+        eprintln!("Cannot install as snapshot {} doesn't exist.", snapshot);
+        return 1;
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() { // Make sure snapshot is not in use by another ash process
+        eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot);
+        return 1;
+    } else if snapshot == "0" {
+        eprintln!("Changing base snapshot is not allowed.");
+        return 1;
+    } else {
+        println!("Updating the system before installing profile {}.", profile);
+        auto_upgrade(snapshot);
+        let tmp_prof = String::from_utf8(Command::new("sh")
+                                         .arg("-c")
+                                         .arg("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX")
+                                         .output().unwrap().stdout).unwrap().trim().to_string();
+        Command::new("sh") //REVIEW change this?
+        .arg("-c")
+        .arg(format!("curl --fail -o {}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{}/packages{}.txt",
+             tmp_prof,profile,get_distro_suffix(&detect::distro_id().as_str()))).status().unwrap();
+        prepare(snapshot);
+        loop { // Ignore empty lines or ones starting with # [ % &
+            let pkg = String::from_utf8(Command::new("sh")
+                                        .arg("-c")
+                                        .arg(r"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\[|^%|^&|^$'")
+                                        .output().unwrap().stdout).unwrap().trim().replace("\n", " ").to_string();
+            let excode1 = install_package(snapshot, pkg.as_str());
+            let excode2 = service_enable(snapshot, profile, tmp_prof.as_str());
+            if excode1 == 1 && excode2 == 1 {
+                chr_delete(snapshot);
+                println!("Install failed and changes discarded.");
+                break 1;
+            } else {
+                post_transactions(snapshot);
+                println!("Profile {} installed in snapshot {} successfully.", profile,snapshot);
+                println!("Deploying snapshot {}.", snapshot);
+                deploy(snapshot);
+                break 0;
+            }
+        }
+    }
+}
 
-//#   Install profile in live snapshot
-//def install_profile_live(profile):
-    //tmp = get_tmp()
-    //ash_chroot_mounts(tmp)
-    //print(f"Updating the system before installing profile {profile}.")
-    //auto_upgrade(tmp)
-    //tmp_prof = subprocess.check_output("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX", shell=True, encoding='utf-8').strip()
-    //subprocess.check_output(f"curl --fail -o {tmp_prof}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{profile}/packages{get_distro_suffix()}.txt", shell=True)
-  //# Ignore empty lines or ones starting with # [ % &
-    //pkg = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\[|^%|^$'", shell=True).decode('utf-8').strip().replace('\n', ' ')
-    //excode1 = install_package_live(tmp, pkg) ### REVIEW snapshot argument needed
-    //excode2 = service_enable(tmp, profile, tmp_prof)
-    //if excode1 == 0 and excode2 == 0:
-        //print(f"Profile {profile} installed in current/live snapshot.") ### REVIEW
-        //return 0
-    //else:
-        //print("F: Install failed and changes discarded.")
-        //return 1
-    //os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}/*{DEBUG}")
-    //os.system(f"umount /.snapshots/rootfs/snapshot-{tmp}{DEBUG}")*/
+// Install profile in live snapshot //REVIEW
+fn install_profile_live(snapshot: &str,profile: &str) -> i32 {
+    let tmp = get_tmp();
+    ash_chroot_mounts(tmp);
+    println!("Updating the system before installing profile {}.", profile);
+    auto_upgrade(tmp);
+    let tmp_prof = String::from_utf8(Command::new("sh").arg("-c")
+                                     .arg("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX")
+                                     .output().unwrap().stdout).unwrap().trim().to_string();
+    Command::new("sh").arg("-c") // REVIEW
+                      .arg(format!("curl --fail -o {}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{}/packages{}.txt", tmp_prof,profile,get_distro_suffix(&detect::distro_id().as_str()))).status().unwrap();
+    // Ignore empty lines or ones starting with # [ % &
+    let pkg = String::from_utf8(Command::new("sh").arg("-c")
+                                     .arg(r"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\[|^%|^$'")
+                                     .output().unwrap().stdout).unwrap().trim().replace("\n", " ").to_string();
+    let excode1 = install_package_live(snapshot, tmp, pkg.as_str());
+    let excode2 = service_enable(tmp, profile, tmp_prof.as_str());
+    Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}/*", tmp)).status().unwrap();
+    Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp)).status().unwrap();
+    if excode1.success() && excode2 == 0 {
+        println!("Profile {} installed in current/live snapshot.", profile);
+        return 0;
+    } else {
+        println!("Install failed and changes discarded.");
+        return 1;
+    }
+}
 
 // Check EFI
 pub fn is_efi() -> bool {
@@ -1153,87 +1182,115 @@ pub fn refresh(snapshot: &str) {
     }
 }
 
-/*#   Recursively remove package in tree
-def remove_from_tree(tree, treename, pkg, profile):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{treename}"):
-        print(f"F: Cannot update as tree {treename} doesn't exist.")
-    else:
-        if pkg: ### NEW
-            uninstall_package(treename, pkg)
-            order = recurse_tree(tree, treename)
-            if len(order) > 2:
-                order.remove(order[0])
-                order.remove(order[0])
-            while True:
-                if len(order) < 2:
-                    break
-                arg = order[0]
-                sarg = order[1]
-                print(arg, sarg)
-                order.remove(order[0])
-                order.remove(order[0])
-                uninstall_package(sarg, pkg)
-            print(f"Tree {treename} updated.")
-        elif profile:
-            print("TODO") ### REVIEW*/
+// Recursively remove package in tree //REVIEW
+pub fn remove_from_tree(treename: &str, pkg: &str, profile: &str) {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
+        eprintln!("Cannot update as tree {} doesn't exist.", treename);
+    } else {
+        if !pkg.is_empty() {
+            uninstall_package(treename, pkg);
+            let mut order = recurse_tree(treename);
+            if order.len() > 2 {
+                order.remove(0);
+                order.remove(0);
+            }
+            loop {
+                if order.len() < 2 {
+                    break;
+                }
+                let arg = &order[0];
+                let sarg = &order[1];
+                println!("{}, {}", arg,sarg);
+                order.remove(0);
+                order.remove(0);
+                let snapshot = &order[1];
+                uninstall_package(snapshot, pkg);
+            }
+            println!("Tree {} updated.", treename);
+        } else if !profile.is_empty() {
+            println!("profile unsupported"); //TODO
+        }
+    }
+}
 
-/*#   Rollback last booted deployment
-def rollback():
-    tmp = get_tmp()
-    i = find_new()
-###    clone_as_tree(tmp)
-    clone_as_tree(tmp, "") ### REVIEW clone_as_tree(tmp, "rollback") will do.
-    write_desc(i, "rollback")
-    deploy(i)*/
+// Rollback last booted deployment
+pub fn rollback() {
+    let tmp = get_tmp();
+    let i = find_new();
+    clone_as_tree(tmp, ""); // REVIEW clone_as_tree(tmp, "rollback") will do.
+    write_desc(i.to_string().as_str(), "rollback").unwrap();
+    deploy(i.to_string().as_str());
+}
 
-/*#   Recursively run an update in tree
-def run_tree(tree, treename, cmd):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{treename}"):
-        print(f"F: Cannot update as tree {treename} doesn't exist.")
-    else:
-        prepare(treename)
-        os.system(f"chroot /.snapshots/rootfs/snapshot-chr{treename} {cmd}")
-        post_transactions(treename)
-        order = recurse_tree(tree, treename)
-        if len(order) > 2:
-            order.remove(order[0])
-            order.remove(order[0])
-        while True:
-            if len(order) < 2:
-                break
-            arg = order[0]
-            sarg = order[1]
-            print(arg, sarg)
-            order.remove(order[0])
-            order.remove(order[0])
-            if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{sarg}"):
-                print(f"F: Snapshot {sarg} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {sarg}'.")
-                print("Tree command canceled.")
-                return
-            else:
-                prepare(sarg)
-                os.system(f"chroot /.snapshots/rootfs/snapshot-chr{sarg} {cmd}")
-                post_transactions(sarg)
-        print(f"Tree {treename} updated.")
+// Recursively run an update in tree //REVIEW
+pub fn run_tree(treename: &str, cmd: &str) {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
+        eprintln!("Cannot update as tree {} doesn't exist.", treename);
+    } else {
+        prepare(treename);
+        Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", treename,cmd)).status().unwrap();
+        post_transactions(treename);
+        let mut order = recurse_tree(treename);
+        if order.len() > 2 {
+            order.remove(0);
+            order.remove(0);
+        }
+        loop {
+            if order.len() < 2 {
+                break;
+            }
+            let arg = &order[0];
+            let sarg = &order[1];
+            println!("{}, {}", arg,sarg);
+            order.remove(0);
+            order.remove(0);
+            let snapshot = &order[1];
+            if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+                eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot);
+                eprintln!("Tree command canceled.");
+                break;
+            } else {
+                let sarg = &order[1];
+                prepare(sarg.as_str());
+                Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", sarg,cmd)).status().unwrap();
+                post_transactions(sarg.as_str());
+                println!("Tree {} updated.", treename);
+                break;
+            }
+        }
+    }
+}
 
-#   Enable service(s) (Systemd, OpenRC, etc.)
-def service_enable(snapshot, profile, tmp_prof):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{snapshot}"):
-        print(f"F: Cannot enable services as snapshot {snapshot} doesn't exist.")
-    else: ### No need for other checks as this function is not exposed to user
-        try:
-            postinst = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -w '^&' | sed 's|& ||'", shell=True).decode('utf-8').strip().split('\n')
-            for cmd in list(filter(None, postinst)): # remove '' from [''] if no postinstalls
-                subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} {cmd}", shell=True)
-            services = subprocess.check_output(f"cat {tmp_prof}/packages.txt | grep -E -w '^%' | sed 's|% ||'", shell=True).decode('utf-8').strip().split('\n')
-            for cmd in list(filter(None, services)): # remove '' from [''] if no services
-                subprocess.check_output(f"chroot /.snapshots/rootfs/snapshot-chr{snapshot} {cmd}", shell=True)
-        except subprocess.CalledProcessError:
-            print(f"F: Failed to enable service(s) from {profile}.")
-            return 1
-        else:
-            print(f"Installed service(s) from {profile}.")
-            return 0*/
+// Enable service(s) (Systemd, OpenRC, etc.) //REVIEW error handling
+fn service_enable(snapshot: &str, profile: &str, tmp_prof: &str) -> i32 {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+        eprintln!("Cannot enable services as snapshot {} doesn't exist.", snapshot);
+        return 1;
+    } else { // No need for other checks as this function is not exposed to user
+        loop {
+            let postinst: Vec<String> = String::from_utf8(Command::new("sh").arg("-c")
+                                             .arg(format!("cat {}/packages.txt | grep -E -w '^&' | sed 's|& ||'", tmp_prof))
+                                             .output().unwrap().stdout).unwrap().trim().split('\n')
+                                                                                       .map(|s| s.to_string()).collect(); //REVIEW
+            for cmd in postinst.into_iter().filter(|cmd| !cmd.is_empty()) {// remove '' from [''] if no postinstalls
+                Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", snapshot,cmd)).status().unwrap();
+            }
+            let services: Vec<String> = String::from_utf8(Command::new("sh").arg("-c")
+                                             .arg(format!("cat {}/packages.txt | grep -E -w '^%' | sed 's|% ||'", tmp_prof))
+                                             .output().unwrap().stdout).unwrap().trim().split('\n')
+                                                                                       .map(|s| s.to_string()).collect();//REVIEW
+            for cmd in services.into_iter().filter(|cmd| !cmd.is_empty()) { // remove '' from [''] if no services
+                let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}",snapshot,cmd)).status().unwrap();
+                if excode.success() {
+                    println!("Failed to enable service(s) from {}.", profile);
+                } else {
+                    println!("Installed service(s) from {}.", profile);
+                }
+            }
+            break 0;
+        }
+    }
+}
 
 // Calls print function
 pub fn show_fstree() {
@@ -1363,36 +1420,56 @@ pub fn snapshot_unlock(snap: &str) {
     Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/rootfs/snapshot-chr{}", snap)).status().unwrap();
 }
 
-/*#   Switch between distros
-def switch_distro():
-    while True:
-        map_tmp = subprocess.check_output("cat /boot/efi/EFI/map.txt | awk 'BEGIN { FS = "'"'" === "'"'" } ; { print $1 }'", shell=True).decode('utf-8').strip()
-        print("Type the name of a distro to switch to: (type 'list' to list them, 'q' to quit)")
-        next_distro = input("> ")
-        if next_distro == "q":
-            break
-        elif next_distro == "list":
-            print(map_tmp)
-        elif next_distro in map_tmp:
-            import csv
-            with open('/boot/efi/EFI/map.txt', 'r') as f:
-                input_file = csv.DictReader(f, delimiter=',', quoting=csv.QUOTE_NONE)
-                for row in input_file:
-                    if row["DISTRO"] == next_distro:
-                        try:
-                            boot_order = subprocess.check_output("efibootmgr | grep BootOrder | awk '{print $2}'", shell=True).decode('utf-8').strip()
-                            temp = boot_order.replace(f'{row["BootOrder"]},', "")
-                            new_boot_order = f"{row['BootOrder']},{temp}"
-                            subprocess.check_output(f'efibootmgr --bootorder {new_boot_order}{DEBUG}', shell=True)
-                        except subprocess.CalledProcessError as e:
-                            print(f"F: Failed to switch distros: {e.output}.") ###
-                        else:
-                            print(f'Done! Please reboot whenever you would like switch to {next_distro}')
-                        #break ### REVIEW
-            break
-        else:
-            print("Invalid distro!")
-            continue*/
+// Switch between distros
+fn switch_distro() -> std::io::Result<()> {
+    let map_output = Command::new("sh")
+        .arg("-c")
+        .arg(r#"cat /boot/efi/EFI/map.txt | awk 'BEGIN { FS = "'"'" === "'"'" } ; { print $1 }'"#)
+        .output().unwrap();
+    let map_tmp = String::from_utf8(map_output.stdout).unwrap().trim().to_owned();
+
+    loop {
+        println!("Type the name of a distro to switch to: (type 'list' to list them, 'q' to quit)");
+        let mut next_distro = String::new();
+        stdin().lock().read_line(&mut next_distro).unwrap();
+        let next_distro = next_distro.trim();
+
+        if next_distro == "q" {
+            break;
+        } else if next_distro == "list" {
+            println!("{}", map_tmp);
+        } else if map_tmp.contains(next_distro) {
+            let file = std::fs::File::open("/boot/efi/EFI/map.txt").unwrap();
+            let mut input_file = csv::ReaderBuilder::new()
+                .delimiter(b',')
+                .quote(b'\0')
+                .from_reader(file);
+            for row in input_file.records() {
+                let record = row.unwrap();
+                if record.get(0) == Some(&next_distro.to_owned()) {
+                    let boot_order_output = Command::new("sh")
+                        .arg("-c")
+                        .arg(r#"efibootmgr | grep BootOrder | awk '{print $2}'"#)
+                        .output().unwrap();
+                    let boot_order = String::from_utf8(boot_order_output.stdout).unwrap().trim().to_owned();
+                    let temp = boot_order.replace(&format!("{},", record[1].to_string().as_str()), "");
+                    let new_boot_order = format!("{},{}", record[1].to_string().as_str(), temp);
+                    Command::new("sh")
+                        .arg("-c")
+                        .arg(&format!("efibootmgr --bootorder {}", new_boot_order))
+                        .output().unwrap();
+                    println!("Done! Please reboot whenever you would like switch to {}", next_distro);
+                    break;
+                }
+            }
+            break;
+        } else {
+            println!("Invalid distro!");
+            continue;
+        }
+    }
+    Ok(())
+}
 
 // Switch between /tmp deployments //REVIEW
 pub fn switch_tmp() {
@@ -1483,52 +1560,83 @@ pub fn sync_time() {
         .status().unwrap();
 }
 
-/*   Sync tree and all its snapshots
-def sync_tree(tree, treename, force_offline, live):
-    if not os.path.exists(f"/.snapshots/rootfs/snapshot-{treename}"):
-        print(f"F: Cannot sync as tree {treename} doesn't exist.")
-    else:
-        if not force_offline: # Syncing tree automatically updates it, unless 'force-sync' is used
-            update_tree(tree, treename)
-        order = recurse_tree(tree, treename)
-        if len(order) > 2:
-            order.remove(order[0]) ### TODO: Better way instead of these repetitive removes
-            order.remove(order[0])
-        while True:
-            if len(order) < 2:
-                break
-            snap_from = order[0]
-            snap_to = order[1]
-            print(snap_from, snap_to)
-            order.remove(order[0])
-            order.remove(order[0])
-            if os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap_to}"):
-                print(f"F: Snapshot {snap_to} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {snap_to}'.")
-                print("Tree sync canceled.")
-                return
-            else:
-                prepare(snap_to)
-                sync_tree_helper("chr", snap_from, snap_to) # Pre-sync
-                if live and int(snap_to) == int(get_current_snapshot()): # Live sync
-                    sync_tree_helper("", snap_from, get_tmp()) # Post-sync
-                post_transactions(snap_to) ### Moved here from the line immediately after first sync_tree_helper
-        print(f"Tree {treename} synced.")*/
+// Sync tree and all its snapshots //REVIEW
+pub fn sync_tree(treename: &str, force_offline: bool, live: bool) {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
+        println!("Cannot sync as tree {} doesn't exist.", treename);
+    } else {
+        if !force_offline { // Syncing tree automatically updates it, unless 'force-sync' is used
+            update_tree(treename);
+        }
+        let mut order = recurse_tree(treename);
+        if order.len() > 2 {
+            order.remove(0); // TODO: Better way instead of these repetitive removes
+            order.remove(0);
+        }
+        loop {
+            if order.len() < 2 {
+                break;
+            }
+            let snap_from = &order[0];
+            let snap_to = &order[1];
+            println!("{}, {}", snap_from, snap_to);
+            order.remove(0);
+            order.remove(0);
+            let snap_from_order = &order[0];
+            let snap_to_order = &order[1];
+            if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snap_to_order)).try_exists().unwrap() {
+                println!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snap_to_order,snap_to_order);
+                println!("Tree sync canceled.");
+            } else {
+                prepare(snap_to_order);
+                sync_tree_helper("chr", snap_from_order, snap_to_order).unwrap(); // Pre-sync
+                if live && snap_to_order == get_current_snapshot().as_str() { // Live sync
+                    sync_tree_helper("", snap_from_order, get_tmp()).unwrap(); // Post-sync
+                    }
+                post_transactions(snap_to_order); // Moved here from the line immediately after first sync_tree_helper
+            }
+            println!("Tree {} synced.", treename);
+            break;
+        }
+    }
+}
 
-//#   Sync tree helper function ### REVIEW might need to put it in distro-specific ashpk.py
-//def sync_tree_helper(CHR, s_f, s_t):
-    //os.system("mkdir -p /.snapshots/tmp-db/local/") ### REVIEW Still resembling Arch pacman folder structure!
-    //os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW
-    //pkg_list_to = pkg_list(CHR, s_t)
-    //pkg_list_from = pkg_list("", s_f)
-  //# Get packages to be inherited
-    //pkg_list_from = [j for j in pkg_list_from if j not in pkg_list_to]
-    //os.system(f"cp -r /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/. /.snapshots/tmp-db/local/") ### REVIEW
-    //os.system(f"cp -n -r --reflink=auto /.snapshots/rootfs/snapshot-{s_f}/. /.snapshots/rootfs/snapshot-{CHR}{s_t}/{DEBUG}")
-    //os.system(f"rm -rf /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/*") ### REVIEW
-    //os.system(f"cp -r /.snapshots/tmp-db/local/. /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/") ### REVIEW
-    //for entry in pkg_list_from:
-        //os.system(f"bash -c 'cp -r /.snapshots/rootfs/snapshot-{s_f}/usr/share/ash/db/local/{entry}-[0-9]* /.snapshots/rootfs/snapshot-{CHR}{s_t}/usr/share/ash/db/local/'") ### REVIEW
-    //os.system("rm -rf /.snapshots/tmp-db/local/*") ### REVIEW (originally inside the loop, but I took it out
+// Sync tree helper function // REVIEW might need to put it in distro-specific ashpk.py
+fn sync_tree_helper(chr: &str, s_f: &str, s_t: &str) -> std::io::Result<()>  {
+    Command::new("mkdir").arg("-p").arg("/.snapshots/tmp-db/local/").status().unwrap(); // REVIEW Still resembling Arch pacman folder structure!
+    Command::new("rm").arg("-rf").arg("/.snapshots/tmp-db/local/*").status().unwrap(); // REVIEW
+    let pkg_list_to = pkg_list(chr, s_t);
+    let pkg_list_from = pkg_list("", s_f);
+    // Get packages to be inherited
+    let mut pkg_list_new = Vec::new();
+    for j in pkg_list_from {
+        if !pkg_list_to.contains(&j) {
+            pkg_list_new.push(j);
+        }
+    }
+    let pkg_list_from = pkg_list_new;
+    Command::new("cp").arg("-r")
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}{}/usr/share/ash/db/local/.", chr,s_t))
+                      .arg("/.snapshots/tmp-db/local/").status().unwrap(); // REVIEW
+    Command::new("cp").args(["-n", "-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/.", s_f))
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}{}/", chr,s_t))
+                      .status().unwrap();
+    Command::new("rm").arg("-rf")
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}{}/usr/share/ash/db/local/*", chr,s_t))
+                      .status().unwrap(); // REVIEW
+    Command::new("cp").arg("-r")
+                      .arg("/.snapshots/tmp-db/local/.")
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}{}/usr/share/ash/db/local/", chr,s_t))
+                      .status().unwrap(); // REVIEW
+    for entry in pkg_list_from {
+        Command::new("sh").arg("-c")
+                          .arg(format!("cp -r /.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local/{}-[0-9]*", s_f,entry))
+                          .arg(format!("/.snapshots/rootfs/snapshot-{}{}/usr/share/ash/db/local/'", chr,s_t)).status().unwrap();// REVIEW
+        }
+    Command::new("rm").arg("-rf").arg("/.snapshots/tmp-db/local/*").status().unwrap(); // REVIEW (originally inside the loop, but I took it out
+    Ok(())
+}
 
 // Clear all temporary snapshots
 pub fn tmp_clear() {
@@ -1564,27 +1672,39 @@ pub fn tmp_delete() {
     }
 }
 
-/*def triage_install(snapshot, live, profile, pkg, not_live):
-    if profile:
-        excode = install_profile(snapshot, profile)
-    elif pkg:
-        excode = install(snapshot, " ".join(pkg))
-  # If installing into current snapshot and no not_live flag, use live install
-    if snapshot == int(get_current_snapshot()) and not not_live:
-        live = True
-  # Perform the live install only if install above was successful
-    if live and not excode:
-        if profile:
-            install_profile_live(profile)
-        elif pkg:
-            install_live(snapshot, " ".join(pkg))
-
-def triage_uninstall(snapshot, profile, pkg, live, not_live): ### TODO add live, not_live
-    if profile:
-        #excode = install_profile(snapshot, profile)
-        print("TODO")
-    elif pkg:
-        uninstall_package(snapshot, " ".join(pkg))*/
+// Triage functions for argparse method //REVIEW
+pub fn triage_install(snapshot: &str, live: bool, profile: &str, pkg: &str) {
+    if !profile.is_empty() {
+        install_profile(snapshot, profile);
+    } else if !pkg.is_empty() {
+        let package = pkg.to_string() + " ";
+        install(snapshot, &package);
+    }
+    // If installing into current snapshot and no not_live flag, use live install
+    let live = if snapshot == get_current_snapshot() && !live {
+        true
+    } else {
+        false
+    };
+    // Perform the live install only if install above was successful
+    if live {
+        if !profile.is_empty() {
+            install_profile_live(snapshot, profile);
+        } else if !pkg.is_empty() {
+            let package = pkg.to_string() + " ";
+            install_live(snapshot, &package);
+        }
+    }
+}
+pub fn triage_uninstall(snapshot: &str, profile: &str, pkg: &str) { // TODO add live, not_live
+    if !profile.is_empty() {
+        //let excode = install_profile(snapshot, profile);
+        println!("TODO");
+    } else if !pkg.is_empty() {
+        let package = pkg.to_string() + " ";
+        uninstall_package(snapshot,  &package);
+    }
+}
 
 // Uninstall package(s)
 pub fn uninstall_package(snapshot: &str, pkg: &str) {
@@ -1665,12 +1785,12 @@ pub fn update_etc() {
     }
 }
 
-// Recursively run an update in tree
-/*pub fn update_tree(treename: &str) {
+// Recursively run an update in tree //REVIEW
+pub fn update_tree(treename: &str) {
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
         eprintln!("Cannot update as tree {} doesn't exist.", treename);
     } else {
-        //upgrade(treename)
+        upgrade(treename);
         let mut order = recurse_tree(treename);
         if order.len() > 2 {
             order.remove(0);
@@ -1685,12 +1805,13 @@ pub fn update_etc() {
                 println!("{}, {}", arg, sarg);
                 order.remove(0);
                 order.remove(0);
+                let snapshot = &order[1];
+                auto_upgrade(snapshot);
             }
-            //auto_upgrade(sarg);
         }
         println!("Tree {} updated.", treename)
     }
-}*/
+}
 
 // Upgrade snapshot
 pub fn upgrade(snapshot:  &str) ->i32 {
