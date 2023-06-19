@@ -18,4 +18,4 @@ clap = "4.1.8"
 cpython = "0.7"
 csv = "1.2.2"
 nix = "0.26.2"
-
+time = {version = "0.3.22", features = ["formatting", "local-offset", "macros"]}

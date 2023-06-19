@@ -348,7 +348,7 @@ let matches = Command::new("ash")
                          .help("snapshot number"),),)
         // Ash version
         .subcommand(Command::new("version")
-                    .short_flag('v')
+                    .alias("v")
                     .about("Print ash version"))
         // Which deployment is active
         .subcommand(Command::new("whichtmp")

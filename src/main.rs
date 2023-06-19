@@ -8,6 +8,7 @@ use nix::unistd::Uid;
 // All snapshots share one /var
 // Global boot is always at @boot
 // *-deploy and *-deploy-aux         : temporary directories used to boot deployed snapshot
+// *-deploy[-aux]-secondary          : temporary directories used to boot secondary deployed snapshot
 // *-chr                             : temporary directories used to chroot into snapshot or copy snapshots around
 // /.snapshots/ash/ash               : symlinked to /usr/sbin/ash
 // /.snapshots/etc/etc-*             : individual /etc for each snapshot
@@ -17,7 +18,6 @@ use nix::unistd::Uid;
 // /usr/share/ash                    : files that store current snapshot info
 // /usr/share/ash/db                 : package database
 // /var/lib/ash(/fstree)             : ash files, stores fstree, symlink to /.snapshots/ash
-// Failed prompts start with "eprintln!"
 
 fn main() {
     if !Uid::effective().is_root() {
@@ -29,6 +29,8 @@ fn main() {
         let matches = cli().get_matches();
         // Call relevant functions
         match matches.subcommand() {
+            Some(("auto-upgrade", _matches)) => {
+            }
             Some(("base-update", _matches)) => {
             }
             Some(("branch", barnch_matches)) => {

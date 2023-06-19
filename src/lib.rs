@@ -4,68 +4,72 @@ mod tree;
 
 use crate::detect_distro as detect;
 use crate::distros::*;
+use nix::mount::{mount, MsFlags};
 use tree::*;
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions, read_dir, read_to_string};
+use std::fs::{copy, File, metadata, OpenOptions, read_dir, read_to_string};
 use std::io::{BufRead, BufReader, Read, stdin, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-
-// Ash version
-//pub fn ash_version() {
-    //let ash_bin_path = Path::new("/usr/sbin/ash");
-    //let metadata = metadata(ash_bin_path).unwrap();
-    //let time = metadata.modified().unwrap();
-    //let duration = time.duration_since(UNIX_EPOCH).unwrap();
-    //let utc = time::OffsetDateTime::UNIX_EPOCH +
-        //time::Duration::try_from(duration).unwrap();
-    //let local = utc.to_offset(time::UtcOffset::local_offset_at(utc).unwrap());
-    //local.format_into(
-        //&mut std::io::stdout().lock(),
-        //time::macros::format_description!(
-            //"[day]-[month repr:short]-[year] [hour]:[minute]:[second]\n"
-        //),
-    //).unwrap();
-//}
+use std::time::UNIX_EPOCH;
 
 // Ash chroot mounts
-pub fn ash_chroot_mounts(i: &str) {
-    let chr = "";
-    Command::new("mount").arg("--bind")
-                         .arg("--make-slave")
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}{}", chr,i))
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}{}", chr,i)).status().unwrap();
-    Command::new("mount").args(["--rbind", "--make-rslave", "/dev"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}{}/dev", chr,i)).status().unwrap();
-    Command::new("mount").args(["--bind", "--make-slave", "/etc"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}{}/etc", chr,i)).status().unwrap();
-    Command::new("mount").args(["--bind", "--make-slave", "/home"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}{}/home", chr,i)).status().unwrap();
-    Command::new("mount").args(["--types", "proc", "/proc"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}{}/proc", chr,i)).status().unwrap();
-    Command::new("mount").args(["--bind", "--make-slave", "/run"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}{}/run", chr,i)).status().unwrap();
-    Command::new("mount").args(["--rbind", "--make-rslave", "/sys"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}{}/sys", chr,i)).status().unwrap();
-    Command::new("mount").args(["--bind", "--make-slave", "/tmp"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}{}/tmp", chr,i)).status().unwrap();
-    Command::new("mount").args(["--bind", "--make-slave", "/var"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}{}/var", chr,i)).status().unwrap();
+pub fn ash_mounts(i: &str, chr: &str) -> nix::Result<()> {
+    let snapshot_path = format!("/.snapshots/rootfs/snapshot-{}{}", chr, i);
+    // Mount snapshot to itself as a bind mount
+    mount(Some(snapshot_path.as_str()), snapshot_path.as_str(),
+          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+    // Mount /dev
+    mount(Some("/dev"), format!("{}/dev", snapshot_path).as_str(),
+          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+    // Mount /etc
+    mount(Some("/etc"), format!("{}/etc", snapshot_path).as_str(),
+          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+    // Mount /home
+    mount(Some("/home"), format!("{}/home", snapshot_path).as_str(),
+          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+    // Mount /proc
+    mount(Some("/proc"), format!("{}/proc", snapshot_path).as_str(),
+          Some("proc"), MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV, None::<&str>).unwrap();
+    // Mount /run
+    mount(Some("/run"), format!("{}/run", snapshot_path).as_str(),
+          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+    // Mount /sys
+    mount(Some("/sys"), format!("{}/sys", snapshot_path).as_str(),
+          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+    // Mount /tmp
+    mount(Some("/tmp"), format!("{}/tmp", snapshot_path).as_str(),
+          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+    // Mount /var
+    mount(Some("/var"), format!("{}/var", snapshot_path).as_str(),
+          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>).unwrap();
     if is_efi() {
-        Command::new("mount").args(["--rbind", "--make-rslave", "/sys/firmware/efi/efivars"])
-                             .arg(format!("/.snapshots/rootfs/snapshot-{}{}/sys/firmware/efi/efivars", chr,i)).status().unwrap();
-        Command::new("cp").args(["--dereference", "/etc/resolv.conf"])
-                          .arg(format!("/.snapshots/rootfs/snapshot-{}{}/etc/", chr,i)).status().unwrap();
-        }
+        // Mount /sys/firmware/efi/efivars
+        mount(Some("/sys/firmware/efi/efivars"), format!("{}/sys/firmware/efi/efivars", snapshot_path).as_str(),
+              Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+        // Copy /etc/resolv.conf
+        let etc_path = format!("{}/etc/resolv.conf", snapshot_path);
+        copy("/etc/resolv.conf", etc_path).unwrap();
+    }
+    Ok(())
 }
 
 // Ash version
 pub fn ash_version() {
-    let version = String::from_utf8_lossy(&Command::new("date").arg("-r")
-                                      .arg("/usr/sbin/ash")
-                                      .arg("+%Y%m%d-%H%M%S")
-                                      .output().unwrap().stdout).to_string();
-    println!("{}", version);
+    //let ash_bin_path = std::env::current_exe().unwrap(); //https://doc.rust-lang.org/std/env/fn.current_exe.html#security
+    let ash_bin_path = Path::new("/usr/sbin/ash");
+    let metadata = metadata(ash_bin_path).unwrap();
+    let time = metadata.modified().unwrap();
+    let duration = time.duration_since(UNIX_EPOCH).unwrap();
+    let utc = time::OffsetDateTime::UNIX_EPOCH +
+        time::Duration::try_from(duration).unwrap();
+    let local = utc.to_offset(time::UtcOffset::local_offset_at(utc).unwrap());
+    local.format_into(
+        &mut std::io::stdout().lock(),
+        time::macros::format_description!(
+            "Last modified on: [weekday] [day]-[month]-[year] [hour repr:12]:[minute]:[second] [period]\n"
+        ),
+    ).unwrap();
 }
 
 // Copy cache of downloaded packages to shared
@@ -794,7 +798,7 @@ pub fn install_live(snapshot: &str, pkg: &str) {
                          .arg("/tmp")
                          .arg(format!("/.snapshots/rootfs/snapshot-{}/tmp", tmp))
                          .status().unwrap();
-    ash_chroot_mounts(tmp);
+    ash_mounts(tmp, "").unwrap();
     println!("Please wait as installation is finishing.");
     let excode = install_package_live(snapshot, tmp, pkg);
     Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}/*", tmp)).status().unwrap();
@@ -854,7 +858,7 @@ fn install_profile(snapshot: &str, profile: &str) -> i32 {
 // Install profile in live snapshot //REVIEW
 fn install_profile_live(snapshot: &str,profile: &str) -> i32 {
     let tmp = get_tmp();
-    ash_chroot_mounts(tmp);
+    ash_mounts(tmp, "").unwrap();
     println!("Updating the system before installing profile {}.", profile);
     auto_upgrade(tmp);
     let tmp_prof = String::from_utf8(Command::new("sh").arg("-c")
