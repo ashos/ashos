@@ -240,44 +240,39 @@ pub fn chroot_check() -> bool {
 }
 
 // Clone tree
-pub fn clone_as_tree(snapshot: &str, desc: &str) {
-    let i = find_new();
+pub fn clone_as_tree(snapshot: &str, desc: &str, i: i32) -> std::io::Result<()> {
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         eprintln!("Cannot clone as snapshot {} doesn't exist.", snapshot);
     } else {
-        if check_mutability(snapshot) {
-            let immutability = "";
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/boot/boot-{}", snapshot))
-                                 .arg(format!("/.snapshots/boot/boot-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/etc/etc-{}", snapshot))
-                                 .arg(format!("/.snapshots/etc/etc-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", i)).status().unwrap();
-            Command::new("touch").arg(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i))
-                                 .status().unwrap();
+        // Make snapshot mutable or immutable
+        let immutability: CreateSnapshotFlags = if check_mutability(snapshot) {
+            CreateSnapshotFlags::empty()
         } else {
-            let immutability = "-r";
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/boot/boot-{}", snapshot))
-                                 .arg(format!("/.snapshots/boot/boot-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/etc/etc-{}", snapshot))
-                                 .arg(format!("/.snapshots/etc/etc-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", i)).status().unwrap();
+            CreateSnapshotFlags::READ_ONLY
+        };
+
+        // Create snapshot
+        create_snapshot(format!("/.snapshots/boot/boot-{}", snapshot),
+                        format!("/.snapshots/boot/boot-{}", i),
+                        immutability, None).unwrap();
+        create_snapshot(format!("/.snapshots/etc/etc-{}", snapshot),
+                        format!("/.snapshots/etc/etc-{}", i),
+                        immutability, None).unwrap();
+        create_snapshot(format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                        format!("/.snapshots/rootfs/snapshot-{}", i),
+                        immutability, None).unwrap();
+
+        // For immutability check
+        if immutability ==  CreateSnapshotFlags::empty() {
+            File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i)).unwrap();
         }
+
+        // Add to root tree
         append_base_tree(i).unwrap();
+        // Save tree to fstree
         write_tree().unwrap();
+
+        // Write description for snapshot
         if desc.is_empty() {
             let description = format!("clone of {}", snapshot);
             write_desc(i.to_string().as_str(), &description).unwrap();
@@ -285,8 +280,8 @@ pub fn clone_as_tree(snapshot: &str, desc: &str) {
             let description = desc.split("").collect::<Vec<&str>>().join(" ");
             write_desc(i.to_string().as_str(), &description).unwrap();
         }
-        println!("Tree {} cloned from {}.", i,snapshot);
     }
+    Ok(())
 }
 
 // Clone branch under same parent
@@ -1305,7 +1300,7 @@ pub fn remove_from_tree(treename: &str, pkg: &str, profile: &str) {
 pub fn rollback() {
     let tmp = get_tmp();
     let i = find_new();
-    clone_as_tree(tmp.as_str(), ""); // REVIEW clone_as_tree(tmp, "rollback") will do.
+    clone_as_tree(tmp.as_str(), "", i).unwrap(); // REVIEW clone_as_tree(tmp, "rollback") will do.
     write_desc(i.to_string().as_str(), "rollback").unwrap();
     deploy(i.to_string().as_str());
 }

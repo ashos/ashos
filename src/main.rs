@@ -57,13 +57,22 @@ fn main() {
                 }
             }
             Some(("clone", clone_matches)) => {
+                let i = find_new();
                 let snapshot = clone_matches.get_one::<i32>("SNAPSHOT").unwrap();
                 if clone_matches.contains_id("DESCRIPTION") {
                     let desc = clone_matches.get_one::<String>("DESCRIPTION").map(|s| s.as_str()).unwrap();
-                    clone_as_tree(format!("{}", snapshot).as_str(), desc);
+                    if clone_as_tree(format!("{}", snapshot).as_str(), desc, i).is_ok() {
+                        println!("Tree {} cloned from {}.", i,snapshot);
+                    } else {
+                        eprintln!("Clone snapshot-{} failed", snapshot);
+                    }
                 } else {
                     let desc = String::new();
-                    clone_as_tree(format!("{}", snapshot).as_str(), desc.as_str());
+                    if clone_as_tree(format!("{}", snapshot).as_str(), desc.as_str(), i).is_ok() {
+                        println!("Tree {} cloned from {}.", i,snapshot);
+                    } else {
+                        eprintln!("Clone snapshot-{} failed", snapshot);
+                    }
                 }
             }
             Some(("clone-branch", clone_branch_matches)) => {
