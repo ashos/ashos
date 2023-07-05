@@ -4,79 +4,117 @@ mod tree;
 
 use crate::detect_distro as detect;
 use crate::distros::*;
-use nix::mount::{mount, MsFlags};
+use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, delete_subvolume, DeleteSubvolumeFlags};
+use nix::mount::{mount, MntFlags, MsFlags, umount2};
 use tree::*;
 use std::collections::HashMap;
-use std::fs::{copy, File, metadata, OpenOptions, read_dir, read_to_string};
+use std::fs::{copy, create_dir_all, DirBuilder, File, OpenOptions, read_dir, read_to_string};
 use std::io::{BufRead, BufReader, Read, stdin, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::UNIX_EPOCH;
 
 // Ash chroot mounts
 pub fn ash_mounts(i: &str, chr: &str) -> nix::Result<()> {
     let snapshot_path = format!("/.snapshots/rootfs/snapshot-{}{}", chr, i);
+
     // Mount snapshot to itself as a bind mount
     mount(Some(snapshot_path.as_str()), snapshot_path.as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /dev
     mount(Some("/dev"), format!("{}/dev", snapshot_path).as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /etc
     mount(Some("/etc"), format!("{}/etc", snapshot_path).as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /home
     mount(Some("/home"), format!("{}/home", snapshot_path).as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /proc
     mount(Some("/proc"), format!("{}/proc", snapshot_path).as_str(),
-          Some("proc"), MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV, None::<&str>).unwrap();
+          Some("proc"), MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV, None::<&str>)?;
+    // Mount /root
+    mount(Some("/root"), format!("{}/root", snapshot_path).as_str(),
+          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /run
     mount(Some("/run"), format!("{}/run", snapshot_path).as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+          Some("tmpfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /sys
     mount(Some("/sys"), format!("{}/sys", snapshot_path).as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+          Some("sysfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /tmp
     mount(Some("/tmp"), format!("{}/tmp", snapshot_path).as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+          Some("tmpfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /var
     mount(Some("/var"), format!("{}/var", snapshot_path).as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>).unwrap();
+          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
+
+    // Check EFI
     if is_efi() {
         // Mount /sys/firmware/efi/efivars
         mount(Some("/sys/firmware/efi/efivars"), format!("{}/sys/firmware/efi/efivars", snapshot_path).as_str(),
-              Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>).unwrap();
-        // Copy /etc/resolv.conf
-        let etc_path = format!("{}/etc/resolv.conf", snapshot_path);
-        copy("/etc/resolv.conf", etc_path).unwrap();
+              Some("efivarfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>)?;
     }
+
+    // Mount /etc/resolv.conf
+    mount(Some("/etc/resolv.conf"), format!("{}/etc/resolv.conf", snapshot_path).as_str(),
+          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
+
     Ok(())
 }
 
-// Ash version
-pub fn ash_version() {
-    //let ash_bin_path = std::env::current_exe().unwrap(); //https://doc.rust-lang.org/std/env/fn.current_exe.html#security
-    let ash_bin_path = Path::new("/usr/sbin/ash");
-    let metadata = metadata(ash_bin_path).unwrap();
-    let time = metadata.modified().unwrap();
-    let duration = time.duration_since(UNIX_EPOCH).unwrap();
-    let utc = time::OffsetDateTime::UNIX_EPOCH +
-        time::Duration::try_from(duration).unwrap();
-    let local = utc.to_offset(time::UtcOffset::local_offset_at(utc).unwrap());
-    local.format_into(
-        &mut std::io::stdout().lock(),
-        time::macros::format_description!(
-            "Last modified on: [weekday] [day]-[month]-[year] [hour repr:12]:[minute]:[second] [period]\n"
-        ),
-    ).unwrap();
+// Ash chroot umounts
+pub fn ash_umounts(i: &str, chr: &str) -> nix::Result<()> {
+    // Unmount in reverse order
+    let snapshot_path = format!("/.snapshots/rootfs/snapshot-{}{}", chr, i);
+
+    // Unmount /etc/resolv.conf
+    umount2(Path::new(&format!("{}/etc/resolv.conf", snapshot_path)),
+            MntFlags::empty())?;
+
+    // Check EFI
+    if is_efi() {
+        // Umount /sys/firmware/efi/efivars
+        umount2(Path::new(&format!("{}/sys/firmware/efi/efivars", snapshot_path)),
+                MntFlags::empty())?;
+    }
+
+    // Unmount /var
+    umount2(Path::new(&format!("{}/var", snapshot_path)),
+            MntFlags::empty())?;
+    // Unmount chroot /tmp
+    umount2(Path::new(&format!("{}/tmp", snapshot_path)),
+            MntFlags::MNT_DETACH)?;
+    // Unmount chroot /sys
+    umount2(Path::new(&format!("{}/sys", snapshot_path)),
+            MntFlags::MNT_DETACH)?;
+    // Unmount chroot /run
+    umount2(Path::new(&format!("{}/run", snapshot_path)),
+            MntFlags::MNT_DETACH)?;
+    // Unmount chroot /root
+    umount2(Path::new(&format!("{}/root", snapshot_path)),
+            MntFlags::MNT_DETACH)?;
+    // Unmount chroot /proc
+    umount2(Path::new(&format!("{}/proc", snapshot_path)),
+            MntFlags::MNT_DETACH)?;
+    // Unmount chroot /home
+    umount2(Path::new(&format!("{}/home", snapshot_path)),
+            MntFlags::MNT_DETACH)?;
+    // Unmount chroot /etc
+    umount2(Path::new(&format!("{}/etc", snapshot_path)),
+            MntFlags::MNT_DETACH)?;
+    // Unmount chroot /dev
+    umount2(Path::new(&format!("{}/dev", snapshot_path)),
+            MntFlags::MNT_DETACH)?;
+    // Unmount chroot directory
+    umount2(Path::new(&format!("{}", snapshot_path)),
+            MntFlags::MNT_DETACH)?;
+
+    Ok(())
 }
 
-// Copy cache of downloaded packages to shared
-pub fn cache_copy(snapshot: &str) {
-    Command::new("cp").args(["-n", "-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg/.", snapshot))
-                      .arg("/var/cache/pacman/pkg/").status().unwrap();
+//Ash version
+pub fn ash_version() -> Option<String> {
+    check_pkg_version()
 }
 
 // Check if snapshot is mutable
@@ -86,72 +124,109 @@ pub fn check_mutability(snapshot: &str) -> bool {
 }
 
 // Check if last update was successful
-pub fn check_update() {
+pub fn check_update() -> std::io::Result<()> {
+    // Open and read upstate file
     let upstate = File::open("/.snapshots/ash/upstate").unwrap();
     let buf_read = BufReader::new(upstate);
     let mut read = buf_read.lines();
+
+    // Read state line
     let line = read.next().unwrap().unwrap();
+    // Read data line
     let data = read.next().unwrap().unwrap();
+
+    // Check state line
     if line.contains("1") {
         eprintln!("Last update on {} failed.", data);
     }
     if line.contains("0") {
-        print!("Last update on {} completed successfully.", data)
+        println!("Last update on {} completed successfully.", data);
     }
+    Ok(())
 }
 
 // Clean chroot mount directories for a snapshot
-pub fn chr_delete(snapshot: &str) {
-    if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
-        Command::new("btrfs").args(["sub", "del"])
-                             .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
-                             .output().expect(&format!("Failed to delete chroot snapshot {}", snapshot));
-        Command::new("btrfs").args(["sub", "del"])
-                             .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
-                             .output().expect(&format!("Failed to delete chroot snapshot {}", snapshot));
-        Command::new("btrfs").args(["sub", "del"])
-                             .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                             .output().expect(&format!("Failed to delete chroot snapshot {}", snapshot));
-        }
+pub fn chr_delete(snapshot: &str) -> std::io::Result<()> {
+    // Path to boot mount directory
+    let boot_path = format!("/.snapshots/boot/boot-chr{}", snapshot);
+    // Path to etc mount directory
+    let etc_path = format!("/.snapshots/etc/etc-chr{}", snapshot);
+    // Path to snapshot mount directory
+    let snapshot_path = format!("/.snapshots/rootfs/snapshot-chr{}", snapshot);
+
+    // Delete boot,etc and snapshot subvolumes
+    if Path::new(&snapshot_path).try_exists()? {
+        delete_subvolume(&boot_path, DeleteSubvolumeFlags::empty()).unwrap();
+        delete_subvolume(&etc_path, DeleteSubvolumeFlags::empty()).unwrap();
+        delete_subvolume(&snapshot_path, DeleteSubvolumeFlags::empty()).unwrap();
+    }
+    Ok(())
 }
 
 // Run command in snapshot
-pub fn chr_run(snapshot: &str, cmd: &str) {
-    // make cmd to cmds (IMPORTANT for install_profile)
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+pub fn chroot(snapshot: &str, cmd: &str) -> std::io::Result<()> {
+    // Make sure snapshot does exist
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         eprintln!("Cannot chroot as snapshot {} doesn't exist.", snapshot);
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
-        // Make sure snapshot is not in use by another ash process
-        eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot)
-    } else if snapshot == "0" {
-        eprintln!("Changing base snapshot is not allowed.")
-    } else {
-        prepare(snapshot);
-        Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                              .arg("sh")
-                              .arg("-c")
-                              .arg(cmd)
-                              .status().unwrap();
-        post_transactions(snapshot);
-    }
-}
 
-// Chroot into snapshot
-pub fn chroot(snapshot: &str) {
-    // make cmd to cmds (IMPORTANT for install_profile)
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Cannot chroot as snapshot {} doesn't exist.", snapshot);
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         // Make sure snapshot is not in use by another ash process
         eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot)
+
     } else if snapshot == "0" {
+        // Make sure snapshot is not base snapshot
         eprintln!("Changing base snapshot is not allowed.")
+
     } else {
-        prepare(snapshot);
-        Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                              .status().unwrap();
-        post_transactions(snapshot);
+        // Prepare snapshot for chroot and run command if existed
+        if prepare(snapshot).is_ok() && !cmd.is_empty() {
+            // Chroot to snapshot path
+            let chroot_and_exec = Command::new("sh").arg("-c")
+                                                    .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,cmd))
+                                                    .status().unwrap();
+            if chroot_and_exec.success() {
+                // Exit chroot
+                Command::new("sh").arg("-c").arg("exit").output().unwrap();
+                // Make sure post_transactions exit properly
+                match post_transactions(snapshot) {
+                    Ok(()) => {
+                    }
+                    Err(error) => {
+                        eprintln!("post_transactions error: {}", error);
+                        // Clean chroot mount directories if command failed
+                        chr_delete(snapshot)?;
+                    }
+                }
+            } else {
+                // Exit chroot and unlock snapshot
+                Command::new("sh").arg("-c").arg("exit").output().unwrap();
+                chr_delete(snapshot)?;
+            }
+        } else if prepare(snapshot).is_ok() {
+            // chroot
+            let chroot = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                               .status().unwrap();
+            if chroot.code().is_some() {
+                // Make sure post_transactions exit properly
+                match post_transactions(snapshot) {
+                    Ok(()) => {
+                    }
+                    Err(error) => {
+                        eprintln!("post_transactions error: {}", error);
+                        // Clean chroot mount directories if command failed
+                        chr_delete(snapshot)?;
+                    }
+                }
+            } else {
+                // Unlock snapshot
+                chr_delete(snapshot)?;
+            }
+        } else {
+            // Unlock snapshot
+            chr_delete(snapshot)?;
+        }
     }
+    Ok(())
 }
 
 // Check if inside chroot
@@ -505,7 +580,7 @@ pub fn deploy(snapshot: &str) {
                                   .status().unwrap();
             }
             switch_tmp();
-            init_system_clean(tmp, "deploy");
+            init_system_clean(tmp, "deploy").unwrap();
             let excode = Command::new("btrfs").args(["sub", "set-default"])
                                  .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
                                  .status().unwrap(); // Set default volume
@@ -639,18 +714,25 @@ pub fn get_part() -> String {
 }
 
 // Get tmp partition state
-pub fn get_tmp() -> &'static str {
+pub fn get_tmp() -> String {
     // By default just return which deployment is running
-    let mount_exec = Command::new("cat")
-        .args(["/proc/mounts", "|", "grep", "' / btrfs'"])
-        .output().unwrap();
-    let mount = String::from_utf8_lossy(&mount_exec.stdout).to_string();
-    if mount.contains("deploy-aux") {
-        let r = "deploy-aux";
+    let file = File::open("/proc/mounts").unwrap();
+    let reader = BufReader::new(file);
+    let mount: Vec<String> = reader.lines().filter_map(|line| {
+        let line = line.unwrap();
+        if line.contains(" / btrfs") {
+            Some(line)
+        } else {
+            None
+        }
+    })
+    .collect();
+    if mount.contains(&"deploy-aux".to_string()) {
+        let r = String::from("deploy-aux");
         return r;
     } else {
-        let r = "deploy";
-        return r;
+        let r = String::from("deploy");
+            return r;
     }
 }
 
@@ -665,7 +747,7 @@ pub fn hollow(s: &str) {
     } else {
         // AUR step might be needed and if so make a distro_specific function with steps similar to install_package().
         // Call it hollow_helper and change this accordingly().
-        prepare(s);
+        prepare(s).unwrap();
         Command::new("mount").arg("--rbind")
                              .arg("--make-rslave")
                              .arg("/")
@@ -680,7 +762,7 @@ pub fn hollow(s: &str) {
             false
         };
         while replay == true {
-            post_transactions(s);
+            post_transactions(s).unwrap();
             immutability_enable(s);
             deploy(s);
             println!("Snapshot {} hollow operation succeeded. Please reboot!", s);
@@ -764,11 +846,11 @@ pub fn install(snapshot: &str, pkg: &str) -> i32 {
     } else {
         let excode = install_package(snapshot, pkg);
         if excode == 0 {
-            post_transactions(snapshot);
+            post_transactions(snapshot).unwrap();
             println!("Package(s) {} installed in snapshot {} successfully.", pkg,snapshot);
             return 1;
         } else {
-            chr_delete(snapshot);
+            chr_delete(snapshot).unwrap();
             eprintln!("Install failed and changes discarded.");
             return 0;
         }
@@ -798,9 +880,9 @@ pub fn install_live(snapshot: &str, pkg: &str) {
                          .arg("/tmp")
                          .arg(format!("/.snapshots/rootfs/snapshot-{}/tmp", tmp))
                          .status().unwrap();
-    ash_mounts(tmp, "").unwrap();
+    ash_mounts(tmp.as_str(), "").unwrap();
     println!("Please wait as installation is finishing.");
-    let excode = install_package_live(snapshot, tmp, pkg);
+    let excode = install_package_live(snapshot, tmp.as_str(), pkg);
     Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}/*", tmp)).status().unwrap();
     Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp)).status().unwrap();
     if excode.success() {
@@ -832,7 +914,7 @@ fn install_profile(snapshot: &str, profile: &str) -> i32 {
         .arg("-c")
         .arg(format!("curl --fail -o {}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{}/packages{}.txt",
              tmp_prof,profile,get_distro_suffix(&detect::distro_id().as_str()))).status().unwrap();
-        prepare(snapshot);
+        prepare(snapshot).unwrap();
         loop { // Ignore empty lines or ones starting with # [ % &
             let pkg = String::from_utf8(Command::new("sh")
                                         .arg("-c")
@@ -841,11 +923,11 @@ fn install_profile(snapshot: &str, profile: &str) -> i32 {
             let excode1 = install_package(snapshot, pkg.as_str());
             let excode2 = service_enable(snapshot, profile, tmp_prof.as_str());
             if excode1 == 1 && excode2 == 1 {
-                chr_delete(snapshot);
+                chr_delete(snapshot).unwrap();
                 println!("Install failed and changes discarded.");
                 break 1;
             } else {
-                post_transactions(snapshot);
+                post_transactions(snapshot).unwrap();
                 println!("Profile {} installed in snapshot {} successfully.", profile,snapshot);
                 println!("Deploying snapshot {}.", snapshot);
                 deploy(snapshot);
@@ -858,9 +940,9 @@ fn install_profile(snapshot: &str, profile: &str) -> i32 {
 // Install profile in live snapshot //REVIEW
 fn install_profile_live(snapshot: &str,profile: &str) -> i32 {
     let tmp = get_tmp();
-    ash_mounts(tmp, "").unwrap();
+    ash_mounts(tmp.as_str(), "").unwrap();
     println!("Updating the system before installing profile {}.", profile);
-    auto_upgrade(tmp);
+    auto_upgrade(tmp.as_str());
     let tmp_prof = String::from_utf8(Command::new("sh").arg("-c")
                                      .arg("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX")
                                      .output().unwrap().stdout).unwrap().trim().to_string();
@@ -870,8 +952,8 @@ fn install_profile_live(snapshot: &str,profile: &str) -> i32 {
     let pkg = String::from_utf8(Command::new("sh").arg("-c")
                                      .arg(r"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\[|^%|^$'")
                                      .output().unwrap().stdout).unwrap().trim().replace("\n", " ").to_string();
-    let excode1 = install_package_live(snapshot, tmp, pkg.as_str());
-    let excode2 = service_enable(tmp, profile, tmp_prof.as_str());
+    let excode1 = install_package_live(snapshot, tmp.as_str(), pkg.as_str());
+    let excode2 = service_enable(tmp.as_str(), profile, tmp_prof.as_str());
     Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}/*", tmp)).status().unwrap();
     Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp)).status().unwrap();
     if excode1.success() && excode2 == 0 {
@@ -918,6 +1000,7 @@ pub fn live_unlock() {
     Command::new("sh").arg("-c")
                         .arg(format!("umount /.snapshots/rootfs/snapshot-{}/*", tmp)).output().unwrap();
     Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp)).status().unwrap();
+    // TODO prevent unlock if ash chroot is active
 }
 
 // Creates new tree from base file
@@ -949,219 +1032,195 @@ pub fn new_snapshot(desc: &str) {
 }
 
 // Post transaction function, copy from chroot dirs back to read only snapshot dir
-pub fn post_transactions(snapshot: &str) {
+pub fn post_transactions(snapshot: &str) -> std::io::Result<()> {
+    // Some operations were moved below to fix hollow functionality
     let tmp = get_tmp();
-    // Some operations were moved below to fix hollow functionality ###
     //File operations in snapshot-chr
-    Command::new("rm").arg("-rf")
-                      .arg(format!("/.snapshots/boot/boot-chr{}/*", snapshot))
-                      .status().unwrap();
+    remove_dir_content(format!("/.snapshots/boot/boot-chr{}", snapshot).as_str()).unwrap();
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/boot/.", snapshot))
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/boot/", snapshot))
                       .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
-                      .status().unwrap();
-    Command::new("rm").arg("-rf")
-                      .arg(format!("/.snapshots/etc/etc-chr{}/*", snapshot))
-                      .status().unwrap();
+                      .output().unwrap();
+    remove_dir_content(format!("/.snapshots/etc/etc-chr{}", snapshot).as_str()).unwrap();
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/.", snapshot))
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/", snapshot))
                       .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
-                      .status().unwrap();
+                      .output().unwrap();
+
     // Keep package manager's cache after installing packages. This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
-    cache_copy(snapshot);
-    Command::new("btrfs").args(["sub", "del"])
-                         .arg(format!("/.snapshots/boot/boot-{}", snapshot))
-                         .status().unwrap();
-    Command::new("btrfs").args(["sub", "del"])
-                         .arg(format!("/.snapshots/etc/etc-{}", snapshot))
-                         .status().unwrap();
-    Command::new("btrfs").args(["sub", "del"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                         .status().unwrap();
+    cache_copy(snapshot).unwrap();
+
+    // Delete old snapshot
+    delete_subvolume(Path::new(&format!("/.snapshots/boot/boot-{}", snapshot)),
+                     DeleteSubvolumeFlags::empty()).unwrap();
+    delete_subvolume(Path::new(&format!("/.snapshots/etc/etc-{}", snapshot)),
+                     DeleteSubvolumeFlags::empty()).unwrap();
+    delete_subvolume(Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)),
+                     DeleteSubvolumeFlags::empty()).unwrap();
+
+    // Create mutable or immutable snapshot
+    // Mutable
     if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/usr/share/ash/mutable", snapshot)).try_exists().unwrap() {
-        Command::new("btrfs").args(["sub", "snap"])
-                             .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
-                             .arg(format!("/.snapshots/boot/boot-{}", snapshot)).status().unwrap();
-        Command::new("btrfs").args(["sub", "snap"])
-                             .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
-                             .arg(format!("/.snapshots/etc/etc-{}", snapshot)).status().unwrap();
+        create_snapshot(format!("/.snapshots/boot/boot-chr{}", snapshot),
+                        format!("/.snapshots/boot/boot-{}", snapshot),
+                        CreateSnapshotFlags::empty(), None).unwrap();
+        create_snapshot(format!("/.snapshots/etc/etc-chr{}", snapshot),
+                        format!("/.snapshots/etc/etc-{}", snapshot),
+                        CreateSnapshotFlags::empty(), None).unwrap();
         // Copy init system files to shared
-        init_system_copy(tmp, "post_transactions");
-        Command::new("btrfs").args(["sub", "snap"])
-                             .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                             .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                             .status().unwrap();
+        init_system_copy(tmp.as_str(), "post_transactions").unwrap();
+        create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
+                        format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                        CreateSnapshotFlags::empty(), None).unwrap();
     } else {
-        let immutability = "-r";
-        Command::new("btrfs").args(["sub", "snap"])
-                             .arg(format!("{}", immutability))
-                             .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
-                             .arg(format!("/.snapshots/boot/boot-{}", snapshot)).status().unwrap();
-        Command::new("btrfs").args(["sub", "snap"])
-                             .arg(format!("{}", immutability))
-                             .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
-                             .arg(format!("/.snapshots/etc/etc-{}", snapshot)).status().unwrap();
+        // Immutable
+        create_snapshot(format!("/.snapshots/boot/boot-chr{}", snapshot),
+                        format!("/.snapshots/boot/boot-{}", snapshot),
+                        CreateSnapshotFlags::READ_ONLY, None).unwrap();
+        create_snapshot(format!("/.snapshots/etc/etc-chr{}", snapshot),
+                        format!("/.snapshots/etc/etc-{}", snapshot),
+                        CreateSnapshotFlags::READ_ONLY, None).unwrap();
         // Copy init system files to shared
-        init_system_copy(tmp, "post_transactions");
-        Command::new("btrfs").args(["sub", "snap"])
-                             .arg(format!("{}", immutability))
-                             .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                             .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                             .status().unwrap();
+        init_system_copy(tmp.as_str(), "post_transactions").unwrap();
+        create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
+                        format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                        CreateSnapshotFlags::READ_ONLY, None).unwrap();
     }
+
     // fix for hollow functionality
-    // Unmount in reverse order
-    Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/resolv.conf", snapshot))
-                          .status().unwrap();
-    Command::new("umount").arg("-R")
-                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/dev", snapshot))
-                          .status().unwrap();
-    Command::new("umount").arg("-R")
-                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/home", snapshot))
-                          .status().unwrap();
-    Command::new("umount").arg("-R")
-                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/proc", snapshot))
-                          .status().unwrap();
-    Command::new("umount").arg("-R")
-                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/root", snapshot))
-                          .status().unwrap();
-    Command::new("umount").arg("-R")
-                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/run", snapshot))
-                          .status().unwrap();
-    Command::new("umount").arg("-R")
-                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/sys", snapshot))
-                          .status().unwrap();
-    Command::new("umount").arg("-R")
-                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                          .status().unwrap();
+    ash_umounts(snapshot, "chr").unwrap();
+
     // Special mutable directories
     let options = snapshot_config_get(snapshot);
     let mutable_dirs: Vec<&str> = options.get("mutable_dirs")
-                                         .map(|dirs| dirs.split(',').filter(|dir| !dir.is_empty()).collect())
-                                         .unwrap_or_else(|| Vec::new());
+                                                .map(|dirs| {dirs.split(',').flat_map(|dir| {
+                                                    if let Some(index) = dir.find("::") {
+                                                        vec![&dir[..index], &dir[index + 2..]]
+                                                    } else {
+                                                        vec![dir]
+                                                    }
+                                                }).filter(|dir| !dir.trim().is_empty()).collect()})
+                                                .unwrap_or_else(|| Vec::new());
     let mutable_dirs_shared: Vec<&str> = options.get("mutable_dirs_shared")
-                                         .map(|dirs| dirs.split(',').filter(|dir| !dir.is_empty()).collect())
-                                         .unwrap_or_else(|| Vec::new());
+                                                .map(|dirs| {dirs.split(',').flat_map(|dir| {
+                                                    if let Some(index) = dir.find("::") {
+                                                        vec![&dir[..index], &dir[index + 2..]]
+                                                    } else {
+                                                        vec![dir]
+                                                    }
+                                                }).filter(|dir| !dir.trim().is_empty()).collect()})
+                                                .unwrap_or_else(|| Vec::new());
     if !mutable_dirs.is_empty() {
         for mount_path in mutable_dirs {
-            Command::new("umount").arg("-R")
-                                  .arg(format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))
-                                  .status().unwrap();
+            umount2(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path)),
+                    MntFlags::MNT_DETACH).unwrap();
         }
     }
     if !mutable_dirs_shared.is_empty() {
         for mount_path in mutable_dirs_shared {
-            Command::new("umount").arg("-R")
-                                  .arg(format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))
-                                  .status().unwrap();
+            umount2(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path)),
+                    MntFlags::MNT_DETACH).unwrap();
         }
     }
+
     // fix for hollow functionality
-    chr_delete(snapshot);
+    chr_delete(snapshot).unwrap();
+    Ok(())
 }
 
-// Prepare snapshot to chroot dir to install or chroot into
-pub fn prepare(snapshot: &str) {
-    chr_delete(snapshot);
-    Command::new("btrfs").args(["sub", "snap"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                         .status().unwrap();
+// Prepare snapshot to chroot directory to install or chroot into
+pub fn prepare(snapshot: &str) -> std::io::Result<()> {
+    chr_delete(snapshot).unwrap();
+    let snapshot_chr = format!("/.snapshots/rootfs/snapshot-chr{}", snapshot);
+
+    // create chroot directory
+    create_snapshot(format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                    &snapshot_chr,
+                    CreateSnapshotFlags::empty(), None).unwrap();
+
     // Pacman gets weird when chroot directory is not a mountpoint, so the following mount is necessary
-    Command::new("mount").args(["--bind", "--make-slave"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                         .status().unwrap();
-    Command::new("mount").args(["--rbind", "--make-rslave", "/dev"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}/dev", snapshot))
-                         .status().unwrap();
-    Command::new("mount").args(["--bind", "--make-slave", "/home"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}/home", snapshot))
-                         .status().unwrap();
-    Command::new("mount").args(["--rbind", "--make-rslave", "/proc"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}/proc", snapshot))
-                         .status().unwrap();
-    Command::new("mount").args(["--bind", "--make-slave", "/root"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}/root", snapshot))
-                         .status().unwrap();
-    Command::new("mount").args(["--rbind", "--make-rslave", "/run"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}/run", snapshot))
-                         .status().unwrap();
-    Command::new("mount").args(["--rbind", "--make-rslave", "/sys"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}/sys", snapshot))
-                         .status().unwrap();
-    Command::new("mount").args(["--rbind", "--make-rslave", "/tmp"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}/tmp", snapshot))
-                         .status().unwrap();
-    Command::new("mount").args(["--bind", "--make-slave", "/var"])
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var", snapshot))
-                         .status().unwrap();
-    Command::new("mount").args(["--bind", "--make-slave"])
-                         .arg("/etc/resolv.conf")
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/resolv.conf", snapshot))
-                         .status().unwrap();
+    ash_mounts(snapshot, "chr").unwrap();
+
     // File operations for snapshot-chr
-    Command::new("btrfs").args(["sub", "snap"])
-                         .arg(format!("/.snapshots/boot/boot-{}", snapshot))
-                         .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
-                         .status().unwrap();
-    Command::new("btrfs").args(["sub", "snap"])
-                         .arg(format!("/.snapshots/etc/etc-{}", snapshot))
-                         .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
-                         .status().unwrap();
+    create_snapshot(format!("/.snapshots/boot/boot-{}", snapshot),
+                    format!("/.snapshots/boot/boot-chr{}", snapshot),
+                    CreateSnapshotFlags::empty(), None).unwrap();
+    create_snapshot(format!("/.snapshots/etc/etc-{}", snapshot),
+                    format!("/.snapshots/etc/etc-chr{}", snapshot),
+                    CreateSnapshotFlags::empty(), None).unwrap();
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/boot/boot-chr{}/.", snapshot))
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/boot", snapshot))
-                      .status().unwrap();
+                      .arg(format!("/.snapshots/boot/boot-chr{}/", snapshot))
+                      .arg(format!("{}/boot", snapshot_chr))
+                      .output().unwrap();
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/etc/etc-chr{}/.", snapshot))
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc", snapshot)).status().unwrap();
-    init_system_clean(snapshot, "prepare");
-    Command::new("cp").arg("/etc/machine-id")
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/machine-id", snapshot))
-                      .status().unwrap();
-    Command::new("mkdir").arg("-p")
-                         .arg(format!("/.snapshots/rootfs/snapshot-chr{}/.snapshots/ash", snapshot)).status().unwrap();
-    Command::new("cp").arg("-f")
-                      .arg("/.snapshots/ash/fstree")
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/.snapshots/ash/", snapshot))
-                      .status().unwrap();
+                      .arg(format!("/.snapshots/etc/etc-chr{}/", snapshot))
+                      .arg(format!("{}/etc", snapshot_chr))
+                      .output().unwrap();
+
+    // Clean init system
+    init_system_clean(snapshot, "prepare").unwrap();
+
+    // Copy ash related configurations
+    if Path::new("/etc/systemd").try_exists().unwrap() {
+        // Machine-id is a Systemd thing
+        copy("/etc/machine-id", format!("{}/etc/machine-id", snapshot_chr)).unwrap();
+    }
+    create_dir_all(format!("{}/.snapshots/ash", snapshot_chr)).unwrap();
+    copy("/.snapshots/ash/fstree", format!("{}/.snapshots/ash/fstree", snapshot_chr)).unwrap();
+
     // Special mutable directories
     let options = snapshot_config_get(snapshot);
     let mutable_dirs: Vec<&str> = options.get("mutable_dirs")
-                                         .map(|dirs| dirs.split(',').filter(|dir| !dir.is_empty()).collect())
-                                         .unwrap_or_else(|| Vec::new());
+                                                .map(|dirs| {dirs.split(',').flat_map(|dir| {
+                                                    if let Some(index) = dir.find("::") {
+                                                        vec![&dir[..index], &dir[index + 2..]]
+                                                    } else {
+                                                        vec![dir]
+                                                    }
+                                                }).filter(|dir| !dir.trim().is_empty()).collect()})
+                                                .unwrap_or_else(|| Vec::new());
     let mutable_dirs_shared: Vec<&str> = options.get("mutable_dirs_shared")
-                                         .map(|dirs| dirs.split(',').filter(|dir| !dir.is_empty()).collect())
-                                         .unwrap_or_else(|| Vec::new());
+                                                .map(|dirs| {dirs.split(',').flat_map(|dir| {
+                                                    if let Some(index) = dir.find("::") {
+                                                        vec![&dir[..index], &dir[index + 2..]]
+                                                    } else {
+                                                        vec![dir]
+                                                    }
+                                                }).filter(|dir| !dir.trim().is_empty()).collect()})
+                                                .unwrap_or_else(|| Vec::new());
     if !mutable_dirs.is_empty() {
         for mount_path in mutable_dirs {
-            Command::new("mkdir").arg("-p")
-                                 .arg(format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path))
-                                 .status().unwrap();
-            Command::new("mkdir").arg("-p")
-                                 .arg(format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))
-                                 .status().unwrap();
-            //Command::new("mount").arg("--bind")
-                                 //.arg(format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path))
-                                 //.arg(format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))
-                                 //.status().unwrap(); //REVIEW
+            // Create mouth_path directory in snapshot
+            DirBuilder::new().recursive(true)
+                             .create(format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path))
+                             .unwrap();
+            // Create mouth_path directory in snapshot-chr
+            DirBuilder::new().recursive(true)
+                             .create(format!("{}/{}", snapshot_chr,mount_path))
+                             .unwrap();
+            // Use mount_path
+            mount(Some(format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path).as_str()),
+                  format!("{}/{}", snapshot_chr,mount_path).as_str(),
+                  Some("btrfs"), MsFlags::MS_BIND , None::<&str>).unwrap();
         }
     }
     if !mutable_dirs_shared.is_empty() {
         for mount_path in mutable_dirs_shared {
-            Command::new("mkdir").arg("-p")
-                                 .arg(format!("/.snapshots/mutable_dirs/{}", mount_path))
-                                 .status().unwrap();
-            Command::new("mkdir").arg("-p")
-                                 .arg(format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))
-                                 .status().unwrap();
-            //Command::new("mount").arg("--bind")
-                                 //.arg(format!("/.snapshots/mutable_dirs/{}", mount_path))
-                                 //.arg(format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))
-                                 //.status().unwrap(); //REVIEW
+            // Create mouth_path directory in snapshot
+            DirBuilder::new().recursive(true)
+                             .create(format!("/.snapshots/mutable_dirs_shared/snapshot-{}/{}", snapshot,mount_path))
+                             .unwrap();
+            // Create mouth_path directory in snapshot-chr
+            DirBuilder::new().recursive(true)
+                             .create(format!("{}/{}", snapshot_chr,mount_path))
+                             .unwrap();
+            // Use mount_path
+            mount(Some(format!("/.snapshots/mutable_dirs_shared/snapshot-{}/{}", snapshot,mount_path).as_str()),
+                  format!("{}/{}", snapshot_chr,mount_path).as_str(),
+                  Some("btrfs"), MsFlags::MS_BIND , None::<&str>).unwrap();
         }
     }
+    Ok(())
 }
 
 // Refresh snapshot
@@ -1174,16 +1233,41 @@ pub fn refresh(snapshot: &str) {
         eprintln!("Changing base snapshot is not allowed.");
     } else {
         //sync_time() // REVIEW At least required in virtualbox, otherwise error in package db update
-        prepare(snapshot);
+        prepare(snapshot).unwrap();
         let excode = refresh_helper(snapshot);
         if excode.success() {
-            post_transactions(snapshot);
+            post_transactions(snapshot).unwrap();
             println!("Snapshot {} refreshed successfully.", snapshot);
         } else {
-            chr_delete(snapshot);
+            chr_delete(snapshot).unwrap();
             eprintln!("Refresh failed and changes discarded.")
         }
     }
+}
+
+// Remove directory contents
+fn remove_dir_content(dir_path: &str) -> std::io::Result<()> {
+    // Specify the path to the directory to remove contents from
+    let path = PathBuf::from(dir_path);
+
+    // Iterate over the directory entries using the `read_dir` function
+    for entry in std::fs::read_dir(path).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+
+        // Check if the entry is a file or a directory
+        if path.is_file() {
+            // If it's a file, remove it using the `remove_file` function
+            std::fs::remove_file(path).unwrap();
+        } else if path.is_symlink() {
+            // If it's a symlink, remove it using the `remove_file` function
+            std::fs::remove_file(path).unwrap();
+        } else if path.is_dir() {
+            // If it's a directory, recursively remove its contents using the `remove_dir_all` function
+            std::fs::remove_dir_all(path).unwrap();
+        }
+    }
+    Ok(())
 }
 
 // Recursively remove package in tree //REVIEW
@@ -1221,7 +1305,7 @@ pub fn remove_from_tree(treename: &str, pkg: &str, profile: &str) {
 pub fn rollback() {
     let tmp = get_tmp();
     let i = find_new();
-    clone_as_tree(tmp, ""); // REVIEW clone_as_tree(tmp, "rollback") will do.
+    clone_as_tree(tmp.as_str(), ""); // REVIEW clone_as_tree(tmp, "rollback") will do.
     write_desc(i.to_string().as_str(), "rollback").unwrap();
     deploy(i.to_string().as_str());
 }
@@ -1231,9 +1315,9 @@ pub fn run_tree(treename: &str, cmd: &str) {
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
         eprintln!("Cannot update as tree {} doesn't exist.", treename);
     } else {
-        prepare(treename);
+        prepare(treename).unwrap();
         Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", treename,cmd)).status().unwrap();
-        post_transactions(treename);
+        post_transactions(treename).unwrap();
         let mut order = recurse_tree(treename);
         if order.len() > 2 {
             order.remove(0);
@@ -1255,9 +1339,9 @@ pub fn run_tree(treename: &str, cmd: &str) {
                 break;
             } else {
                 let sarg = &order[1];
-                prepare(sarg.as_str());
+                prepare(sarg.as_str()).unwrap();
                 Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", sarg,cmd)).status().unwrap();
-                post_transactions(sarg.as_str());
+                post_transactions(sarg.as_str()).unwrap();
                 println!("Tree {} updated.", treename);
                 break;
             }
@@ -1301,17 +1385,6 @@ pub fn show_fstree() {
     print_tree();
 }
 
-// Read snap file
-//pub fn snap() -> String {
-    //let source_dep = get_tmp();
-    //let sfile = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", source_dep)).unwrap();
-    //let mut buf_read = BufReader::new(sfile);
-    //let mut snap_value = String::new();
-    //buf_read.read_line(&mut snap_value).unwrap();
-    //let snap = snap_value.replace(" ", "").replace("\n", "");
-    //snap
-//}
-
 // Edit per-snapshot configuration
 pub fn snapshot_config_edit(snapshot: &str) {
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
@@ -1319,7 +1392,7 @@ pub fn snapshot_config_edit(snapshot: &str) {
     } else if snapshot == "0" {
         eprintln!("Changing base snapshot is not allowed.")
     } else {
-        prepare(snapshot);
+        prepare(snapshot).unwrap();
         if std::env::var_os("EDITOR").is_some() { // REVIEW always return None
         Command::new("sh").arg("-c")
                           .arg(format!("$EDITOR /.snapshots/rootfs/snapshot-chr{}/etc/ash.conf", snapshot))
@@ -1368,7 +1441,7 @@ pub fn snapshot_config_edit(snapshot: &str) {
             else {
                 eprintln!("No text editor available!");
             }
-            post_transactions(snapshot);
+            post_transactions(snapshot).unwrap();
         }
     }
 }
@@ -1592,12 +1665,12 @@ pub fn sync_tree(treename: &str, force_offline: bool, live: bool) {
                 println!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snap_to_order,snap_to_order);
                 println!("Tree sync canceled.");
             } else {
-                prepare(snap_to_order);
+                prepare(snap_to_order).unwrap();
                 sync_tree_helper("chr", snap_from_order, snap_to_order).unwrap(); // Pre-sync
                 if live && snap_to_order == get_current_snapshot().as_str() { // Live sync
-                    sync_tree_helper("", snap_from_order, get_tmp()).unwrap(); // Post-sync
+                    sync_tree_helper("", snap_from_order, get_tmp().as_str()).unwrap(); // Post-sync
                     }
-                post_transactions(snap_to_order); // Moved here from the line immediately after first sync_tree_helper
+                post_transactions(snap_to_order).unwrap(); // Moved here from the line immediately after first sync_tree_helper
             }
             println!("Tree {} synced.", treename);
             break;
@@ -1719,13 +1792,13 @@ pub fn uninstall_package(snapshot: &str, pkg: &str) {
     } else if snapshot == "0" {
         eprintln!("Changing base snapshot is not allowed.");
     } else {
-        prepare(snapshot);
+        prepare(snapshot).unwrap();
         let excode = uninstall_package_helper(snapshot, pkg);
         if excode.success() {
-            post_transactions(snapshot);
+            post_transactions(snapshot).unwrap();
             println!("Package {} removed from snapshot {} successfully.", pkg,snapshot);
         } else {
-            chr_delete(snapshot);
+            chr_delete(snapshot).unwrap();
             eprintln!("Remove failed and changes discarded.");
         }
     }
@@ -1741,7 +1814,7 @@ pub fn update_boot(snapshot: &str) {
     } else {
         let tmp = get_tmp();
         let part = get_part();
-        prepare(snapshot);
+        prepare(snapshot).unwrap();
         if Path::new(&format!("/boot/{}/BAK/", grub)).try_exists().unwrap() {
             Command::new("sh").arg("-c")
                               .arg("find")
@@ -1766,7 +1839,7 @@ pub fn update_boot(snapshot: &str) {
                               .arg("-c")
                               .arg(format!(r"sed -i '0,\|{}| s||{} snapshot {}|' /boot/{}/grub.cfg", detect::distro_name(),detect::distro_name(),snapshot,grub))
                               .status().unwrap();
-        post_transactions(snapshot);
+        post_transactions(snapshot).unwrap();
     }
 }
 
@@ -1833,11 +1906,11 @@ pub fn upgrade(snapshot:  &str) ->i32 {
         // Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
         let excode = upgrade_helper(snapshot);
         if excode.success() {
-            post_transactions(snapshot);
+            post_transactions(snapshot).unwrap();
             println!("Snapshot {} upgraded successfully.", snapshot);
             return 0;
         } else {
-            chr_delete(snapshot);
+            chr_delete(snapshot).unwrap();
             eprintln!("Upgrade failed and changes discarded.");
             return 1;
         }

@@ -44,12 +44,22 @@ fn main() {
                 }
             }
             Some(("check", _matches)) => {
-                check_update();
+                check_update().unwrap();
+            }
+            Some(("chroot", chroot_matches)) => {
+                let snapshot  = chroot_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                if chroot_matches.contains_id("COMMAND") {
+                    let cmd = chroot_matches.get_one::<String>("COMMAND").map(|s| s.as_str()).unwrap();
+                    chroot(format!("{}", snapshot).as_str(), cmd).unwrap();
+                } else {
+                    let cmd = String::new();
+                    chroot(format!("{}", snapshot).as_str(), cmd.as_str()).unwrap();
+                }
             }
             Some(("clone", clone_matches)) => {
-                let snapshot = clone_matches.get_one::<i32>("snapshot").unwrap();
-                if clone_matches.contains_id("desc") {
-                    let desc = clone_matches.get_one::<String>("desc").map(|s| s.as_str()).unwrap();
+                let snapshot = clone_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                if clone_matches.contains_id("DESCRIPTION") {
+                    let desc = clone_matches.get_one::<String>("DESCRIPTION").map(|s| s.as_str()).unwrap();
                     clone_as_tree(format!("{}", snapshot).as_str(), desc);
                 } else {
                     let desc = String::new();
@@ -86,7 +96,10 @@ fn main() {
                 tmp_clear();
             }
             Some(("version", _matches)) => {
-                ash_version();
+                match ash_version() {
+                    Some(version) => println!("ash version: {}", version),
+                    None => eprintln!("Ash not found"),
+                }
             }
             Some(("whichtmp", _matches)) => {
                 println!("{}", get_tmp());

@@ -1,9 +1,8 @@
-use std::fs::File;
-use std::io::{BufRead, BufReader};
+use alpm::Alpm;
 use std::path::Path;
 use std::process::{Command, ExitStatus};
-use crate::{check_mutability, chr_delete, get_tmp, immutability_disable, immutability_enable, prepare, post_transactions,
-            snapshot_config_get, sync_time, write_desc};
+use crate::{check_mutability, chr_delete, immutability_disable, immutability_enable, prepare, post_transactions,
+            remove_dir_content, snapshot_config_get, sync_time};
 
 // Check if AUR is setup right
 pub fn aur_check(snapshot: &str) -> bool {
@@ -22,16 +21,16 @@ pub fn aur_check(snapshot: &str) -> bool {
 // Noninteractive update
 pub fn auto_upgrade(snapshot: &str) {
     sync_time(); // Required in virtualbox, otherwise error in package db update
-    prepare(snapshot);
+    prepare(snapshot).unwrap();
     if !aur_check(snapshot) {
         let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                                            .args(["pacman", "--noconfirm", "-Syyu"]).status().unwrap();
         if excode.success() {
-            post_transactions(snapshot);
+            post_transactions(snapshot).unwrap();
             Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").status().unwrap();
             Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").status().unwrap();
         } else {
-            chr_delete(snapshot);
+            chr_delete(snapshot).unwrap();
             Command::new("echo").args(["1", ">"]).arg("/.snapshots/ash/upstate").status().unwrap();
             Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").status().unwrap();
         }
@@ -40,21 +39,43 @@ pub fn auto_upgrade(snapshot: &str) {
                                        .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} su aur -c 'paru --noconfirm -Syy'", snapshot))
                                        .status().unwrap();
         if excode.success() {
-            post_transactions(snapshot);
+            post_transactions(snapshot).unwrap();
             Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").status().unwrap();
             Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").status().unwrap();
         } else {
-            chr_delete(snapshot);
+            chr_delete(snapshot).unwrap();
             Command::new("echo").args(["1", ">"]).arg("/.snapshots/ash/upstate").status().unwrap();
             Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").status().unwrap();
         }
     }
 }
 
+// Copy cache of downloaded packages to shared
+pub fn cache_copy(snapshot: &str) -> std::io::Result<()> {
+    Command::new("cp").args(["-n", "-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg", snapshot))
+                      .arg("/var/cache/pacman/")
+                      .output().unwrap();
+    Ok(())
+}
+
+// Check installed package version
+pub fn check_pkg_version() -> Option<String> {
+    // Read database of installed packages
+    let root = "/";
+    let db_path = "/var/lib/pacman";
+    let alpm = Alpm::new2(root, &db_path).unwrap();
+
+    // Search for package name in database and return its version
+    let package_name = "ash";
+    let db = alpm.localdb();
+    db.pkg(package_name).ok().map(|pkg| pkg.version().to_string())
+}
+
 // Fix signature invalid error
 pub fn fix_package_db(snapshot: &str) {
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Cannot fix package manager database as snapshot {} doesn't exist.", snapshot);
+        eprintln!("Cannot fix package man database as snapshot {} doesn't exist.", snapshot);
     } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
         eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot);
     } else {
@@ -69,7 +90,7 @@ pub fn fix_package_db(snapshot: &str) {
             immutability_disable(snapshot);
             true
         };
-        prepare(snapshot);
+        prepare(snapshot).unwrap();
         if flip {
             immutability_enable(snapshot);
         }
@@ -83,42 +104,38 @@ pub fn fix_package_db(snapshot: &str) {
         let excode6 = Command::new("sh").arg("-c").arg(format!("{} pacman-key --init", p)).status().unwrap();
         let excode7 = Command::new("sh").arg("-c").arg(format!("{} pacman-key --populate archlinux", p)).status().unwrap();
         let excode8 = Command::new("sh").arg("-c").arg(format!("{} pacman -Syvv --noconfirm archlinux-keyring", p)).status().unwrap(); // REVIEW NEEDED? (maybe)
-        post_transactions(snapshot);
+        post_transactions(snapshot).unwrap();
         if excode1.success() && excode2.success() && excode3.success() && excode4.success()
             && excode5.success() && excode6.success() && excode7.success() && excode8.success() {
             println!("Snapshot {}'s package manager database fixed successfully.", snapshot);
         } else {
-            chr_delete(snapshot);
+            chr_delete(snapshot).unwrap();
             println!("Fixing package manager database failed.");
         }
     }
 }
 
 // Delete init system files (Systemd, OpenRC, etc.)
-pub fn init_system_clean(snapshot: &str, from: &str) {
+pub fn init_system_clean(snapshot: &str, from: &str) -> std::io::Result<()> {
     if from == "prepare" {
-        Command::new("rm").arg("-rf")
-                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/*", snapshot))
-                          .status().unwrap();
+        remove_dir_content(format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/", snapshot).as_str()).unwrap();
     } else if from == "deploy" {
-        Command::new("rm").args(["-rf", "/var/lib/systemd/*"])
-                          .status().unwrap();
-        Command::new("rm").arg("-rf")
-                          .arg(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/*", snapshot))
-                          .status().unwrap();
+        remove_dir_content("/var/lib/systemd/").unwrap();
+        remove_dir_content(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", snapshot).as_str()).unwrap();
     }
+    Ok(())
 }
 
 // Copy init system files (Systemd, OpenRC, etc.) to shared
-pub fn init_system_copy(snapshot: &str, from: &str) {
+pub fn init_system_copy(snapshot: &str, from: &str) -> std::io::Result<()> {
     if from == "post_transactions" {
-        Command::new("rm").args(["-rf" ,"/var/lib/systemd/*"])
-                          .status().unwrap();
+        remove_dir_content("/var/lib/systemd/").unwrap();
         Command::new("cp").args(["-r", "--reflink=auto",])
-                          .arg(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/.", snapshot))
+                          .arg(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", snapshot))
                           .arg("/var/lib/systemd/")
-                          .status().unwrap();
+                          .output().unwrap();
     }
+    Ok(())
 }
 
 // Install atomic-operation
@@ -128,7 +145,7 @@ pub fn install_package(snapshot:&str, pkg: &str) -> i32 {
                                        .arg(format!("{}", pkg))
                                        .status().unwrap(); // --sysroot
     if !excode.success() {
-        prepare(snapshot);
+        prepare(snapshot).unwrap();
         if aur_check(snapshot) {
             let excode = Command::new("sh")
                 .arg("-c")
@@ -144,7 +161,7 @@ pub fn install_package(snapshot:&str, pkg: &str) -> i32 {
             return 1;
         }
     } else {
-        prepare(snapshot);
+        prepare(snapshot).unwrap();
         let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                                            .args(["pacman", "-S"])
                                            .arg(format!("{}", pkg))
@@ -208,7 +225,7 @@ pub fn uninstall_package_helper(snapshot: &str, pkg: &str) -> ExitStatus {
 
 // Upgrade snapshot atomic-operation
 pub fn upgrade_helper(snapshot: &str) -> ExitStatus {
-    prepare(snapshot);
+    prepare(snapshot).unwrap();
     if !aur_check(snapshot) {
         let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                                            .args(["pacman", "-Syyu"])
