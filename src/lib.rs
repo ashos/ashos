@@ -262,7 +262,7 @@ pub fn clone_as_tree(snapshot: &str, desc: &str, i: i32) -> std::io::Result<()> 
                         format!("/.snapshots/rootfs/snapshot-{}", i),
                         immutability, None).unwrap();
 
-        // For immutability check
+        // Mark newly created snapshot as mutable
         if immutability ==  CreateSnapshotFlags::empty() {
             File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i)).unwrap();
         }
@@ -274,7 +274,7 @@ pub fn clone_as_tree(snapshot: &str, desc: &str, i: i32) -> std::io::Result<()> 
 
         // Write description for snapshot
         if desc.is_empty() {
-            let description = format!("clone of {}", snapshot);
+            let description = format!("clone of {}.", snapshot);
             write_desc(i.to_string().as_str(), &description).unwrap();
         } else {
             let description = desc.split("").collect::<Vec<&str>>().join(" ");
@@ -285,60 +285,53 @@ pub fn clone_as_tree(snapshot: &str, desc: &str, i: i32) -> std::io::Result<()> 
 }
 
 // Clone branch under same parent
-pub fn clone_branch(snapshot: &str) -> i32 {
-    let i = find_new();
+pub fn clone_branch(snapshot: &str, i: i32) -> std::io::Result<i32> {
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         eprintln!("Cannot clone as snapshot {} doesn't exist.", snapshot);
     } else {
-        if check_mutability(snapshot) {
-            let immutability = "";
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/boot/boot-{}", snapshot))
-                                 .arg(format!("/.snapshots/boot/boot-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/etc/etc-{}", snapshot))
-                                 .arg(format!("/.snapshots/etc/etc-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", i)).status().unwrap();
-            Command::new("touch").arg(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i))
-                                 .status().unwrap();
+        // Make snapshot mutable or immutable
+        let immutability: CreateSnapshotFlags = if check_mutability(snapshot) {
+            CreateSnapshotFlags::empty()
         } else {
-            let immutability = "-r";
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/boot/boot-{}", snapshot))
-                                 .arg(format!("/.snapshots/boot/boot-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/etc/etc-{}", snapshot))
-                                 .arg(format!("/.snapshots/etc/etc-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", i)).status().unwrap();
+            CreateSnapshotFlags::READ_ONLY
+        };
+
+        // Create snapshot
+        create_snapshot(format!("/.snapshots/boot/boot-{}", snapshot),
+                        format!("/.snapshots/boot/boot-{}", i),
+                        immutability, None).unwrap();
+        create_snapshot(format!("/.snapshots/etc/etc-{}", snapshot),
+                        format!("/.snapshots/etc/etc-{}", i),
+                        immutability, None).unwrap();
+        create_snapshot(format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                        format!("/.snapshots/rootfs/snapshot-{}", i),
+                        immutability, None).unwrap();
+
+        // Mark newly created snapshot as mutable
+        if immutability ==  CreateSnapshotFlags::empty() {
+            File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i)).unwrap();
         }
+
+        // Clone within node
         add_node_to_level(snapshot, i).unwrap();
+        // Save tree to fstree
         write_tree().unwrap();
         let desc = format!("clone of {}", snapshot);
         write_desc(i.to_string().as_str(), &desc).unwrap();
-        println!("Branch {} added to parent of {}.", i,snapshot);
     }
-    return i;
+    Ok(i)
 }
 
 // Recursively clone an entire tree
 pub fn clone_recursive(snapshot: &str) {
+    let i = find_new();
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         println!("Cannot clone as tree {} doesn't exist.", snapshot);
     } else {
         let mut children = return_children(snapshot);
         let ch = children.clone();
         children.insert(0, snapshot.to_string());
-        let ntree = clone_branch(snapshot);
+        let ntree = clone_branch(snapshot, i).unwrap();
         let mut new_children = ch.clone();
         new_children.insert(0, ntree.to_string());
         for child in ch {

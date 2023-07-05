@@ -46,38 +46,82 @@ fn main() {
             Some(("check", _matches)) => {
                 check_update().unwrap();
             }
+            // Chroot
             Some(("chroot", chroot_matches)) => {
-                let snapshot  = chroot_matches.get_one::<i32>("SNAPSHOT").unwrap();
-                if chroot_matches.contains_id("COMMAND") {
-                    let cmd = chroot_matches.get_one::<String>("COMMAND").map(|s| s.as_str()).unwrap();
-                    chroot(format!("{}", snapshot).as_str(), cmd).unwrap();
+                // Get snapshot value
+                let snapshot  = if chroot_matches.contains_id("SNAPSHOT") {
+                    let snap = chroot_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Get description value
+                let cmd = if chroot_matches.contains_id("COMMAND") {
+                    let cmd = chroot_matches.get_one::<String>("COMMAND").map(|s| s.as_str()).unwrap().to_string();
+                    cmd
                 } else {
                     let cmd = String::new();
-                    chroot(format!("{}", snapshot).as_str(), cmd.as_str()).unwrap();
-                }
+                    cmd
+                };
+
+                // Run chroot
+                chroot(format!("{}", snapshot).as_str(), cmd.as_str()).unwrap();
             }
+            // Clone
             Some(("clone", clone_matches)) => {
+                // Next snapshot number
                 let i = find_new();
-                let snapshot = clone_matches.get_one::<i32>("SNAPSHOT").unwrap();
-                if clone_matches.contains_id("DESCRIPTION") {
-                    let desc = clone_matches.get_one::<String>("DESCRIPTION").map(|s| s.as_str()).unwrap();
-                    if clone_as_tree(format!("{}", snapshot).as_str(), desc, i).is_ok() {
-                        println!("Tree {} cloned from {}.", i,snapshot);
-                    } else {
-                        eprintln!("Clone snapshot-{} failed", snapshot);
-                    }
+
+                // Get snapshot value
+                let snapshot = if clone_matches.contains_id("SNAPSHOT") {
+                    let snap = clone_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Get description value
+                let desc = if clone_matches.contains_id("DESCRIPTION") {
+                    let desc = clone_matches.get_one::<String>("DESCRIPTION").map(|s| s.as_str()).unwrap().to_string();
+                    desc
                 } else {
                     let desc = String::new();
-                    if clone_as_tree(format!("{}", snapshot).as_str(), desc.as_str(), i).is_ok() {
-                        println!("Tree {} cloned from {}.", i,snapshot);
-                    } else {
-                        eprintln!("Clone snapshot-{} failed", snapshot);
-                    }
+                    desc
+                };
+
+                // Run clone
+                if clone_as_tree(snapshot.as_str(), desc.as_str(), i).is_ok() {
+                    println!("Tree {} cloned from {}.", i,snapshot);
+                } else {
+                    eprintln!("Clone snapshot-{} failed.", snapshot);
                 }
             }
+            // Clone branch
             Some(("clone-branch", clone_branch_matches)) => {
-                let snapshot = clone_branch_matches.get_one::<i32>("snapshot").unwrap();
-                clone_branch(snapshot.to_string().as_str());
+                // Next snapshot number
+                let i = find_new();
+
+                // Get snapshot value
+                let snapshot = if clone_branch_matches.contains_id("SNAPSHOT") {
+                    let snap = clone_branch_matches.get_one::<i32>("snapshot").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Run clone-branch
+                if clone_branch(snapshot.to_string().as_str(), i).is_ok() {
+                    println!("Branch {} added to parent of {}.", i,snapshot);
+                } else {
+                    eprint!("Add branch {} to parent of {} failed.", i,snapshot);
+                }
             }
             Some(("clone-tree", clone_tree_matches)) => {
                 let snapshot = clone_tree_matches.get_one::<i32>("snapshot").unwrap();
