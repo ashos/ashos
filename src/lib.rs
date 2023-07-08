@@ -9,7 +9,7 @@ use nix::mount::{mount, MntFlags, MsFlags, umount2};
 use tree::*;
 use std::collections::HashMap;
 use std::fs::{copy, create_dir_all, DirBuilder, File, OpenOptions, read_dir, read_to_string};
-use std::io::{BufRead, BufReader, Read, stdin, Write};
+use std::io::{BufRead, BufReader, Error, ErrorKind, Read, stdin, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -167,15 +167,18 @@ pub fn chr_delete(snapshot: &str) -> std::io::Result<()> {
 pub fn chroot(snapshot: &str, cmd: &str) -> std::io::Result<()> {
     // Make sure snapshot does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
-        eprintln!("Cannot chroot as snapshot {} doesn't exist.", snapshot);
+        return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", snapshot)));
 
     } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         // Make sure snapshot is not in use by another ash process
-        eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot)
+        return Err(Error::new
+                   (ErrorKind::NotFound,
+                    format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.",
+                            snapshot,snapshot)));
 
     } else if snapshot == "0" {
         // Make sure snapshot is not base snapshot
-        eprintln!("Changing base snapshot is not allowed.")
+        return Err(Error::new(ErrorKind::NotFound, format!("Changing base snapshot is not allowed.")));
 
     } else {
         // Prepare snapshot for chroot and run command if existed
@@ -240,9 +243,14 @@ pub fn chroot_check() -> bool {
 }
 
 // Clone tree
-pub fn clone_as_tree(snapshot: &str, desc: &str, i: i32) -> std::io::Result<()> {
+pub fn clone_as_tree(snapshot: &str, desc: &str) -> std::io::Result<i32> {
+    // Find the next available snapshot number
+    let i = find_new();
+
+    // Make sure snapshot does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Cannot clone as snapshot {} doesn't exist.", snapshot);
+        return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", snapshot)));
+
     } else {
         // Make snapshot mutable or immutable
         let immutability: CreateSnapshotFlags = if check_mutability(snapshot) {
@@ -264,30 +272,36 @@ pub fn clone_as_tree(snapshot: &str, desc: &str, i: i32) -> std::io::Result<()> 
 
         // Mark newly created snapshot as mutable
         if immutability ==  CreateSnapshotFlags::empty() {
-            File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i)).unwrap();
+            File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i))?;
         }
 
+        // Import tree file
+        let tree = fstree().unwrap();
         // Add to root tree
-        append_base_tree(i).unwrap();
+        append_base_tree(&tree, i).unwrap();
         // Save tree to fstree
-        write_tree().unwrap();
-
+        write_tree(&tree)?;
         // Write description for snapshot
         if desc.is_empty() {
             let description = format!("clone of {}.", snapshot);
-            write_desc(i.to_string().as_str(), &description).unwrap();
+            write_desc(i.to_string().as_str(), &description)?;
         } else {
             let description = desc.split("").collect::<Vec<&str>>().join(" ");
-            write_desc(i.to_string().as_str(), &description).unwrap();
+            write_desc(i.to_string().as_str(), &description)?;
         }
     }
-    Ok(())
+    Ok(i)
 }
 
 // Clone branch under same parent
-pub fn clone_branch(snapshot: &str, i: i32) -> std::io::Result<i32> {
+pub fn clone_branch(snapshot: &str) -> std::io::Result<i32> {
+    // Find the next available snapshot number
+    let i = find_new();
+
+    // Make sure snapshot does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Cannot clone as snapshot {} doesn't exist.", snapshot);
+        return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", snapshot)));
+
     } else {
         // Make snapshot mutable or immutable
         let immutability: CreateSnapshotFlags = if check_mutability(snapshot) {
@@ -309,86 +323,99 @@ pub fn clone_branch(snapshot: &str, i: i32) -> std::io::Result<i32> {
 
         // Mark newly created snapshot as mutable
         if immutability ==  CreateSnapshotFlags::empty() {
-            File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i)).unwrap();
+            File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i))?;
         }
 
+        // Import tree file
+        let tree = fstree().unwrap();
         // Clone within node
-        add_node_to_level(snapshot, i).unwrap();
+        add_node_to_level(&tree, snapshot, i).unwrap();
         // Save tree to fstree
-        write_tree().unwrap();
-        let desc = format!("clone of {}", snapshot);
-        write_desc(i.to_string().as_str(), &desc).unwrap();
+        write_tree(&tree)?;
+        // Write description for snapshot
+        let desc = format!("clone of {}.", snapshot);
+        write_desc(i.to_string().as_str(), &desc)?;
     }
     Ok(i)
 }
 
 // Recursively clone an entire tree
-pub fn clone_recursive(snapshot: &str) {
-    let i = find_new();
+pub fn clone_recursive(snapshot: &str) -> std::io::Result<()> {
+    // Make sure snapshot does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        println!("Cannot clone as tree {} doesn't exist.", snapshot);
+        return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", snapshot)));
+
     } else {
-        let mut children = return_children(snapshot);
+        // Import tree file
+        let tree = fstree().unwrap();
+        // Clone its branch and replace the original child with the clone
+        let mut children = return_children(&tree, snapshot);
         let ch = children.clone();
         children.insert(0, snapshot.to_string());
-        let ntree = clone_branch(snapshot, i).unwrap();
+        let ntree = clone_branch(snapshot)?;
         let mut new_children = ch.clone();
         new_children.insert(0, ntree.to_string());
+
+        // Clone each child's branch under the corresponding parent in the new children list
         for child in ch {
-            let parent = get_parent(&child).unwrap().to_string();
+            let parent = get_parent(&tree, &child).unwrap().to_string();
             let index = children.iter().position(|x| x == &parent).unwrap();
-            let i = clone_under(&new_children[index], &child);
+            let i = clone_under(&new_children[index], &child)?;
             new_children[index] = i.to_string();
         }
     }
+    Ok(())
 }
 
 // Clone under specified parent
-pub fn clone_under(snapshot: &str, branch: &str) -> i32 {
+pub fn clone_under(snapshot: &str, branch: &str) -> std::io::Result<i32> {
+    // Find the next available snapshot number
     let i = find_new();
+
+    // Make sure snapshot does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Cannot clone as snapshot {} doesn't exist.", snapshot);
+        return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", snapshot)));
+
+        // Make sure branch does exist
         } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", branch)).try_exists().unwrap() {
-        eprintln!("Cannot clone as snapshot {} doesn't exist.", branch);
+        return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", snapshot)));
+
+    } else {
+
+        // Check mutability
+        let immutability: CreateSnapshotFlags = if check_mutability(snapshot) {
+            CreateSnapshotFlags::empty()
         } else {
-        if check_mutability(snapshot) {
-            let immutability = "";
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/boot/boot-{}", branch))
-                                 .arg(format!("/.snapshots/boot/boot-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/etc/etc-{}", branch))
-                                 .arg(format!("/.snapshots/etc/etc-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", branch))
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", i)).status().unwrap();
-            Command::new("touch").arg(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i))
-                                 .status().unwrap();
-        } else {
-            let immutability = "-r";
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/boot/boot-{}", branch))
-                                 .arg(format!("/.snapshots/boot/boot-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/etc/etc-{}", branch))
-                                 .arg(format!("/.snapshots/etc/etc-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", branch))
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", i)).status().unwrap();
+            CreateSnapshotFlags::READ_ONLY
+        };
+
+        // Create snapshot
+        create_snapshot(format!("/.snapshots/boot/boot-{}", snapshot),
+                        format!("/.snapshots/boot/boot-{}", i),
+                        immutability, None).unwrap();
+        create_snapshot(format!("/.snapshots/etc/etc-{}", snapshot),
+                        format!("/.snapshots/etc/etc-{}", i),
+                        immutability, None).unwrap();
+        create_snapshot(format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                        format!("/.snapshots/rootfs/snapshot-{}", i),
+                        immutability, None).unwrap();
+
+        // Mark newly created snapshot as mutable
+        if immutability ==  CreateSnapshotFlags::empty() {
+            File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i))?;
         }
-        add_node_to_parent(snapshot, i).unwrap();
-        write_tree().unwrap();
-        let desc = format!("clone of {}", branch);
-        write_desc(i.to_string().as_str(), desc.as_str()).unwrap();
-        println!("Branch {} added under snapshot {}.", i,snapshot);
+
+        // Import tree file
+        let tree = fstree().unwrap();
+        // Add child to node
+        add_node_to_parent(&tree, snapshot, i).unwrap();
+        // Save tree to fstree
+        write_tree(&tree)?;
+        // Write description for snapshot
+        let desc = format!("clone of {}.", branch);
+        write_desc(i.to_string().as_str(), desc.as_str())?;
     }
-    return i;
+    Ok(i)
 }
 
 // Everything after '#' is a comment
@@ -428,7 +455,10 @@ pub fn delete_node(snapshots: &str, quiet: bool) {
         } else if snapshot == &get_next_snapshot() && run != false {
             eprintln!("Cannot delete deployed snapshot.");
         } else if run == true {
-            let children = return_children(&snapshot);
+            // Import tree file
+            let tree = fstree().unwrap();
+
+            let children = return_children(&tree, &snapshot);
             write_desc(&snapshot, "").unwrap(); // Clear descriptio
             Command::new("btrfs").args(["sub", "del"])
                                  .arg(format!("/.snapshots/boot/boot-{}", snapshot))
@@ -462,7 +492,7 @@ pub fn delete_node(snapshots: &str, quiet: bool) {
                     Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/rootfs/snapshot-chr{}", child)).status().unwrap();
                 }
             }
-            if remove_node(&snapshot).is_ok() && write_tree().is_ok() { // Remove node from tree or root
+            if remove_node(&tree, &snapshot).is_ok() && write_tree(&tree).is_ok() { // Remove node from tree or root
                 println!("Snapshot {} removed.", snapshot); //REVIEW
             }
         } else {
@@ -617,8 +647,11 @@ pub fn extend_branch(snapshot: &str, desc: &str) {
                                  .arg(format!("/.snapshots/rootfs/snapshot-{}", i)).status().unwrap();
         }
     }
-    add_node_to_parent(snapshot, i).unwrap();
-    write_tree().unwrap();
+
+    // Import tree file
+    let tree = fstree().unwrap();
+    add_node_to_parent(&tree, snapshot, i).unwrap();
+    write_tree(&tree).unwrap();
     if desc.is_empty() {
         print!("Branch {} added under snapshot {}.", i,snapshot);
     } else {
@@ -1007,10 +1040,13 @@ pub fn new_snapshot(desc: &str) {
                          .arg("/.snapshots/rootfs/snapshot-0")
                          .arg(format!("/.snapshots/rootfs/snapshot-{}", i))
                          .output().unwrap();
-    append_base_tree(i).unwrap();
-    let excode = write_tree();
+    // Import tree file
+    let tree = fstree().unwrap();
+
+    append_base_tree(&tree, i).unwrap();
+    let excode = write_tree(&tree);
     if desc.is_empty() {
-        write_desc(i.to_string().as_str(), "clone of base").unwrap();
+        write_desc(i.to_string().as_str(), "clone of base.").unwrap();
     } else {
         write_desc(i.to_string().as_str(), desc).unwrap();
     }
@@ -1264,8 +1300,10 @@ pub fn remove_from_tree(treename: &str, pkg: &str, profile: &str) {
         eprintln!("Cannot update as tree {} doesn't exist.", treename);
     } else {
         if !pkg.is_empty() {
+            // Import tree file
+            let tree = fstree().unwrap();
             uninstall_package(treename, pkg);
-            let mut order = recurse_tree(treename);
+            let mut order = recurse_tree(&tree, treename);
             if order.len() > 2 {
                 order.remove(0);
                 order.remove(0);
@@ -1293,7 +1331,7 @@ pub fn remove_from_tree(treename: &str, pkg: &str, profile: &str) {
 pub fn rollback() {
     let tmp = get_tmp();
     let i = find_new();
-    clone_as_tree(tmp.as_str(), "", i).unwrap(); // REVIEW clone_as_tree(tmp, "rollback") will do.
+    clone_as_tree(tmp.as_str(), "").unwrap(); // REVIEW clone_as_tree(tmp, "rollback") will do.
     write_desc(i.to_string().as_str(), "rollback").unwrap();
     deploy(i.to_string().as_str());
 }
@@ -1306,7 +1344,10 @@ pub fn run_tree(treename: &str, cmd: &str) {
         prepare(treename).unwrap();
         Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", treename,cmd)).status().unwrap();
         post_transactions(treename).unwrap();
-        let mut order = recurse_tree(treename);
+        // Import tree file
+        let tree = fstree().unwrap();
+
+        let mut order = recurse_tree(&tree, treename);
         if order.len() > 2 {
             order.remove(0);
             order.remove(0);
@@ -1370,7 +1411,9 @@ fn service_enable(snapshot: &str, profile: &str, tmp_prof: &str) -> i32 {
 
 // Calls print function
 pub fn show_fstree() {
-    print_tree();
+    // Import tree file
+    let tree = fstree().unwrap();
+    print_tree(&tree);
 }
 
 // Edit per-snapshot configuration
@@ -1633,7 +1676,10 @@ pub fn sync_tree(treename: &str, force_offline: bool, live: bool) {
         if !force_offline { // Syncing tree automatically updates it, unless 'force-sync' is used
             update_tree(treename);
         }
-        let mut order = recurse_tree(treename);
+        // Import tree file
+        let tree = fstree().unwrap();
+
+        let mut order = recurse_tree(&tree, treename);
         if order.len() > 2 {
             order.remove(0); // TODO: Better way instead of these repetitive removes
             order.remove(0);
@@ -1856,7 +1902,10 @@ pub fn update_tree(treename: &str) {
         eprintln!("Cannot update as tree {} doesn't exist.", treename);
     } else {
         upgrade(treename);
-        let mut order = recurse_tree(treename);
+        // Import tree file
+        let tree = fstree().unwrap();
+
+        let mut order = recurse_tree(&tree, treename);
         if order.len() > 2 {
             order.remove(0);
             order.remove(0);

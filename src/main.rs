@@ -72,9 +72,6 @@ fn main() {
             }
             // Clone
             Some(("clone", clone_matches)) => {
-                // Next snapshot number
-                let i = find_new();
-
                 // Get snapshot value
                 let snapshot = if clone_matches.contains_id("SNAPSHOT") {
                     let snap = clone_matches.get_one::<i32>("SNAPSHOT").unwrap();
@@ -95,20 +92,17 @@ fn main() {
                 };
 
                 // Run clone
-                if clone_as_tree(snapshot.as_str(), desc.as_str(), i).is_ok() {
-                    println!("Tree {} cloned from {}.", i,snapshot);
-                } else {
-                    eprintln!("Clone snapshot-{} failed.", snapshot);
+                let run = clone_as_tree(snapshot.as_str(), desc.as_str());
+                match run {
+                    Ok(snapshot_num) => println!("Tree {} cloned from {}.", snapshot_num,snapshot),
+                    Err(e) => eprintln!("{}", e),
                 }
             }
             // Clone branch
             Some(("clone-branch", clone_branch_matches)) => {
-                // Next snapshot number
-                let i = find_new();
-
                 // Get snapshot value
                 let snapshot = if clone_branch_matches.contains_id("SNAPSHOT") {
-                    let snap = clone_branch_matches.get_one::<i32>("snapshot").unwrap();
+                    let snap = clone_branch_matches.get_one::<i32>("SNAPSHOT").unwrap();
                     let snap_to_string = format!("{}", snap);
                     snap_to_string
                 } else {
@@ -117,15 +111,47 @@ fn main() {
                 };
 
                 // Run clone-branch
-                if clone_branch(snapshot.to_string().as_str(), i).is_ok() {
-                    println!("Branch {} added to parent of {}.", i,snapshot);
-                } else {
-                    eprint!("Add branch {} to parent of {} failed.", i,snapshot);
+                let run = clone_branch(snapshot.as_str());
+                match run {
+                    Ok(snapshot_num) => println!("Branch {} added to parent of {}.", snapshot_num,snapshot),
+                    Err(e) => eprintln!("{}", e),
                 }
             }
+            // Clone tree
             Some(("clone-tree", clone_tree_matches)) => {
-                let snapshot = clone_tree_matches.get_one::<i32>("snapshot").unwrap();
-                clone_recursive(snapshot.to_string().as_str());
+                // Get snapshot value
+                let snapshot = if clone_tree_matches.contains_id("SNAPSHOT") {
+                    let snap = clone_tree_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Run clone-tree
+                let run = clone_recursive(snapshot.as_str());
+                match run {
+                    Ok(_) => println!("Snapshot {} was cloned recursively.", snapshot),
+                    Err(e) => eprintln!("{}", e),
+                }
+                clone_recursive(snapshot.as_str()).unwrap();
+            }
+            Some(("clone-under", clone_under_matches)) => {
+                // Get snapshot value
+                let snap = clone_under_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                let snapshot = format!("{}", snap);
+
+                // Get branch value
+                let branch_i32 = clone_under_matches.get_one::<i32>("BRANCH").unwrap();
+                let branch = format!("{}", branch_i32);
+
+                // Run clone-under
+                let run = clone_under(snapshot.as_str(), branch.as_str());
+                match run {
+                    Ok(snapshot_num) => println!("Branch {} added to parent of {}.", snapshot_num,snapshot),
+                    Err(e) => eprintln!("{}", e),
+                }
             }
             Some(("current", _matches)) => {
                 println!("{}", get_current_snapshot());
