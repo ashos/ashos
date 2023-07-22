@@ -260,6 +260,7 @@ pub fn write_tree(tree: &PyObject) -> Result<(), std::io::Error> {
     let fstreepath = "/.snapshots/ash/fstree";
     let mut fsfile = OpenOptions::new().read(true)
                                        .write(true)
+                                       .truncate(true)
                                        .open(fstreepath)
                                        .unwrap();
 

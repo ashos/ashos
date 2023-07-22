@@ -172,13 +172,13 @@ pub fn chroot(snapshot: &str, cmd: &str) -> std::io::Result<()> {
     } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         // Make sure snapshot is not in use by another ash process
         return Err(Error::new
-                   (ErrorKind::NotFound,
+                   (ErrorKind::Unsupported,
                     format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.",
                             snapshot,snapshot)));
 
     } else if snapshot == "0" {
         // Make sure snapshot is not base snapshot
-        return Err(Error::new(ErrorKind::NotFound, format!("Changing base snapshot is not allowed.")));
+        return Err(Error::new(ErrorKind::Unsupported, format!("Changing base snapshot is not allowed.")));
 
     } else {
         // Prepare snapshot for chroot and run command if existed
@@ -429,79 +429,94 @@ fn comment_after_hash(line: &mut String) -> &str {
 }
 
 // Delete tree or branch
-pub fn delete_node(snapshots: &str, quiet: bool) {
-    let snapshots: Vec<&str> = snapshots.split_whitespace().collect();
-    for snapshot in snapshots {
-        let run = if !quiet {
-            let mut answer = String::new();
-            println!("Are you sure you want to delete snapshot {}? (y/n)", snapshot);
-            stdin().read_line(&mut answer).unwrap();
-            let choice: String = answer.trim().parse().unwrap();
-            let selected_run = if choice != "y".to_string() {
-                false
-            } else {
-                true
-            };
-            selected_run
-        } else {
-            true
-        };
-        if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() && run != false {
-            eprintln!("Cannot delete as snapshot {} doesn't exist.", snapshot);
-        } else if snapshot == "0" && run != false {
-            eprintln!("Changing base snapshot is not allowed.");
-        } else if snapshot == &get_current_snapshot() && run != false {
-            eprintln!("Cannot delete booted snapshot.");
-        } else if snapshot == &get_next_snapshot() && run != false {
-            eprintln!("Cannot delete deployed snapshot.");
-        } else if run == true {
-            // Import tree file
-            let tree = fstree().unwrap();
+pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> std::io::Result<()> {
+    // Get some values
+    let current_snapshot = get_current_snapshot();
+    let next_snapshot = get_next_snapshot();
+    let mut run = false;
 
-            let children = return_children(&tree, &snapshot);
-            write_desc(&snapshot, "").unwrap(); // Clear descriptio
-            Command::new("btrfs").args(["sub", "del"])
-                                 .arg(format!("/.snapshots/boot/boot-{}", snapshot))
-                                 .status().unwrap();
-            Command::new("btrfs").args(["sub", "del"])
-                                 .arg(format!("/.snapshots/etc/etc-{}", snapshot))
-                                 .status().unwrap();
-            Command::new("btrfs").args(["sub", "del"])
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                                 .status().unwrap();
+    // Iterating over snapshots
+    for snapshot in snapshots {
+        // Make sure snapshot is not base snapshot
+        if snapshot.as_str() == "0" {
+            return Err(Error::new(ErrorKind::Unsupported, format!("Changing base snapshot is not allowed.")));
+        }
+
+        if !nuke {
+            // Make sure snapshot does exist
+            if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+                return Err(Error::new(ErrorKind::NotFound, format!(
+                    "Cannot delete as snapshot {} doesn't exist.", snapshot)));
+
+                // Make sure snapshot is not current working snapshot
+                } else if snapshot == &current_snapshot {
+                return Err(Error::new(ErrorKind::Unsupported, format!(
+                    "Cannot delete booted snapshot.")));
+
+                // Make sure snapshot is not deploy snapshot
+                } else if snapshot == &next_snapshot {
+                return Err(Error::new(ErrorKind::Unsupported, format!(
+                    "Cannot delete deployed snapshot.")));
+
+                // Abort if not quiet and confirmation message is false
+                } else if !quiet && !yes_no(format!("Are you sure you want to delete snapshot {}?", snapshot).as_str()) {
+                return Err(Error::new(ErrorKind::Other, format!(
+                    "Aborted.")));
+            } else {
+                run = true;
+            }
+        }
+
+        if nuke | run {
+            // Delete snapshot
+            let tree = fstree().unwrap();
+            let children = return_children(&tree, snapshot.as_str());
+            write_desc(snapshot, "")?;
+            delete_subvolume(format!("/.snapshots/boot/boot-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(format!("/.snapshots/etc/etc-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+
             // Make sure temporary chroot directories are deleted as well
             if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
-                Command::new("btrfs").args(["sub", "del"])
-                                     .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
-                                     .status().unwrap();
-                Command::new("btrfs").args(["sub", "del"])
-                                     .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
-                                     .status().unwrap();
-                Command::new("btrfs").args(["sub", "del"])
-                                     .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                     .status().unwrap();
+                delete_subvolume(format!("/.snapshots/boot/boot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(format!("/.snapshots/etc/etc-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
             }
-            for child in children { // This deletes the node itself along with its children
-                write_desc(&snapshot, "").unwrap();
-                Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/boot/boot-{}", child)).status().unwrap();
-                Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/etc/etc-{}", child)).status().unwrap();
-                Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/rootfs/snapshot-{}", child)).status().unwrap();
+
+            for child in children {
+                // This deletes the node itself along with its children
+                write_desc(snapshot, "")?;
+                delete_subvolume(format!("/.snapshots/boot/boot{}", child), DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(format!("/.snapshots/etc/etc-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                 if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", child)).try_exists().unwrap() {
-                    Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/boot/boot-chr{}", child)).status().unwrap();
-                    Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/etc/etc-chr{}", child)).status().unwrap();
-                    Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/rootfs/snapshot-chr{}", child)).status().unwrap();
+                    delete_subvolume(format!("/.snapshots/boot/boot-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
+                    delete_subvolume(format!("/.snapshots/etc/etc-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
+                    delete_subvolume(format!("/.snapshots/rootfs/snapshot-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                 }
             }
-            if remove_node(&tree, &snapshot).is_ok() && write_tree(&tree).is_ok() { // Remove node from tree or root
-                println!("Snapshot {} removed.", snapshot); //REVIEW
-            }
-        } else {
-            println!("Aborted");
+            // Remove node from tree or root
+            remove_node(&tree, snapshot).unwrap();
+            write_tree(&tree)?;
         }
     }
+    Ok(())
 }
 
-// Deploy snapshot //REVIEW
+// Delete tree or branch //REVIEW // New function
+//def delete_deploys():
+    //for snap in ("deploy", "deploy-aux"):
+        //os.system(f"btrfs sub del /.snapshots/boot/boot-{snap}{DEBUG}")
+        //os.system(f"btrfs sub del /.snapshots/etc/etc-{snap}{DEBUG}")
+        //os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snap}{DEBUG}")
+        //# Make sure temporary chroot directories are deleted as well
+        //if (os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}")):
+            //os.system(f"btrfs sub del /.snapshots/boot/boot-chr{snap}{DEBUG}")
+            //os.system(f"btrfs sub del /.snapshots/etc/etc-chr{snap}{DEBUG}")
+            //os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snap}{DEBUG}")
+        //print(f"Snapshot {snap} removed.")
+
+// Deploy snapshot
 pub fn deploy(snapshot: &str) {
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         eprintln!("Cannot deploy as snapshot {} doesn't exist.", snapshot);
@@ -711,13 +726,16 @@ pub fn get_next_snapshot() -> String {
     } else {
         "deploy-aux"
     };
-    if Path::new(&format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", d)).try_exists().unwrap() {// Make sure next snapshot exists
+
+    // Make sure next snapshot exists
+    if Path::new(&format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", d)).try_exists().unwrap() {
         let mut file = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", d)).unwrap();
         let mut contents = String::new();
         let csnapshot = file.read_to_string(&mut contents).unwrap();
         return csnapshot.to_string().trim().to_string();
     } else {
-        return "".to_string() // Return empty string in case no snapshot is deployed
+        // Return empty string in case no snapshot is deployed
+        return "".to_string()
         }
 }
 
@@ -1963,4 +1981,18 @@ pub fn write_desc(snapshot: &str, desc: &str) -> std::io::Result<()> {
                                          .unwrap();
     descfile.write_all(desc.as_bytes()).unwrap();
     Ok(())
+}
+
+// Generic yes no prompt
+fn yes_no(msg: &str) -> bool {
+    loop {
+        println!("{} (y/n)", msg);
+        let mut reply = String::new();
+        stdin().read_line(&mut reply).expect("Failed to read input");
+        match reply.trim().to_lowercase().as_str() {
+            "yes" | "y" => return true,
+            "no" | "n" => return false,
+            _ => println!("F: Invalid choice!"),
+        }
+    }
 }

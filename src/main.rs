@@ -156,6 +156,21 @@ fn main() {
             Some(("current", _matches)) => {
                 println!("{}", get_current_snapshot());
             }
+            Some(("del", del_matches)) => {
+                // Get snapshot value
+                let snapshots: Vec<_> = del_matches.get_many::<i32>("SNAPSHOT").unwrap().map(|s| format!("{}", s)).collect();
+
+                // Optional values
+                let quiet = del_matches.get_flag("quiet");
+                let nuke = del_matches.get_flag("nuke");
+
+                // Run delelte_node
+                let run = delete_node(&snapshots, quiet, nuke);
+                match run {
+                    Ok(_) => println!("Snapshot {:?} removed.", snapshots),
+                    Err(e) => eprintln!("{}", e),
+                }
+            }
             Some(("dist", _matches)) => {
             }
             Some(("etc-update", _matches)) => {
