@@ -738,6 +738,11 @@ pub fn deploy(snapshot: &str, secondary: bool) -> std::io::Result<()> {
     Ok(())
 }
 
+// Show diff of packages between 2 snapshots
+pub fn diff(snapshot1:  &str, snapshot2: &str) {
+    snapshot_diff(snapshot1, snapshot2).unwrap();
+}
+
 // Find new unused snapshot dir
 pub fn find_new() -> i32 {
     let mut i = 0;
@@ -985,108 +990,95 @@ pub fn immutability_enable(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Install packages
-pub fn install(snapshot: &str, pkg: &str) -> i32 {
+pub fn install(snapshot: &str, pkg: &str) -> std::io::Result<()> {
+    // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Cannot install as snapshot {} doesn't exist.", snapshot);
-        return 1;
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() { // Make sure snapshot is not in use by another ash process
-        eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot);
-        return 1;
-    } else if snapshot == "0" {
-        eprintln!("Changing base snapshot is not allowed.");
-        return 1;
-    } else {
-        let excode = install_package(snapshot, pkg);
-        if excode == 0 {
-            post_transactions(snapshot).unwrap();
-            println!("Package(s) {} installed in snapshot {} successfully.", pkg,snapshot);
-            return 1;
+        return Err(Error::new(ErrorKind::NotFound,
+                              format!("Cannot install as snapshot {} doesn't exist.", snapshot)));
+
+        // Make sure snapshot is not in use by another ash process
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        return Err(
+            Error::new(ErrorKind::Unsupported,
+                       format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.",
+                               snapshot,snapshot)));
+
+        // Make sure snapshot is not base snapshot
+        } else if snapshot == "0" {
+        return Err(Error::new(ErrorKind::Unsupported,
+                              format!("Changing base snapshot is not allowed.")));
+
+        // Install package
         } else {
-            chr_delete(snapshot).unwrap();
-            eprintln!("Install failed and changes discarded.");
-            return 0;
+        if install_package(snapshot, pkg).is_ok() {
+            post_transactions(snapshot)?;
+            } else {
+            chr_delete(snapshot)?;
+            return Err(Error::new(ErrorKind::Interrupted,
+                                  format!("Install failed and changes discarded.")));
         }
     }
+    Ok(())
 }
 
 // Install live
-pub fn install_live(snapshot: &str, pkg: &str) {
+pub fn install_live(snapshot: &str, pkg: &str) -> std::io::Result<()> {
     let tmp = get_tmp();
-    Command::new("mount").arg("--bind")
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
-                         .status().unwrap();
-    Command::new("mount").arg("--bind")
-                         .arg("/home")
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}/home", tmp))
-                         .status().unwrap();
-    Command::new("mount").arg("--bind")
-                         .arg("/var")
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}/var",tmp))
-                         .status().unwrap();
-    Command::new("mount").arg("--bind")
-                         .arg("/etc")
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}/etc", tmp))
-                         .status().unwrap();
-    Command::new("mount").arg("--bind")
-                         .arg("/tmp")
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}/tmp", tmp))
-                         .status().unwrap();
-    ash_mounts(tmp.as_str(), "").unwrap();
+    ash_mounts(&tmp.as_str(), "").unwrap();
     println!("Please wait as installation is finishing.");
-    let excode = install_package_live(snapshot, tmp.as_str(), pkg);
-    Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}/*", tmp)).status().unwrap();
-    Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp)).status().unwrap();
-    if excode.success() {
-        println!("Package(s) {} live installed in snapshot {} successfully.", pkg,snapshot);
-    } else {
-        eprintln!("Live installation failed!");
-    }
+    install_package_live(snapshot, tmp.as_str(), pkg)?;
+    ash_umounts(tmp.as_str(), "").unwrap();
+    Ok(())
 }
 
-// Install a profile from a text file //REVIEW error handling
-fn install_profile(snapshot: &str, profile: &str, secondary: bool) -> i32 {
+// Install a profile from a text file //REVIEW
+fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool, section_only: Option<String>) -> std::io::Result<()> {
+    // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Cannot install as snapshot {} doesn't exist.", snapshot);
-        return 1;
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() { // Make sure snapshot is not in use by another ash process
-        eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot);
-        return 1;
-    } else if snapshot == "0" {
-        eprintln!("Changing base snapshot is not allowed.");
-        return 1;
+        return Err(Error::new(ErrorKind::NotFound,
+                              format!("Cannot install as snapshot {} doesn't exist.", snapshot)));
+
+        // Make sure snapshot is not in use by another ash process
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        return Err(
+            Error::new(ErrorKind::Unsupported,
+                       format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.",
+                               snapshot,snapshot)));
+
+        // Make sure snapshot is not base snapshot
+        } else if snapshot == "0" {
+        return Err(Error::new(ErrorKind::Unsupported,
+                              format!("Changing base snapshot is not allowed.")));
     } else {
+        // Install profile
         println!("Updating the system before installing profile {}.", profile);
-        auto_upgrade(snapshot);
-        let tmp_prof = String::from_utf8(Command::new("sh")
-                                         .arg("-c")
-                                         .arg("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX")
-                                         .output().unwrap().stdout).unwrap().trim().to_string();
+        auto_upgrade(snapshot)?;
+        prepare(snapshot)?;
+        let pkgs = "";
+        let tmp_prof = Temp::new_dir_in("/.snapshots/tmp")?;
         Command::new("sh") //REVIEW change this?
         .arg("-c")
         .arg(format!("curl --fail -o {}/packages.txt -LO https://raw.githubusercontent.com/ashos/ashos/main/src/profiles/{}/packages{}.txt",
-             tmp_prof,profile,get_distro_suffix(&detect::distro_id().as_str()))).status().unwrap();
-        prepare(snapshot).unwrap();
-        loop { // Ignore empty lines or ones starting with # [ % &
+             tmp_prof.as_os_str().to_str().unwrap(),profile,get_distro_suffix(&detect::distro_id().as_str()))).status().unwrap();
+        loop {
+            // Ignore empty lines or ones starting with # [ % &
             let pkg = String::from_utf8(Command::new("sh")
                                         .arg("-c")
                                         .arg(r"cat {tmp_prof}/packages.txt | grep -E -v '^#|^\[|^%|^&|^$'")
                                         .output().unwrap().stdout).unwrap().trim().replace("\n", " ").to_string();
             let excode1 = install_package(snapshot, pkg.as_str());
-            let excode2 = service_enable(snapshot, profile, tmp_prof.as_str());
-            if excode1 == 1 && excode2 == 1 {
+            let excode2 = service_enable(snapshot, profile, tmp_prof.as_os_str().to_str().unwrap());
+            if excode1.is_ok() && excode2 == 1 {
                 chr_delete(snapshot).unwrap();
-                println!("Install failed and changes discarded.");
-                break 1;
+                return Err(Error::new(ErrorKind::Unsupported,
+                              format!("Install failed and changes discarded.")));
             } else {
-                post_transactions(snapshot).unwrap();
-                println!("Profile {} installed in snapshot {} successfully.", profile,snapshot);
-                println!("Deploying snapshot {}.", snapshot);
-                deploy(snapshot, secondary).unwrap();
-                break 0;
+                post_transactions(snapshot)?;
+                deploy(snapshot, secondary)?;
             }
         }
     }
+    Ok(())
 }
 
 // Install profile in live snapshot //REVIEW
@@ -1094,7 +1086,7 @@ fn install_profile_live(snapshot: &str,profile: &str) -> i32 {
     let tmp = get_tmp();
     ash_mounts(tmp.as_str(), "").unwrap();
     println!("Updating the system before installing profile {}.", profile);
-    auto_upgrade(tmp.as_str());
+    auto_upgrade(tmp.as_str()).unwrap();
     let tmp_prof = String::from_utf8(Command::new("sh").arg("-c")
                                      .arg("mktemp -d -p /tmp ashpk_profile.XXXXXXXXXXXXXXXX")
                                      .output().unwrap().stdout).unwrap().trim().to_string();
@@ -1108,12 +1100,37 @@ fn install_profile_live(snapshot: &str,profile: &str) -> i32 {
     let excode2 = service_enable(tmp.as_str(), profile, tmp_prof.as_str());
     Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}/*", tmp)).status().unwrap();
     Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp)).status().unwrap();
-    if excode1.success() && excode2 == 0 {
+    if excode1.is_ok() && excode2 == 0 {
         println!("Profile {} installed in current/live snapshot.", profile);
         return 0;
     } else {
         println!("Install failed and changes discarded.");
         return 1;
+    }
+}
+
+// Triage functions for argparse method //REVIEW
+pub fn install_triage(not_live: bool, live: bool, pkg: &str, profile: &str, snapshot: &str, force: bool) {
+    if !profile.is_empty() {
+        //install_profile(snapshot, profile, force);
+    } else if !pkg.is_empty() {
+        let package = pkg.to_string() + " ";
+        install(snapshot, &package).unwrap();
+    }
+    // If installing into current snapshot and no not_live flag, use live install
+    let live = if snapshot == get_current_snapshot() && !live {
+        true
+    } else {
+        false
+    };
+    // Perform the live install only if install above was successful
+    if live {
+        if !profile.is_empty() {
+            install_profile_live(snapshot, profile);
+        } else if !pkg.is_empty() {
+            let package = pkg.to_string() + " ";
+            install_live(snapshot, &package).unwrap();
+        }
     }
 }
 
@@ -1243,7 +1260,7 @@ pub fn post_transactions(snapshot: &str) -> std::io::Result<()> {
     }
 
     // fix for hollow functionality
-    ash_umounts(snapshot, "chr").unwrap();
+    ash_umounts(snapshot, "chr")?;
 
     // Special mutable directories
     let options = snapshot_config_get(snapshot);
@@ -1633,21 +1650,6 @@ pub fn snapshot_config_get(snapshot: &str) -> HashMap<String, String> {
     }
 }
 
-// Show diff of packages between 2 snapshots
-pub fn snapshot_diff(snapshot1: &str, snapshot2: &str) {
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot1)).try_exists().unwrap() {
-        println!("Snapshot {} not found.", snapshot1);
-    } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot2)).try_exists().unwrap() {
-        println!("Snapshot {} not found.", snapshot2);
-    } else {
-        Command::new("bash")
-                .arg("-c")
-                .arg(format!("diff <(ls /.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local)\\
- <(ls /.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local) | grep '^>\\|^<' | sort", snapshot1, snapshot2))
-                .status().unwrap();
-    }
-}
-
 // Remove temporary chroot for specified snapshot only
 // This unlocks the snapshot for use by other functions
 pub fn snapshot_unlock(snapshot: &str) {
@@ -1951,40 +1953,6 @@ pub fn tmp_delete(secondary: bool) -> std::io::Result<()> {
     Ok(())
 }
 
-// Triage functions for argparse method //REVIEW
-pub fn triage_install(snapshot: &str, live: bool, profile: &str, pkg: &str, force: bool) {
-    if !profile.is_empty() {
-        install_profile(snapshot, profile, force);
-    } else if !pkg.is_empty() {
-        let package = pkg.to_string() + " ";
-        install(snapshot, &package);
-    }
-    // If installing into current snapshot and no not_live flag, use live install
-    let live = if snapshot == get_current_snapshot() && !live {
-        true
-    } else {
-        false
-    };
-    // Perform the live install only if install above was successful
-    if live {
-        if !profile.is_empty() {
-            install_profile_live(snapshot, profile);
-        } else if !pkg.is_empty() {
-            let package = pkg.to_string() + " ";
-            install_live(snapshot, &package);
-        }
-    }
-}
-pub fn triage_uninstall(snapshot: &str, profile: &str, pkg: &str) { // TODO add live, not_live
-    if !profile.is_empty() {
-        //let excode = install_profile(snapshot, profile);
-        println!("TODO");
-    } else if !pkg.is_empty() {
-        let package = pkg.to_string() + " ";
-        uninstall_package(snapshot,  &package);
-    }
-}
-
 // Uninstall package(s)
 pub fn uninstall_package(snapshot: &str, pkg: &str) {
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
@@ -2003,6 +1971,16 @@ pub fn uninstall_package(snapshot: &str, pkg: &str) {
             chr_delete(snapshot).unwrap();
             eprintln!("Remove failed and changes discarded.");
         }
+    }
+}
+
+pub fn uninstall_triage(snapshot: &str, profile: &str, pkg: &str) { // TODO add live, not_live
+    if !profile.is_empty() {
+        //let excode = install_profile(snapshot, profile);
+        println!("TODO");
+    } else if !pkg.is_empty() {
+        let package = pkg.to_string() + " ";
+        uninstall_package(snapshot,  &package);
     }
 }
 
@@ -2104,7 +2082,7 @@ pub fn update_tree(treename: &str) {
                 order.remove(0);
                 order.remove(0);
                 let snapshot = &order[1];
-                auto_upgrade(snapshot);
+                auto_upgrade(snapshot).unwrap();
             }
         }
         println!("Tree {} updated.", treename)

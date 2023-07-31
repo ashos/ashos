@@ -1,7 +1,8 @@
+use crate::{check_mutability, chr_delete, immutability_disable, immutability_enable, prepare, post_transactions,
+            remove_dir_content, snapshot_config_get, sync_time, WalkDir};
+use std::io::{Error, ErrorKind};
 use std::path::Path;
 use std::process::{Command, ExitStatus};
-use crate::{check_mutability, chr_delete, immutability_disable, immutability_enable, prepare, post_transactions,
-            remove_dir_content, snapshot_config_get, sync_time};
 
 // Check if AUR is setup right
 pub fn aur_check(snapshot: &str) -> bool {
@@ -18,35 +19,37 @@ pub fn aur_check(snapshot: &str) -> bool {
 }
 
 // Noninteractive update
-pub fn auto_upgrade(snapshot: &str) {
-    sync_time(); // Required in virtualbox, otherwise error in package db update
-    prepare(snapshot).unwrap();
+pub fn auto_upgrade(snapshot: &str) -> std::io::Result<()> {
+    // Required in virtualbox, otherwise error in package db update
+    sync_time();
+    prepare(snapshot)?;
     if !aur_check(snapshot) {
         let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                           .args(["pacman", "--noconfirm", "-Syyu"]).status().unwrap();
-        if excode.success() {
-            post_transactions(snapshot).unwrap();
-            Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").status().unwrap();
-            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").status().unwrap();
+                                           .args(["pacman", "--noconfirm", "-Syyu"]).output()?;
+        if excode.status.success() {
+            post_transactions(snapshot)?;
+            Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").output()?;
+            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").output()?;
         } else {
-            chr_delete(snapshot).unwrap();
-            Command::new("echo").args(["1", ">"]).arg("/.snapshots/ash/upstate").status().unwrap();
-            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").status().unwrap();
+            chr_delete(snapshot)?;
+            Command::new("echo").args(["1", ">"]).arg("/.snapshots/ash/upstate").output()?;
+            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").output()?;
         }
     } else {
         let excode = Command::new("sh").arg("-c")
                                        .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} su aur -c 'paru --noconfirm -Syy'", snapshot))
-                                       .status().unwrap();
-        if excode.success() {
-            post_transactions(snapshot).unwrap();
-            Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").status().unwrap();
-            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").status().unwrap();
+                                       .output()?;
+        if excode.status.success() {
+            post_transactions(snapshot)?;
+            Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").output()?;
+            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").output()?;
         } else {
-            chr_delete(snapshot).unwrap();
-            Command::new("echo").args(["1", ">"]).arg("/.snapshots/ash/upstate").status().unwrap();
-            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").status().unwrap();
+            chr_delete(snapshot)?;
+            Command::new("echo").args(["1", ">"]).arg("/.snapshots/ash/upstate").output()?;
+            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").output()?;
         }
     }
+    Ok(())
 }
 
 // Copy cache of downloaded packages to shared
@@ -73,12 +76,12 @@ pub fn fix_package_db(snapshot: &str) {
         let flip = if check_mutability(snapshot) { // Snapshot is mutable so do not make it immutable after fixdb is done.
             false
         } else {
-            immutability_disable(snapshot);
+            immutability_disable(snapshot).unwrap();
             true
         };
         prepare(snapshot).unwrap();
         if flip {
-            immutability_enable(snapshot);
+            immutability_enable(snapshot).unwrap();
         }
         // this is ugly! //REVIEW
         let home_dir = std::env::var_os("HOME").unwrap();
@@ -125,65 +128,57 @@ pub fn init_system_copy(snapshot: &str, from: &str) -> std::io::Result<()> {
 }
 
 // Install atomic-operation
-pub fn install_package(snapshot:&str, pkg: &str) -> i32 {
-    // This extra pacman check is to avoid unwantedly triggering AUR if package is official but user answers no to prompt
+pub fn install_package(snapshot:&str, pkg: &str) -> std::io::Result<()> {
+    // This extra pacman check is to avoid unwantedly triggering AUR if package is official
     let excode = Command::new("pacman").arg("-Si")
-                                       .arg(format!("{}", pkg))
-                                       .status().unwrap(); // --sysroot
-    if !excode.success() {
-        prepare(snapshot).unwrap();
+                          .arg(format!("{}", pkg))
+                          .output()?; // --sysroot
+    if !excode.status.success() {
+        // Use paru if aur is enabled
         if aur_check(snapshot) {
-            let excode = Command::new("sh")
+            Command::new("sh")
                 .arg("-c")
                 .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} su aur -c \'paru -S {} --needed --overwrite '/var/*''\'", snapshot,pkg))
-                .status().unwrap();
-            if excode.success() {
-                return 0;
-            } else {
-                return 1;
-            }
+                .status()?;
         } else {
-            eprintln!("AUR is not enabled!");
-            return 1;
+            return Err(Error::new(ErrorKind::NotFound,
+                                  format!("AUR is not enabled!")));
         }
     } else {
-        prepare(snapshot).unwrap();
-        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                           .args(["pacman", "-S"])
-                                           .arg(format!("{}", pkg))
-                                           .args(["--needed", "--overwrite", "'/var/*'"])
-                                           .status().unwrap();
-        if excode.success() {
-            return 0;
-        } else {
-            return 1;
-        }
+        prepare(snapshot)?;
+        Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                              .args(["pacman", "-S"])
+                              .arg(format!("{}", pkg))
+                              .args(["--needed", "--overwrite", "'/var/*'"])
+                              .status()?;
     }
+    Ok(())
 }
 
 // Install atomic-operation in live snapshot
-pub fn install_package_live(snapshot: &str, tmp: &str, pkg: &str) -> ExitStatus {
+pub fn install_package_live(snapshot: &str, tmp: &str, pkg: &str) -> std::io::Result<()> {
+    // This extra pacman check is to avoid unwantedly triggering AUR if package is official
     let excode = Command::new("pacman").arg("-Si")
                                        .arg(format!("{}", pkg))
-                                       .output().unwrap(); // --sysroot
+                                       .output()?; // --sysroot
     if excode.status.success() {
-        let excode = Command::new("sh")
+        Command::new("sh")
             .arg("-c")
             .arg(format!("chroot /.snapshots/rootfs/snapshot-{} pacman -Sy --overwrite '*' --noconfirm {}", tmp,pkg))
-            .status().unwrap();
-        return excode;
+            .status()?;
     } else {
+        // Use paru if aur is enabled
         if aur_check(snapshot) {
-            let excode = Command::new("sh")
+            Command::new("sh")
                 .arg("-c")
                 .arg(format!("chroot /.snapshots/rootfs/snapshot-{} su aur -c 'paru -Sy --overwrite '*' --noconfirm {}'", tmp,pkg))
-                .status().unwrap();
-            return excode;
+                .status()?;
         } else {
-            eprint!("AUR is not enabled!");
-            return excode.status;
+            return Err(Error::new(ErrorKind::NotFound,
+                                  format!("AUR is not enabled!")));
         }
     }
+    Ok(())
 }
 
 // Get list of packages installed in a snapshot
@@ -199,6 +194,49 @@ pub fn pkg_list(chr: &str, snap: &str) -> Vec<String> {
 pub fn refresh_helper(snapshot: &str) -> ExitStatus {
     Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                           .args(["pacman", "-Syy"]).status().unwrap()
+}
+
+// Show diff of packages between 2 snapshots
+pub fn snapshot_diff(snapshot1: &str, snapshot2: &str) -> std::io::Result<()> {
+    // Make sure snapshot one does exists
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot1)).try_exists().unwrap() {
+        return Err(Error::new(ErrorKind::NotFound,
+                              format!("Snapshot {} not found.", snapshot1)));
+
+        // Make sure snapshot two does exists
+        } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot2)).try_exists().unwrap() {
+        return Err(Error::new(ErrorKind::NotFound,
+                              format!("Snapshot {} not found.", snapshot2)));
+
+    } else {
+        let snap1 = format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local", snapshot1);
+        let snap2 = format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local", snapshot2);
+        let path1 = Path::new(&snap1);
+        let path2 = Path::new(&snap2);
+        // Iterate over all directories in dir2 and check if any are missing in dir1
+        let mut missing_dirs = Vec::new();
+        for entry in WalkDir::new(path2) {
+            let entry = entry.unwrap();
+            if entry.file_type().is_dir() {
+                let relative_path = entry.path().strip_prefix(path2).unwrap();
+                let dir1_path = path1.join(relative_path);
+
+                if !dir1_path.exists() {
+                    let dir_name = relative_path.file_name().unwrap();
+                    missing_dirs.push(dir_name.to_string_lossy().to_string());
+                }
+            }
+        }
+
+        // Print the missing directory names
+        if !missing_dirs.is_empty() {
+            missing_dirs.sort();
+            for dir_name in missing_dirs {
+                println!("{}", dir_name);
+            }
+        }
+    }
+    Ok(())
 }
 
 // Uninstall package(s) atomic-operation

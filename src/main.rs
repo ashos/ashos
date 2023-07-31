@@ -53,7 +53,7 @@ fn main() {
                     desc
                 };
 
-                // Run barnch
+                // Run barnch_create
                 let run = branch_create(snapshot.as_str(), desc.as_str());
                 match run {
                     Ok(snapshot_num) => println!("Branch {} added under snapshot {}.", snapshot_num,snapshot),
@@ -127,7 +127,7 @@ fn main() {
                     snap
                 };
 
-                // Run clone-branch
+                // Run clone_branch
                 let run = clone_branch(snapshot.as_str());
                 match run {
                     Ok(snapshot_num) => println!("Branch {} added to parent of {}.", snapshot_num,snapshot),
@@ -146,7 +146,7 @@ fn main() {
                     snap
                 };
 
-                // Run clone-tree
+                // Run clone_recursive
                 let run = clone_recursive(snapshot.as_str());
                 match run {
                     Ok(_) => println!("Snapshot {} was cloned recursively.", snapshot),
@@ -162,7 +162,7 @@ fn main() {
                 let branch_i32 = clone_under_matches.get_one::<i32>("BRANCH").unwrap();
                 let branch = format!("{}", branch_i32);
 
-                // Run clone-under
+                // Run clone_under
                 let run = clone_under(snapshot.as_str(), branch.as_str());
                 match run {
                     Ok(snapshot_num) => println!("Branch {} added to parent of {}.", snapshot_num,snapshot),
@@ -208,6 +208,18 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            Some(("diff", diff_matches)) => {
+                // Get snapshot one value
+                let snap1 = diff_matches.get_one::<i32>("SNAPSHOT-1").unwrap();
+                let snapshot1 = format!("{}", snap1);
+
+                // Get snapshot two value
+                let snap2 = diff_matches.get_one::<i32>("SNAPSHOT-2").unwrap();
+                let snapshot2 = format!("{}", snap2);
+
+                // Run diff
+                diff(snapshot1.as_str(), snapshot2.as_str());
+            }
             Some(("dist", _matches)) => {
             }
             Some(("etc-update", _matches)) => {
@@ -242,7 +254,7 @@ fn main() {
                     snap
                 };
 
-                // Run immdis
+                // Run immutability_disable
                 let run = immutability_disable(snapshot.as_str());
                 match run {
                     Ok(_) => println!("Snapshot {} successfully made mutable.", snapshot),
@@ -260,7 +272,7 @@ fn main() {
                     snap
                 };
 
-                // Run immdis
+                // Run immutability_enable
                 let run = immutability_enable(snapshot.as_str());
                 match run {
                     Ok(_) => println!("Snapshot {} successfully made immutable.", snapshot),
