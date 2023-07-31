@@ -17,7 +17,7 @@ let matches = Command::new("ash")
         // Base update
         .subcommand(Command::new("base-update")
                     .alias("bu")
-                    .about("Update the base snapshot"))
+                    .about("Update the base snapshot")) //REVIEW
         // Boot update command
         .subcommand(Command::new("boot")
                     .alias("boot-update")
@@ -25,18 +25,21 @@ let matches = Command::new("ash")
                     .arg_required_else_help(true)
                     .arg(Arg::new("snapshot")
                          .value_parser(clap::value_parser!(i32))
-                         .help("snapshot number"),),)
+                         .help("snapshot number"),),)//REVIEW
         // Branch
         .subcommand(Command::new("branch")
                     .alias("add-branch")
                     .about("Create a new branch from snapshot")
-                    .arg_required_else_help(true)
-                    .arg(Arg::new("snapshot")
+                    .arg(Arg::new("SNAPSHOT")
+                         .long("snapshot")
+                         .alias("snap")
+                         .short('s')
                          .value_parser(clap::value_parser!(i32))
-                         .help("snapshot number"),)
-                    .arg(Arg::new("desc")
-                         .long("desc")
-                         .alias("description")
+                         .required(false)
+                         .help("Snapshot number"),)
+                    .arg(Arg::new("DESCRIPTION")
+                         .long("description")
+                         .alias("desc")
                          .short('d')
                          .num_args(1..)
                          .required(false)
@@ -156,11 +159,21 @@ let matches = Command::new("ash")
                     .aliases(["d", "dep"])
                     .about("Deploy a snapshot for next boot")
                     .arg_required_else_help(true)
-                    .arg(Arg::new("snapshot")
+                    .arg(Arg::new("secondary")
+                         .long("secondary")
+                         .alias("sec")
+                         .required(false)
+                         .action(ArgAction::SetTrue)
+                         .help("Deploy into secondary snapshot slot"),)
+                    .arg(Arg::new("SNAPSHOT")
+                         .long("snapshot")
+                         .alias("snap")
+                         .short('s')
                          .value_parser(clap::value_parser!(i32))
+                         .required(false)
                          .help("snapshot number"),),)
         // Description
-        .subcommand(Command::new("desc")
+        .subcommand(Command::new("desc") //REVIEW
                     .about("set a description for a snapshot")
                     .arg_required_else_help(true)
                     .arg(Arg::new("snapshot")
@@ -170,7 +183,7 @@ let matches = Command::new("ash")
                          .num_args(1..)
                          .help("description to be added"),),)
         // Diff two snapshots
-        .subcommand(Command::new("diff")
+        .subcommand(Command::new("diff") //REVIEW
                     .alias("dif")
                     .about("Show package diff between snapshots")
                     .arg_required_else_help(true)
@@ -181,7 +194,7 @@ let matches = Command::new("ash")
                          .value_parser(clap::value_parser!(i32))
                          .help("Target snapshot"),),)
         // Edit Ash configuration
-        .subcommand(Command::new("edit")
+        .subcommand(Command::new("edit")//REVIEW
                     .alias("edit-conf")
                     .about("Edit configuration for a snapshot")
                     .arg_required_else_help(true)
@@ -189,11 +202,11 @@ let matches = Command::new("ash")
                          .value_parser(clap::value_parser!(i32))
                          .help("snapshot number"),),)
         // etc update
-        .subcommand(Command::new("etc-update")
+        .subcommand(Command::new("etc-update")//REVIEW
                     .alias("etc")
                     .about("update /etc"))
         // Fix db command ### MAYBE ash_unlock was needed?
-        .subcommand(Command::new("fixdb")
+        .subcommand(Command::new("fixdb")//REVIEW
                     .alias("fix")
                     .about("fix package database of a snapshot")
                     .arg_required_else_help(true)
@@ -203,28 +216,37 @@ let matches = Command::new("ash")
         // Hollow a node
         .subcommand(Command::new("hollow")
                     .about("Make a snapshot hollow (vulnerable)")
-                    .arg_required_else_help(true)
-                    .arg(Arg::new("s")
+                    .arg(Arg::new("SNAPSHOT")
+                         .long("snapshot")
+                         .alias("snap")
+                         .short('s')
                          .value_parser(clap::value_parser!(i32))
+                         .required(false)
                          .help("snapshot number"),),)
         // Immutability disable
         .subcommand(Command::new("immdis")
-                    .aliases(["disimm", "immdisable", "disableimm"])
+                    .aliases(["disable-mutability", "disableimm", "disimm", "dmut", "immdisable"])
                     .about("Disable immutability of a snapshot")
-                    .arg_required_else_help(true)
-                    .arg(Arg::new("snapshot")
+                    .arg(Arg::new("SNAPSHOT")
+                         .long("snapshot")
+                         .alias("snap")
+                         .short('s')
                          .value_parser(clap::value_parser!(i32))
+                         .required(false)
                          .help("snapshot number"),),)
         // Immutability enable
         .subcommand(Command::new("immen")
-                    .aliases(["enimm", "immenable", "enableimm"])
+                    .aliases(["enable-mutability", "enableimm", "enimm", "immenable", "mut"])
                     .about("Enable immutability of a snapshot")
-                    .arg_required_else_help(true)
-                    .arg(Arg::new("snapshot")
+                    .arg(Arg::new("SNAPSHOT")
+                         .long("snapshot")
+                         .alias("snap")
+                         .short('s')
                          .value_parser(clap::value_parser!(i32))
+                         .required(false)
                          .help("snapshot number"),),)
         // Install command
-        .subcommand(Command::new("install")
+        .subcommand(Command::new("install")//REVIEW
                     .alias("in")
                     .about("install package(s) inside a snapshot")
                     .arg_required_else_help(true)
@@ -244,11 +266,11 @@ let matches = Command::new("ash")
                          .conflicts_with("--profile")
                          .help("install profile"),),)
         // Live chroot
-        .subcommand(Command::new("live-chroot")
+        .subcommand(Command::new("live-chroot")//REVIEW
                     .aliases(["lchroot", "lc"])
                     .about("Open a shell inside currently booted snapshot with read-write access. Changes are discarded on new deployment."))
         // New
-        .subcommand(Command::new("new")
+        .subcommand(Command::new("new")//REVIEW
                     .alias("new-tree")
                     .about("Create a new base snapshot")
                     .arg_required_else_help(true)
@@ -258,7 +280,7 @@ let matches = Command::new("ash")
                          .required(false)
                          .help("Description for the snapshot"),),)
         // Refresh
-        .subcommand(Command::new("refresh")
+        .subcommand(Command::new("refresh")//REVIEW
                     .alias("ref")
                     .about("Refresh package manager db of a snapshot")
                     .arg_required_else_help(true)
@@ -266,10 +288,10 @@ let matches = Command::new("ash")
                          .value_parser(clap::value_parser!(i32))
                          .help("snapshot number"),),)
         // Rollback
-        .subcommand(Command::new("rollback")
+        .subcommand(Command::new("rollback")//REVIEW
                     .about("Revert the deployment to the last booted snapshot"))
         // Run a command
-        .subcommand(Command::new("run")
+        .subcommand(Command::new("run")//REVIEW
                     .about("Run command(s) inside another snapshot (chrooted)")
                     .arg_required_else_help(true)
                     .arg(Arg::new("snapshot")
@@ -279,11 +301,11 @@ let matches = Command::new("ash")
                          .num_args(1..)
                          .help("command"),),)
         // Subvolumes list
-        .subcommand(Command::new("subs")
+        .subcommand(Command::new("subs")//REVIEW
                     .aliases(["sub", "subvol", "subvols", "subvolumes"])
                     .about("List subvolumes of active snapshot (currently booted)"))
         // Tree-Sync
-        .subcommand(Command::new("sync")
+        .subcommand(Command::new("sync")//REVIEW
                     .aliases(["tree-sync", "tsync"])
                     .about("Sync packages and configuration changes recursively (requires an internet connection)")
                     .arg_required_else_help(true)
@@ -301,15 +323,15 @@ let matches = Command::new("ash")
                          .required(false)
                          .help("Disable live sync"),),)
         // tmp (clear tmp)
-        .subcommand(Command::new("tmp")
+        .subcommand(Command::new("tmp")//REVIEW
                     .alias("tmpclear")
                     .about("Show ash tree"))
         // Tree
-        .subcommand(Command::new("tree")
+        .subcommand(Command::new("tree")//REVIEW
                     .alias("t")
                     .about("Show ash tree"))
         // Tree-remove
-        .subcommand(Command::new("tremove")
+        .subcommand(Command::new("tremove")//REVIEW
                     .alias("tree-rmpkg")
                     .about("Uninstall package(s) or profile(s) from a tree recursively")
                     .arg_required_else_help(true)
@@ -329,7 +351,7 @@ let matches = Command::new("ash")
                          .conflicts_with("--profile")
                          .help("profile(s) to be uninstalled"),),)
         // Tree-run
-        .subcommand(Command::new("trun")
+        .subcommand(Command::new("trun")//REVIEW
                     .alias("tree-run")
                     .about("Execute command(s) inside another snapshot and all snapshots below it")
                     .arg_required_else_help(true)
@@ -342,7 +364,7 @@ let matches = Command::new("ash")
                          .required(false)
                          .help("command(s) to run"),),)
         // Tree-upgrade
-        .subcommand(Command::new("tupgrade")
+        .subcommand(Command::new("tupgrade")//REVIEW
                     .aliases(["tree-upgrade", "tup"])
                     .about("Update all packages in a snapshot recursively")
                     .arg_required_else_help(true)
@@ -350,7 +372,7 @@ let matches = Command::new("ash")
                          .value_parser(clap::value_parser!(i32))
                          .help("snapshot number"),),)
         // Uninstall package(s) from a snapshot
-        .subcommand(Command::new("uninstall")
+        .subcommand(Command::new("uninstall")//REVIEW
                     .aliases(["unin", "uninst", "unins", "un"])
                     .about("Uninstall package(s) from a snapshot")
                     .arg_required_else_help(true)
@@ -370,7 +392,7 @@ let matches = Command::new("ash")
                          .conflicts_with("--profile")
                          .help("profile(s) to be uninstalled"),),)
         // Unlock a snapshot
-        .subcommand(Command::new("unlock")
+        .subcommand(Command::new("unlock")//REVIEW
                     .alias("ul")
                     .about("Unlock a snapshot")
                     .arg_required_else_help(true)
@@ -378,7 +400,7 @@ let matches = Command::new("ash")
                          .value_parser(clap::value_parser!(i32))
                          .help("snapshot number"),),)
         // Upgrade a snapshot
-        .subcommand(Command::new("upgrade")
+        .subcommand(Command::new("upgrade")//REVIEW
                     .alias("up")
                     .about("Update all packages in a snapshot")
                     .arg_required_else_help(true)
@@ -390,7 +412,7 @@ let matches = Command::new("ash")
                     .alias("v")
                     .about("Print ash version"))
         // Which deployment is active
-        .subcommand(Command::new("whichtmp")
+        .subcommand(Command::new("whichtmp")//REVIEW
                     .aliases(["whichdep", "which"])
                     .about("Show which deployment snapshot is in use"));
     return matches;

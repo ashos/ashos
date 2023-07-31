@@ -33,14 +33,31 @@ fn main() {
             }
             Some(("base-update", _matches)) => {
             }
-            Some(("branch", barnch_matches)) => {
-                let snapshot  = barnch_matches.get_one::<i32>("snapshot").unwrap();
-                if barnch_matches.contains_id("desc") {
-                    let desc = barnch_matches.get_one::<String>("desc").map(|s| s.as_str()).unwrap();
-                    extend_branch(format!("{}", snapshot).as_str(), desc);
+            Some(("branch", branch_matches)) => {
+                // Get snapshot value
+                let snapshot = if branch_matches.contains_id("SNAPSHOT") {
+                    let snap = branch_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Get description value
+                let desc = if branch_matches.contains_id("DESCRIPTION") {
+                    let desc = branch_matches.get_one::<String>("DESCRIPTION").map(|s| s.as_str()).unwrap().to_string();
+                    desc
                 } else {
                     let desc = String::new();
-                    extend_branch(format!("{}", snapshot).as_str(), desc.as_str());
+                    desc
+                };
+
+                // Run barnch
+                let run = branch_create(snapshot.as_str(), desc.as_str());
+                match run {
+                    Ok(snapshot_num) => println!("Branch {} added under snapshot {}.", snapshot_num,snapshot),
+                    Err(e) => eprintln!("{}", e),
                 }
             }
             Some(("check", _matches)) => {
@@ -135,7 +152,6 @@ fn main() {
                     Ok(_) => println!("Snapshot {} was cloned recursively.", snapshot),
                     Err(e) => eprintln!("{}", e),
                 }
-                clone_recursive(snapshot.as_str()).unwrap();
             }
             Some(("clone-under", clone_under_matches)) => {
                 // Get snapshot value
@@ -171,10 +187,85 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            Some(("deploy", deploy_matches)) => {
+                // Get snapshot value
+                let snapshot = if deploy_matches.contains_id("SNAPSHOT") {
+                    let snap = deploy_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Optional values
+                let secondary = deploy_matches.get_flag("secondary");
+
+                // Run deploy
+                let run = deploy(snapshot.as_str(), secondary);
+                match run {
+                    Ok(_) => println!("Snapshot {} deployed to /.", snapshot),
+                    Err(e) => eprintln!("{}", e),
+                }
+            }
             Some(("dist", _matches)) => {
             }
             Some(("etc-update", _matches)) => {
                 update_etc();
+            }
+            Some(("hollow", hollow_matches)) => {
+                // Get snapshot value
+                let snapshot = if hollow_matches.contains_id("SNAPSHOT") {
+                    let snap = hollow_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Run hollow
+                let run = hollow(snapshot.as_str());
+                match run {
+                    Ok(_) => println!("Snapshot {} hollow operation succeeded. Please reboot!", snapshot),
+                    Err(e) => eprintln!("{}", e),
+                }
+            }
+            Some(("immdis", immdis_matches)) => {
+                // Get snapshot value
+                let snapshot = if immdis_matches.contains_id("SNAPSHOT") {
+                    let snap = immdis_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Run immdis
+                let run = immutability_disable(snapshot.as_str());
+                match run {
+                    Ok(_) => println!("Snapshot {} successfully made mutable.", snapshot),
+                    Err(e) => eprintln!("{}", e),
+                }
+            }
+            Some(("immen", immen_matches)) => {
+                // Get snapshot value
+                let snapshot = if immen_matches.contains_id("SNAPSHOT") {
+                    let snap = immen_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Run immdis
+                let run = immutability_enable(snapshot.as_str());
+                match run {
+                    Ok(_) => println!("Snapshot {} successfully made immutable.", snapshot),
+                    Err(e) => eprintln!("{}", e),
+                }
             }
             Some(("live-chroot", _matches)) => {
                 live_unlock();
@@ -190,10 +281,7 @@ fn main() {
                 tmp_clear();
             }
             Some(("version", _matches)) => {
-                match ash_version() {
-                    Some(version) => println!("ash version: {}", version),
-                    None => eprintln!("Ash not found"),
-                }
+                ash_version().unwrap();
             }
             Some(("whichtmp", _matches)) => {
                 println!("{}", get_tmp());

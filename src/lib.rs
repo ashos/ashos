@@ -5,13 +5,17 @@ mod tree;
 use crate::detect_distro as detect;
 use crate::distros::*;
 use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, delete_subvolume, DeleteSubvolumeFlags};
+use mktemp::Temp;
 use nix::mount::{mount, MntFlags, MsFlags, umount2};
-use tree::*;
+use partition_identity::{PartitionID, PartitionSource};
 use std::collections::HashMap;
-use std::fs::{copy, create_dir_all, DirBuilder, File, OpenOptions, read_dir, read_to_string};
+use std::fs::{copy, DirBuilder, File, metadata, OpenOptions, read_dir, read_to_string};
 use std::io::{BufRead, BufReader, Error, ErrorKind, Read, stdin, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::UNIX_EPOCH;
+use tree::*;
+use walkdir::{DirEntry, WalkDir};
 
 // Ash chroot mounts
 pub fn ash_mounts(i: &str, chr: &str) -> nix::Result<()> {
@@ -113,8 +117,74 @@ pub fn ash_umounts(i: &str, chr: &str) -> nix::Result<()> {
 }
 
 //Ash version
-pub fn ash_version() -> Option<String> {
-    check_pkg_version()
+pub fn ash_version() -> std::io::Result<String> {
+    //let ash_bin_path = std::env::current_exe().unwrap(); //https://doc.rust-lang.org/std/env/fn.current_exe.html#security
+    let ash_bin_path = if Path::new("/usr/sbin/ash").try_exists().unwrap() {
+        Path::new("/usr/sbin/ash")
+    } else {
+        Path::new("/.snapshots/ash/ash")
+    };
+    let metadata = metadata(ash_bin_path).unwrap();
+    let time = metadata.modified().unwrap();
+    let duration = time.duration_since(UNIX_EPOCH).unwrap();
+    let utc = time::OffsetDateTime::UNIX_EPOCH +
+        time::Duration::try_from(duration).unwrap();
+    let local = utc.to_offset(time::UtcOffset::local_offset_at(utc).unwrap());
+    let version = local.format_into(
+        &mut std::io::stdout().lock(),
+        time::macros::format_description!(
+            "Last modified on: [weekday] [day]-[month]-[year] [hour repr:12]:[minute]:[second] [period]\n"
+        ),
+    ).unwrap().to_string();
+    Ok(version)
+}
+
+// Add node to branch
+pub fn branch_create(snapshot: &str, desc: &str) -> std::io::Result<i32> {
+    // Find the next available snapshot number
+    let i = find_new();
+
+    // Make sure snapshot exists
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+        return Err(Error::new(ErrorKind::NotFound, format!("Cannot branch as snapshot {} doesn't exist.", snapshot)));
+
+    } else {
+        // Check mutability
+        let immutability: CreateSnapshotFlags = if check_mutability(snapshot) {
+            CreateSnapshotFlags::empty()
+        } else {
+            CreateSnapshotFlags::READ_ONLY
+        };
+
+        // Create snapshot
+        create_snapshot(format!("/.snapshots/boot/boot-{}", snapshot),
+                        format!("/.snapshots/boot/boot-{}", i),
+                        immutability, None).unwrap();
+        create_snapshot(format!("/.snapshots/etc/etc-{}", snapshot),
+                        format!("/.snapshots/etc/etc-{}", i),
+                        immutability, None).unwrap();
+        create_snapshot(format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                        format!("/.snapshots/rootfs/snapshot-{}", i),
+                        immutability, None).unwrap();
+
+        // Mark newly created snapshot as mutable
+        if immutability ==  CreateSnapshotFlags::empty() {
+            File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i))?;
+        }
+
+        // Import tree file
+        let tree = fstree().unwrap();
+        // Add child to node
+        add_node_to_parent(&tree, snapshot, i).unwrap();
+        // Save tree to fstree
+        write_tree(&tree)?;
+        // Write description for snapshot
+        if !desc.is_empty() {
+            let description = desc.split("").collect::<Vec<&str>>().join(" ");
+            write_desc(i.to_string().as_str(), &description)?;
+        }
+    }
+    Ok(i)
 }
 
 // Check if snapshot is mutable
@@ -126,14 +196,14 @@ pub fn check_mutability(snapshot: &str) -> bool {
 // Check if last update was successful
 pub fn check_update() -> std::io::Result<()> {
     // Open and read upstate file
-    let upstate = File::open("/.snapshots/ash/upstate").unwrap();
+    let upstate = File::open("/.snapshots/ash/upstate")?;
     let buf_read = BufReader::new(upstate);
     let mut read = buf_read.lines();
 
     // Read state line
-    let line = read.next().unwrap().unwrap();
+    let line = read.next().unwrap()?;
     // Read data line
-    let data = read.next().unwrap().unwrap();
+    let data = read.next().unwrap()?;
 
     // Check state line
     if line.contains("1") {
@@ -432,7 +502,7 @@ fn comment_after_hash(line: &mut String) -> &str {
 pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> std::io::Result<()> {
     // Get some values
     let current_snapshot = get_current_snapshot();
-    let next_snapshot = get_next_snapshot();
+    let next_snapshot = get_next_snapshot(false);
     let mut run = false;
 
     // Iterating over snapshots
@@ -460,7 +530,7 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> std::io:
 
                 // Abort if not quiet and confirmation message is false
                 } else if !quiet && !yes_no(format!("Are you sure you want to delete snapshot {}?", snapshot).as_str()) {
-                return Err(Error::new(ErrorKind::Other, format!(
+                return Err(Error::new(ErrorKind::Interrupted, format!(
                     "Aborted.")));
             } else {
                 run = true;
@@ -503,176 +573,169 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> std::io:
     Ok(())
 }
 
-// Delete tree or branch //REVIEW // New function
-//def delete_deploys():
-    //for snap in ("deploy", "deploy-aux"):
-        //os.system(f"btrfs sub del /.snapshots/boot/boot-{snap}{DEBUG}")
-        //os.system(f"btrfs sub del /.snapshots/etc/etc-{snap}{DEBUG}")
-        //os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-{snap}{DEBUG}")
-        //# Make sure temporary chroot directories are deleted as well
-        //if (os.path.exists(f"/.snapshots/rootfs/snapshot-chr{snap}")):
-            //os.system(f"btrfs sub del /.snapshots/boot/boot-chr{snap}{DEBUG}")
-            //os.system(f"btrfs sub del /.snapshots/etc/etc-chr{snap}{DEBUG}")
-            //os.system(f"btrfs sub del /.snapshots/rootfs/snapshot-chr{snap}{DEBUG}")
+// Delete tree or branch
+pub fn delete_deploys() -> std::io::Result<()> {
+    for snap in ["deploy", "deploy-aux"] {
+        delete_subvolume(format!("/.snapshots/boot/boot-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+        delete_subvolume(format!("/.snapshots/etc/etc-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+        delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+        // Make sure temporary chroot directories are deleted as well
+        if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snap)).try_exists().unwrap() {
+            delete_subvolume(format!("/.snapshots/boot/boot-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(format!("/.snapshots/etc/etc-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(format!("/.snapshots/rootfs/snapshot-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+        }
         //print(f"Snapshot {snap} removed.")
+    }
+    Ok(())
+}
+
+// Delete old grub.cfg
+pub fn delete_old_grub_files(grub: &str) -> Result<(), Error> {
+    let bak_path = Path::new(grub).join("BAK");
+    let cutoff_time = std::time::SystemTime::now() - std::time::Duration::from_secs(30 * 24 * 60 * 60);
+    for entry in WalkDir::new(bak_path) {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_file() && path.to_str().unwrap().contains("grub.cfg") && path.metadata()?.modified()? < cutoff_time {
+            std::fs::remove_file(path)?;
+        }
+    }
+    Ok(())
+}
 
 // Deploy snapshot
-pub fn deploy(snapshot: &str) {
+pub fn deploy(snapshot: &str, secondary: bool) -> std::io::Result<()> {
+    // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Cannot deploy as snapshot {} doesn't exist.", snapshot);
+        return Err(Error::new(ErrorKind::NotFound, format!("Cannot deploy as snapshot {} doesn't exist.", snapshot)));
+
     } else {
-        update_boot(snapshot);
+        println!("The snapshot {} is being deployed, it may take some time, please be patient.", snapshot);
+        update_boot(snapshot, secondary)?;
         let tmp = get_tmp();
+        // Set default volume
         Command::new("btrfs").args(["sub", "set-default"])
                              .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
-                             .status().unwrap(); // Set default volume
-        tmp_delete();
-        let tmp = if tmp.contains("deploy-aux") {
-            "deploy"
-        } else {
-            "deploy-aux"
-        };
+                             .output()?;
+        tmp_delete(secondary)?;
+        let tmp = get_aux_tmp(tmp, secondary);
+
         // Special mutable directories
         let options = snapshot_config_get(snapshot);
         let mutable_dirs: Vec<&str> = options.get("mutable_dirs")
-                                             .map(|dirs| dirs.split(',').filter(|dir| !dir.is_empty()).collect())
+                                             .map(|dirs| {dirs.split(',').flat_map(|dir| {
+                                                 if let Some(index) = dir.find("::") {
+                                                     vec![&dir[..index], &dir[index + 2..]]
+                                                 } else {
+                                                     vec![dir]
+                                                 }
+                                             }).filter(|dir| !dir.trim().is_empty()).collect()})
                                              .unwrap_or_else(|| Vec::new());
         let mutable_dirs_shared: Vec<&str> = options.get("mutable_dirs_shared")
-                                                    .map(|dirs| dirs.split(',').filter(|dir| !dir.is_empty()).collect())
+                                                    .map(|dirs| {dirs.split(',').flat_map(|dir| {
+                                                        if let Some(index) = dir.find("::") {
+                                                            vec![&dir[..index], &dir[index + 2..]]
+                                                        } else {
+                                                            vec![dir]
+                                                        }
+                                                    }).filter(|dir| !dir.trim().is_empty()).collect()})
                                                     .unwrap_or_else(|| Vec::new());
+
         // btrfs snapshot operations
-        Command::new("btrfs").args(["sub", "snap"])
-                             .arg(format!("/.snapshots/boot/boot-{}", snapshot))
-                             .arg(format!("/.snapshots/boot/boot-{}", tmp))
-                             .status().unwrap();
-        Command::new("btrfs").args(["sub", "snap"])
-                             .arg(format!("/.snapshots/etc/etc-{}", snapshot))
-                             .arg(format!("/.snapshots/etc/etc-{}", tmp))
-                             .status().unwrap();
-        Command::new("btrfs").args(["sub", "snap"])
-                             .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                             .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
-                             .status().unwrap();
-        Command::new("mkdir").arg("-p")
-                             .arg(format!("/.snapshots/rootfs/snapshot-{}/boot", tmp))
-                             .status().unwrap();
-        Command::new("mkdir").arg("-p")
-                             .arg(format!("/.snapshots/rootfs/snapshot-{}/etc", tmp))
-                             .status().unwrap();
-        Command::new("rm").arg("-rf")
-                          .arg(format!("/.snapshots/rootfs/snapshot-{}/var", tmp))
-                          .status().unwrap();
+        create_snapshot(format!("/.snapshots/boot/boot-{}", snapshot),
+                        format!("/.snapshots/boot/boot-{}", tmp),
+                        CreateSnapshotFlags::empty(), None).unwrap();
+        create_snapshot(format!("/.snapshots/etc/etc-{}", snapshot),
+                        format!("/.snapshots/etc/etc-{}", tmp),
+                        CreateSnapshotFlags::empty(), None).unwrap();
+        create_snapshot(format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                        format!("/.snapshots/rootfs/snapshot-{}", tmp),
+                        CreateSnapshotFlags::empty(), None).unwrap();
+        DirBuilder::new().recursive(true)
+                         .create(format!("/.snapshots/rootfs/snapshot-{}/boot", tmp))?;
+        DirBuilder::new().recursive(true)
+                         .create(format!("/.snapshots/rootfs/snapshot-{}/etc", tmp))?;
+        std::fs::remove_dir_all(&format!("/.snapshots/rootfs/snapshot-{}/var", tmp))?;
         Command::new("cp").args(["-r", "--reflink=auto"])
-                          .arg(format!("/.snapshots/boot/boot-{}/.", snapshot))
+                          .arg(format!("/.snapshots/boot/boot-{}/", snapshot))
                           .arg(format!("/.snapshots/rootfs/snapshot-{}/boot", tmp))
-                          .status().unwrap();
+                          .output()?;
         Command::new("cp").args(["-r", "--reflink=auto"])
-                          .arg(format!("/.snapshots/etc/etc-{}/.", snapshot))
+                          .arg(format!("/.snapshots/etc/etc-{}/", snapshot))
                           .arg(format!("/.snapshots/rootfs/snapshot-{}/etc", tmp))
-                          .status().unwrap();
+                          .output()?;
+
         // If snapshot is mutable, modify '/' entry in fstab to read-write
         if check_mutability(snapshot) {
-            Command::new("sh").arg("-c")
-                              .arg(format!("sed -i '0,/snapshot-{}/ s|,ro||' /.snapshots/rootfs/snapshot-{}/etc/fstab", tmp,tmp)) // ,rw
-                              .status().unwrap();
+            let mut fstab_file = File::open(format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", tmp))?;
+            let mut contents = String::new();
+            fstab_file.read_to_string(&mut contents)?;
+
+            let pattern = format!("snapshot-{}", tmp);
+            if let Some(index) = contents.find(&pattern) {
+                if let Some(end) = contents[index..].find(",ro") {
+                    let replace_index = index + end;
+                    let mut new_contents = String::with_capacity(contents.len());
+                    new_contents.push_str(&contents[..replace_index]);
+                    new_contents.push_str(&contents[replace_index + 3..]);
+                    std::fs::write(format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", tmp), new_contents)?;
+                }
+            }
         }
+
         // Add special user-defined mutable directories as bind-mounts into fstab
         if !mutable_dirs.is_empty() {
             for mount_path in mutable_dirs {
                 let source_path = format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path);
-                Command::new("mkdir").arg("-p")
-                                     .arg(format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path))
-                                     .status().unwrap();
-                Command::new("mkdir").arg("-p")
-                                     .arg(format!("/.snapshots/rootfs/snapshot-{}/{}", tmp,mount_path))
-                                     .status().unwrap();
-                Command::new("sh")
-                    .arg("-c")
-                    .arg(format!("echo '{} /{} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{}/etc/fstab", source_path,mount_path,tmp))
-                    .status().unwrap();
+                DirBuilder::new().recursive(true)
+                                 .create(format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path))?;
+                DirBuilder::new().recursive(true)
+                                 .create(format!("/.snapshots/rootfs/snapshot-{}/{}", tmp,mount_path))?;
+                let fstab = format!("{} /{} none defaults,bind 0 0", source_path,mount_path);
+                let mut fstab_file = OpenOptions::new().append(true)
+                                                       .create(true)
+                                                       .read(true)
+                                                       .open(format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", tmp))?;
+                fstab_file.write_all(format!("{}\n", fstab).as_bytes())?;
             }
         }
+
         // Same thing but for shared directories
         if mutable_dirs_shared.is_empty() {
             for mount_path in mutable_dirs_shared {
                 let source_path = format!("/.snapshots/mutable_dirs/{}", mount_path);
-                Command::new("mkdir").arg("-p")
-                                     .arg(format!("/.snapshots/mutable_dirs/{}", mount_path))
-                                     .status().unwrap();
-                Command::new("mkdir").arg("-p")
-                                     .arg(format!("/.snapshots/rootfs/snapshot-{}/{}", tmp,mount_path))
-                                     .status().unwrap();
-                Command::new("sh").arg("-c")
-                                  .arg(format!("echo '{} /{} none defaults,bind 0 0' >> /.snapshots/rootfs/snapshot-{}/etc/fstab", source_path,mount_path,tmp))
-                                  .status().unwrap();
-                Command::new("btrfs").args(["sub", "snap"])
-                                     .arg("/var")
-                                     .arg(format!("/.snapshots/rootfs/snapshot-{}/var", tmp)).status().unwrap(); // Is this needed?
-                Command::new("sh").arg("-c")
-                                  .arg(format!("echo '{}' > /.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", snapshot,tmp))
-                                  .status().unwrap();
-            }
-            switch_tmp();
-            init_system_clean(tmp, "deploy").unwrap();
-            let excode = Command::new("btrfs").args(["sub", "set-default"])
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
-                                 .status().unwrap(); // Set default volume
-            if excode.success() {
-                println!("Snapshot {} deployed to /.", snapshot) //REVIEW
+                DirBuilder::new().recursive(true)
+                                 .create(format!("/.snapshots/mutable_dirs/{}", mount_path))?;
+                DirBuilder::new().recursive(true)
+                                 .create(format!("/.snapshots/rootfs/snapshot-{}/{}", tmp,mount_path))?;
+                let fstab = format!("{} /{} none defaults,bind 0 0", source_path,mount_path);
+                let mut fstab_file = OpenOptions::new().append(true)
+                                                       .create(true)
+                                                       .read(true)
+                                                       .open(format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", tmp))?;
+               fstab_file.write_all(format!("{}\n", fstab).as_bytes())?;
             }
         }
-    }
-}
+        create_snapshot("/var",
+                        format!("/.snapshots/rootfs/snapshot-{}/var", tmp),
+                        CreateSnapshotFlags::empty(), None).unwrap();
+        let snap_num = format!("{}", snapshot);
+        let mut snap_file = OpenOptions::new().truncate(true)
+                                              .create(true)
+                                              .read(true)
+                                              .write(true)
+                                              .open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", tmp))?;
+        snap_file.write_all(snap_num.as_bytes())?;
+        switch_tmp(secondary)?;
+        init_system_clean(tmp.as_str(), "deploy")?;
 
-// Add node to branch
-pub fn extend_branch(snapshot: &str, desc: &str) {
-    let i = find_new();
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Cannot branch as snapshot {} doesn't exist.", snapshot);
-    } else {
-        if check_mutability(snapshot) {
-            let immutability = "";
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/boot/boot-{}", snapshot))
-                                 .arg(format!("/.snapshots/boot/boot-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/etc/etc-{}", snapshot))
-                                 .arg(format!("/.snapshots/etc/etc-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", i)).status().unwrap();
-            Command::new("touch").arg(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i))
-                                 .status().unwrap();
-       } else {
-            let immutability = "-r";
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/boot/boot-{}", snapshot))
-                                 .arg(format!("/.snapshots/boot/boot-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/etc/etc-{}", snapshot))
-                                 .arg(format!("/.snapshots/etc/etc-{}", i)).status().unwrap();
-            Command::new("btrfs").args(["sub", "snap"])
-                                 .arg(immutability)
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                                 .arg(format!("/.snapshots/rootfs/snapshot-{}", i)).status().unwrap();
-        }
+        // Set default volume
+        Command::new("btrfs").args(["sub", "set-default"])
+                             .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
+                             .output()?;
     }
-
-    // Import tree file
-    let tree = fstree().unwrap();
-    add_node_to_parent(&tree, snapshot, i).unwrap();
-    write_tree(&tree).unwrap();
-    if desc.is_empty() {
-        print!("Branch {} added under snapshot {}.", i,snapshot);
-    } else {
-        write_desc(i.to_string().as_str(), desc).unwrap();
-        print!("Branch {} added under snapshot {}.", i,snapshot);
-    }
+    Ok(())
 }
 
 // Find new unused snapshot dir
@@ -704,6 +767,24 @@ pub fn find_new() -> i32 {
     }
 }
 
+// Get aux tmp
+pub fn get_aux_tmp(tmp: String, secondary: bool) -> String {
+    let tmp = if secondary {
+        if tmp.contains("secondary") {
+            tmp.replace("-secondary", "")
+        } else {
+            format!("{}-secondary", tmp)
+        }
+    } else {
+        if tmp.contains("deploy-aux") {
+            tmp.replace("deploy-aux", "deploy")
+        } else {
+            tmp.replace("deploy", "deploy-aux")
+        }
+    };
+    return tmp;
+}
+
 // Get current snapshot
 pub fn get_current_snapshot() -> String {
     let csnapshot = read_to_string("/usr/share/ash/snap").unwrap();
@@ -719,13 +800,30 @@ pub fn get_distro_suffix(distro: &str) -> String {
     }
 }
 
+// Get Grub path
+fn get_grub() -> Option<String> {
+    let boot_dir = "/boot";
+    let grub_dirs: Vec<String> = WalkDir::new(boot_dir)
+        .into_iter()
+        .filter_map(|entry| {
+            let entry: DirEntry = entry.unwrap();
+            if entry.file_type().is_dir() {
+                if let Some(dir_path) = entry.path().file_name() {
+                    if dir_path == "grub" {
+                        return Some(entry.path().to_string_lossy().into_owned());
+                    }
+                }
+            }
+            None
+        })
+        .collect();
+    grub_dirs.get(0).cloned()
+}
+
 // Get deployed snapshot
-pub fn get_next_snapshot() -> String {
-    let d = if get_tmp().contains("deploy-aux") {
-        "deploy"
-    } else {
-        "deploy-aux"
-    };
+pub fn get_next_snapshot(secondary: bool) -> String {
+    let tmp = get_tmp();
+    let d = get_aux_tmp(tmp, secondary);
 
     // Make sure next snapshot exists
     if Path::new(&format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", d)).try_exists().unwrap() {
@@ -741,15 +839,14 @@ pub fn get_next_snapshot() -> String {
 
 // Get drive partition
 pub fn get_part() -> String {
+    // Read part UUID
     let mut file = File::open("/.snapshots/ash/part").unwrap();
     let mut contents = String::new();
     file.read_to_string(&mut contents).unwrap();
-    let output = Command::new("sh").arg("-c")
-                                   .arg(format!("blkid | grep '{}' | awk -F: '{{print $1}}'", contents.trim_end()))
-                                   .output()
-                                   .unwrap();
-    let cpart = String::from_utf8(output.stdout).unwrap().trim().to_string();
-    return cpart;
+
+    // Get partition path from UUID
+    let cpart = PartitionID::new(PartitionSource::UUID, contents.trim_end().to_string());
+    cpart.get_device_path().unwrap().to_string_lossy().into_owned()
 }
 
 // Get tmp partition state
@@ -775,100 +872,116 @@ pub fn get_tmp() -> String {
     }
 }
 
-// Make a snapshot vulnerable to be modified even further (snapshot should be deployed as mutable) //REVIEW
-pub fn hollow(s: &str) {
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", s)).try_exists().unwrap() {
-        println!("Cannot make hollow as snapshot {} doesn't exist.", s);
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", s)).try_exists().unwrap() { // Make sure snapshot is not in use by another ash process
-        println!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", s,s)
-    } else if s == "0" {
-        println!("Changing base snapshot is not allowed.");
+// Make a snapshot vulnerable to be modified even further (snapshot should be deployed as mutable)
+pub fn hollow(snapshot: &str) -> std::io::Result<()> {
+    // Make sure snapshot exists
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+        return Err(Error::new(ErrorKind::NotFound, format!("Cannot make hollow as snapshot {} doesn't exist.", snapshot)));
+
+        // Make sure snapshot is not in use by another ash process
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        return Err(
+            Error::new(
+                ErrorKind::Unsupported,
+                format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.",
+                        snapshot,snapshot)));
+
+        // Make sure snapshot is not  base snapshot
+        } else if snapshot == "0" {
+        return Err(Error::new(ErrorKind::Unsupported, format!("Changing base snapshot is not allowed.")));
+
     } else {
         // AUR step might be needed and if so make a distro_specific function with steps similar to install_package().
         // Call it hollow_helper and change this accordingly().
-        prepare(s).unwrap();
-        Command::new("mount").arg("--rbind")
-                             .arg("--make-rslave")
-                             .arg("/")
-                             .arg(format!("/.snapshots/rootfs/snapshot-chr{}", s)).status().unwrap();
-        println!("Snapshot {} is now hollow! When done, type YES (in capital):", s);
-        let mut answer = String::new();
-        stdin().read_line(&mut answer).unwrap();
-        let choice: String = answer.trim().parse().unwrap();
-        let replay = if choice == "YES".to_string() {
-            true
+        prepare(snapshot)?;
+        // Mount root
+        mount(Some("/"), format!("/.snapshots/rootfs/snapshot-chr{}", snapshot).as_str(),
+              Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>)?;
+        // Deploy or not
+        if yes_no(format!("Snapshot {} is now hollow! Whenever done, type yes to deploy and no to discard", snapshot).as_str()) {
+            post_transactions(snapshot)?;
+            immutability_enable(snapshot)?;
+            deploy(snapshot, false)?;
         } else {
-            false
-        };
-        while replay == true {
-            post_transactions(s).unwrap();
-            immutability_enable(s);
-            deploy(s);
-            println!("Snapshot {} hollow operation succeeded. Please reboot!", s);
-            break;
+            chr_delete(snapshot)?;
+            return Err(Error::new(ErrorKind::Interrupted,
+                                  format!("No changes applied on snapshot {}.", snapshot)));
         }
     }
+    Ok(())
 }
 
 // Make a node mutable
-pub fn immutability_disable(snapshot: &str) {
+pub fn immutability_disable(snapshot: &str) -> std::io::Result<()> {
+    // If not base snapshot
     if snapshot != "0" {
+        // Make sure snapshot exists
         if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-            eprintln!("Snapshot {} doesn't exist.", snapshot);
+            return Err(Error::new(ErrorKind::NotFound, format!("Snapshot {} doesn't exist.", snapshot)));
+
         } else {
+            // Make sure snapshot is not already mutable
             if check_mutability(snapshot) {
-                println!("Snapshot {} is already mutable.", snapshot);
+                return Err(Error::new(ErrorKind::AlreadyExists,
+                                      format!("Snapshot {} is already mutable.", snapshot)));
+
             } else {
-                let excode1 = Command::new("btrfs").arg("property")
-                                                   .arg("set")
-                                                   .arg("-ts")
-                                                   .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                                                   .arg("ro")
-                                                   .arg("false")
-                                                   .status().unwrap();
-                let excode2 = Command::new("touch").arg(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snapshot))
-                                                   .status().unwrap();
-                if excode1.success() && excode2.success() {
-                    println!("Snapshot {} successfully made mutable.", snapshot);
-                }
-                write_desc(snapshot, " MUTABLE").unwrap();
+                // Disable immutability
+                Command::new("btrfs").arg("property")
+                                     .arg("set")
+                                     .arg("-ts")
+                                     .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
+                                     .arg("ro")
+                                     .arg("false")
+                                     .output()?;
+                File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snapshot))?;
+                write_desc(snapshot, " MUTABLE ")?;
             }
         }
+
     } else {
-        eprintln!("Snapshot 0 (base) should not be modified.");
+        // Base snapshot unsupported
+        return Err(Error::new(ErrorKind::Unsupported, format!("Snapshot 0 (base) should not be modified.")));
     }
+    Ok(())
 }
 
 //Make a node immutable
-pub fn immutability_enable(snapshot: &str) {
+pub fn immutability_enable(snapshot: &str) -> std::io::Result<()> {
+    // If not base snapshot
     if snapshot != "0" {
+        // Make sure snapshot exists
         if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-            eprintln!("Snapshot {} doesn't exist.", snapshot);
+            return Err(Error::new(ErrorKind::NotFound, format!("Snapshot {} doesn't exist.", snapshot)));
         } else {
+            // Make sure snapshot is not already immutable
             if !check_mutability(snapshot) {
-                println!("Snapshot {} is already immutable.", snapshot);
+                return Err(Error::new(ErrorKind::AlreadyExists,
+                                      format!("Snapshot {} is already immutable.", snapshot)));
             } else {
-                let excode1 = Command::new("rm").arg(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snapshot))
-                                                .status().unwrap();
-                let excode2 = Command::new("btrfs").arg("property")
-                                                   .arg("set")
-                                                   .arg("-ts")
-                                                   .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                                                   .arg("ro")
-                                                   .arg("true")
-                                                   .status().unwrap();
-                if excode1.success() && excode2.success() {
-                    println!("Snapshot {} successfully made immutable.", snapshot);
-                }
-                Command::new("sed").arg("-i")
-                                   .arg("s|MUTABLE||g")
-                                   .arg(format!("/.snapshots/ash/snapshots/{}-desc", snapshot))
-                                   .status().unwrap();
+                // Enable immutability
+                std::fs::remove_file(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snapshot))?;
+                Command::new("btrfs").arg("property")
+                                     .arg("set")
+                                     .arg("-ts")
+                                     .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
+                                     .arg("ro")
+                                     .arg("true")
+                                     .output()?;
+                // Read the desc file into a string
+                let mut contents = std::fs::read_to_string(format!("/.snapshots/ash/snapshots/{}-desc", snapshot))?;
+                // Replace MUTABLE word with an empty string
+                contents = contents.replace(" MUTABLE ", "");
+                // Write the modified contents back to the file
+                std::fs::write(format!("/.snapshots/ash/snapshots/{}-desc", snapshot), contents)?;
             }
         }
+
     } else {
-        eprintln!("Snapshot 0 (base) should not be modified.");
+        // Base snapshot unsupported
+        return Err(Error::new(ErrorKind::Unsupported, format!("Snapshot 0 (base) should not be modified.")));
     }
+    Ok(())
 }
 
 // Install packages
@@ -932,7 +1045,7 @@ pub fn install_live(snapshot: &str, pkg: &str) {
 }
 
 // Install a profile from a text file //REVIEW error handling
-fn install_profile(snapshot: &str, profile: &str) -> i32 {
+fn install_profile(snapshot: &str, profile: &str, secondary: bool) -> i32 {
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         eprintln!("Cannot install as snapshot {} doesn't exist.", snapshot);
         return 1;
@@ -969,7 +1082,7 @@ fn install_profile(snapshot: &str, profile: &str) -> i32 {
                 post_transactions(snapshot).unwrap();
                 println!("Profile {} installed in snapshot {} successfully.", profile,snapshot);
                 println!("Deploying snapshot {}.", snapshot);
-                deploy(snapshot);
+                deploy(snapshot, secondary).unwrap();
                 break 0;
             }
         }
@@ -1166,13 +1279,13 @@ pub fn post_transactions(snapshot: &str) -> std::io::Result<()> {
     }
 
     // fix for hollow functionality
-    chr_delete(snapshot).unwrap();
+    chr_delete(snapshot)?;
     Ok(())
 }
 
 // Prepare snapshot to chroot directory to install or chroot into
 pub fn prepare(snapshot: &str) -> std::io::Result<()> {
-    chr_delete(snapshot).unwrap();
+    chr_delete(snapshot)?;
     let snapshot_chr = format!("/.snapshots/rootfs/snapshot-chr{}", snapshot);
 
     // create chroot directory
@@ -1181,7 +1294,7 @@ pub fn prepare(snapshot: &str) -> std::io::Result<()> {
                     CreateSnapshotFlags::empty(), None).unwrap();
 
     // Pacman gets weird when chroot directory is not a mountpoint, so the following mount is necessary
-    ash_mounts(snapshot, "chr").unwrap();
+    ash_mounts(snapshot, "chr")?;
 
     // File operations for snapshot-chr
     create_snapshot(format!("/.snapshots/boot/boot-{}", snapshot),
@@ -1193,22 +1306,23 @@ pub fn prepare(snapshot: &str) -> std::io::Result<()> {
     Command::new("cp").args(["-r", "--reflink=auto"])
                       .arg(format!("/.snapshots/boot/boot-chr{}/", snapshot))
                       .arg(format!("{}/boot", snapshot_chr))
-                      .output().unwrap();
+                      .output()?;
     Command::new("cp").args(["-r", "--reflink=auto"])
                       .arg(format!("/.snapshots/etc/etc-chr{}/", snapshot))
                       .arg(format!("{}/etc", snapshot_chr))
-                      .output().unwrap();
+                      .output()?;
 
     // Clean init system
-    init_system_clean(snapshot, "prepare").unwrap();
+    init_system_clean(snapshot, "prepare")?;
 
     // Copy ash related configurations
     if Path::new("/etc/systemd").try_exists().unwrap() {
         // Machine-id is a Systemd thing
-        copy("/etc/machine-id", format!("{}/etc/machine-id", snapshot_chr)).unwrap();
+        copy("/etc/machine-id", format!("{}/etc/machine-id", snapshot_chr))?;
     }
-    create_dir_all(format!("{}/.snapshots/ash", snapshot_chr)).unwrap();
-    copy("/.snapshots/ash/fstree", format!("{}/.snapshots/ash/fstree", snapshot_chr)).unwrap();
+    DirBuilder::new().recursive(true)
+                     .create(format!("{}/.snapshots/ash", snapshot_chr))?;
+    copy("/.snapshots/ash/fstree", format!("{}/.snapshots/ash/fstree", snapshot_chr))?;
 
     // Special mutable directories
     let options = snapshot_config_get(snapshot);
@@ -1234,32 +1348,28 @@ pub fn prepare(snapshot: &str) -> std::io::Result<()> {
         for mount_path in mutable_dirs {
             // Create mouth_path directory in snapshot
             DirBuilder::new().recursive(true)
-                             .create(format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path))
-                             .unwrap();
+                             .create(format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path))?;
             // Create mouth_path directory in snapshot-chr
             DirBuilder::new().recursive(true)
-                             .create(format!("{}/{}", snapshot_chr,mount_path))
-                             .unwrap();
+                             .create(format!("{}/{}", snapshot_chr,mount_path))?;
             // Use mount_path
             mount(Some(format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path).as_str()),
                   format!("{}/{}", snapshot_chr,mount_path).as_str(),
-                  Some("btrfs"), MsFlags::MS_BIND , None::<&str>).unwrap();
+                  Some("btrfs"), MsFlags::MS_BIND , None::<&str>)?;
         }
     }
     if !mutable_dirs_shared.is_empty() {
         for mount_path in mutable_dirs_shared {
             // Create mouth_path directory in snapshot
             DirBuilder::new().recursive(true)
-                             .create(format!("/.snapshots/mutable_dirs_shared/snapshot-{}/{}", snapshot,mount_path))
-                             .unwrap();
+                             .create(format!("/.snapshots/mutable_dirs/{}", mount_path))?;
             // Create mouth_path directory in snapshot-chr
             DirBuilder::new().recursive(true)
-                             .create(format!("{}/{}", snapshot_chr,mount_path))
-                             .unwrap();
+                             .create(format!("{}/{}", snapshot_chr,mount_path))?;
             // Use mount_path
-            mount(Some(format!("/.snapshots/mutable_dirs_shared/snapshot-{}/{}", snapshot,mount_path).as_str()),
+            mount(Some(format!("/.snapshots/mutable_dirs/{}", mount_path).as_str()),
                   format!("{}/{}", snapshot_chr,mount_path).as_str(),
-                  Some("btrfs"), MsFlags::MS_BIND , None::<&str>).unwrap();
+                  Some("btrfs"), MsFlags::MS_BIND , None::<&str>)?;
         }
     }
     Ok(())
@@ -1293,20 +1403,20 @@ fn remove_dir_content(dir_path: &str) -> std::io::Result<()> {
     let path = PathBuf::from(dir_path);
 
     // Iterate over the directory entries using the `read_dir` function
-    for entry in std::fs::read_dir(path).unwrap() {
-        let entry = entry.unwrap();
+    for entry in std::fs::read_dir(path)? {
+        let entry = entry?;
         let path = entry.path();
 
         // Check if the entry is a file or a directory
         if path.is_file() {
             // If it's a file, remove it using the `remove_file` function
-            std::fs::remove_file(path).unwrap();
+            std::fs::remove_file(path)?;
         } else if path.is_symlink() {
             // If it's a symlink, remove it using the `remove_file` function
-            std::fs::remove_file(path).unwrap();
+            std::fs::remove_file(path)?;
         } else if path.is_dir() {
             // If it's a directory, recursively remove its contents using the `remove_dir_all` function
-            std::fs::remove_dir_all(path).unwrap();
+            std::fs::remove_dir_all(path)?;
         }
     }
     Ok(())
@@ -1351,7 +1461,7 @@ pub fn rollback() {
     let i = find_new();
     clone_as_tree(tmp.as_str(), "").unwrap(); // REVIEW clone_as_tree(tmp, "rollback") will do.
     write_desc(i.to_string().as_str(), "rollback").unwrap();
-    deploy(i.to_string().as_str());
+    deploy(i.to_string().as_str(), false).unwrap();
 }
 
 // Recursively run an update in tree //REVIEW
@@ -1496,17 +1606,17 @@ pub fn snapshot_config_edit(snapshot: &str) {
 }
 
 // Get per-snapshot configuration options
-pub fn snapshot_config_get(snap: &str) -> HashMap<String, String> {
+pub fn snapshot_config_get(snapshot: &str) -> HashMap<String, String> {
     let mut options = HashMap::new();
 
-    if !Path::new(&format!("/.snapshots/etc/etc-{}/ash.conf", snap)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/etc/etc-{}/ash.conf", snapshot)).try_exists().unwrap() {
         // defaults here
         options.insert(String::from("aur"), String::from("False"));
         options.insert(String::from("mutable_dirs"), String::new());
         options.insert(String::from("mutable_dirs_shared"), String::new());
         return options;
     } else {
-        let optfile = File::open(format!("/.snapshots/etc/etc-{}/ash.conf", snap)).unwrap();
+        let optfile = File::open(format!("/.snapshots/etc/etc-{}/ash.conf", snapshot)).unwrap();
         let reader = BufReader::new(optfile);
 
         for line in reader.lines() {
@@ -1524,26 +1634,26 @@ pub fn snapshot_config_get(snap: &str) -> HashMap<String, String> {
 }
 
 // Show diff of packages between 2 snapshots
-pub fn snapshot_diff(snap1: &str, snap2: &str) {
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap1)).try_exists().unwrap() {
-        println!("Snapshot {} not found.", snap1);
-    } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap2)).try_exists().unwrap() {
-        println!("Snapshot {} not found.", snap2);
+pub fn snapshot_diff(snapshot1: &str, snapshot2: &str) {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot1)).try_exists().unwrap() {
+        println!("Snapshot {} not found.", snapshot1);
+    } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot2)).try_exists().unwrap() {
+        println!("Snapshot {} not found.", snapshot2);
     } else {
         Command::new("bash")
                 .arg("-c")
                 .arg(format!("diff <(ls /.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local)\\
- <(ls /.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local) | grep '^>\\|^<' | sort", snap1, snap2))
+ <(ls /.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local) | grep '^>\\|^<' | sort", snapshot1, snapshot2))
                 .status().unwrap();
     }
 }
 
 // Remove temporary chroot for specified snapshot only
 // This unlocks the snapshot for use by other functions
-pub fn snapshot_unlock(snap: &str) {
-    Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/boot/boot-chr{}", snap)).status().unwrap();
-    Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/etc/etc-chr{}", snap)).status().unwrap();
-    Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/rootfs/snapshot-chr{}", snap)).status().unwrap();
+pub fn snapshot_unlock(snapshot: &str) {
+    Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/boot/boot-chr{}", snapshot)).status().unwrap();
+    Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/etc/etc-chr{}", snapshot)).status().unwrap();
+    Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).status().unwrap();
 }
 
 // Switch between distros
@@ -1597,85 +1707,124 @@ fn switch_distro() -> std::io::Result<()> {
     Ok(())
 }
 
-// Switch between /tmp deployments //REVIEW
-pub fn switch_tmp() {
+// Switch between /tmp deployments
+pub fn switch_tmp(secondary: bool) -> std::io::Result<()> {
     let distro_suffix = get_distro_suffix(&detect::distro_id().as_str());
-    let grub =  String::from_utf8(Command::new("sh").arg("-c")
-                                  .arg("ls /boot | grep grub")
-                                  .output().unwrap().stdout).unwrap().trim().to_string();
+    let grub = get_grub().unwrap();
     let part = get_part();
-    let tmp_boot = String::from_utf8(Command::new("sh").arg("-c")
-                                     .arg("mktemp -d -p /.snapshots/tmp boot.XXXXXXXXXXXXXXXX")
-                                     .output().unwrap().stdout).unwrap().trim().to_string();
-    Command::new("sh").arg("-c").arg("mount").arg(format!("{} -o subvol=@boot{} {}", part,distro_suffix,tmp_boot)).status().unwrap(); // Mount boot partition for writing
+    let tmp_boot = Temp::new_dir_in("/.snapshots/tmp")?;
+
+    // Mount boot partition for writing
+    mount(Some(part.as_str()), tmp_boot.as_os_str(),
+          Some("btrfs"), MsFlags::empty(), Some(format!("subvol=@boot{}", distro_suffix).as_bytes()))?;
+
     // Swap deployment subvolumes: deploy <-> deploy-aux
-    let (source_dep, target_dep) = if get_tmp().contains("deploy-aux") {
-        ("deploy-aux", "deploy")
-    } else {
-        ("deploy", "deploy-aux")
-    };
+    let source_dep = get_tmp();
+    let target_dep = get_aux_tmp(source_dep.to_string(), secondary);
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-{}/boot/.", target_dep))
-                      .arg(format!("{}", tmp_boot)).status().unwrap();
-    Command::new("sed")
-        .arg("-i")
-        .arg(format!("s|@.snapshots{}/rootfs/snapshot-{}|@.snapshots{}/rootfs/snapshot-{}|g", distro_suffix,source_dep,distro_suffix,target_dep))
-        .arg(format!("{}/{}/grub.cfg", tmp_boot,grub)).status().unwrap(); // Overwrite grub config boot subvolume
-    Command::new("sed")
-        .arg("-i")
-        .arg(format!("s|@.snapshots{}/rootfs/snapshot-{}|@.snapshots{}/rootfs/snapshot-{}|g", distro_suffix,source_dep,distro_suffix,target_dep))
-        .arg(format!("/.snapshots/rootfs/snapshot-{}/boot/{}/grub.cfg", target_dep,grub)).status().unwrap();
-    Command::new("sed")
-        .arg("-i")
-        .arg(format!("s|@.snapshots{}/boot/boot-{}|@.snapshots{}/boot/boot-{}|g",distro_suffix,source_dep,distro_suffix,target_dep))
-        .arg(format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", target_dep)).status().unwrap(); // Update fstab for new deployment
-    Command::new("sed")
-        .arg("-i")
-        .arg(format!("s|@.snapshots{}/etc/etc-{}|@.snapshots{}/etc/etc-{}|g", distro_suffix,source_dep,distro_suffix,target_dep))
-        .arg(format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", target_dep)).status().unwrap();
-    Command::new("sed")
-        .arg("-i")
-        .arg(format!("s|@.snapshots{}/rootfs/snapshot-{}|@.snapshots{}/rootfs/snapshot-{}|g", distro_suffix,source_dep,distro_suffix,target_dep))
-        .arg(format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", target_dep)).status().unwrap();
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/boot/", target_dep))
+                      .arg(format!("{}", tmp_boot.to_str().unwrap()))
+                      .output().unwrap();
+
+    // Overwrite grub config boot subvolume
+    let tmp_grub_cfg = format!("{}/{}/grub.cfg", tmp_boot.to_str().unwrap(),grub);
+    // Read the contents of the file into a string
+    let mut contents = String::new();
+    let mut file = File::open(&tmp_grub_cfg)?;
+    file.read_to_string(&mut contents)?;
+    let modified_tmp_contents = contents.replace(format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,source_dep).as_str(),
+                                             format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep).as_str());
+    // Write the modified contents back to the file
+    let mut file = File::create(tmp_grub_cfg)?;
+    file.write_all(modified_tmp_contents.as_bytes())?;
+
+    let grub_cfg = format!("/.snapshots/rootfs/snapshot-{}/{}/grub.cfg", target_dep,grub);
+    // Read the contents of the file into a string
+    let mut contents = String::new();
+    let mut file = File::open(&grub_cfg)?;
+    file.read_to_string(&mut contents)?;
+    let modified_cfg_contents = contents.replace(format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,source_dep).as_str(),
+                                             format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep).as_str());
+    // Write the modified contents back to the file
+    let mut file = File::create(grub_cfg)?;
+    file.write_all(modified_cfg_contents.as_bytes())?;
+
+    // Update fstab for new deployment
+    let fstab_file = format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", target_dep);
+    // Read the contents of the file into a string
+    let mut contents = String::new();
+    let mut file = File::open(&fstab_file)?;
+    file.read_to_string(&mut contents)?;
+    let modified_boot_contents = contents.replace(format!("@.snapshots{}/boot/boot-{}", distro_suffix,source_dep).as_str(),
+                                                  format!("@.snapshots{}/boot/boot-{}", distro_suffix,target_dep).as_str());
+    let modified_etc_contents = contents.replace(format!("@.snapshots{}/etc/etc-{}", distro_suffix,source_dep).as_str(),
+                                                 format!("@.snapshots{}/etc/etc-{}", distro_suffix,target_dep).as_str());
+    let modified_rootfs_contents = contents.replace(format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,source_dep).as_str(),
+                                                    format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep).as_str());
+    // Write the modified contents back to the file
+    let mut file = File::create(fstab_file)?;
+    file.write_all(modified_boot_contents.as_bytes())?;
+    file.write_all(modified_etc_contents.as_bytes())?;
+    file.write_all(modified_rootfs_contents.as_bytes())?;
+
     let file = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", source_dep)).unwrap();
     let mut reader = BufReader::new(file);
     let mut sfile = String::new();
     reader.read_line(&mut sfile).unwrap();
     let snap = sfile.replace(" ", "").replace('\n', "");
+
     // Update GRUB configurations
-    for boot_location in ["/.snapshots/rootfs/snapshot-deploy-aux/boot", &tmp_boot] {
-        let file = File::open(format!("{}/{}/grub.cfg", boot_location,grub)).unwrap();
-        let mut reader = BufReader::new(file);
-        let mut grubconf = String::new();
-        let line = reader.read_line(&mut grubconf).unwrap().to_string();
-        let gconf = if line.contains("}") {
-            "".to_owned() + &line
-        } else {
-            "".to_owned()
-        };
-        let gconf = if gconf.contains("snapshot-deploy-aux") {
-            gconf.replace("snapshot-deploy-aux", "snapshot-deploy")
-        } else {
-            gconf.replace("snapshot-deploy", "snapshot-deploy-aux")
-        };
-        let gconf = if gconf.contains(&detect::distro_name()) {
-            //gconf.replace(r"snapshot \d", "");
-            gconf.replace(&detect::distro_name(), &format!("{} last booted deployment (snapshot {})", detect::distro_name(), snap))
-        } else {
-            gconf
-        };
-        Command::new("sh").arg("-c")
-                          .arg(format!("sed -i '$ d' {}/{}/grub.cfg", boot_location,grub))
-                          .status().unwrap();
-        let mut grubconf_file = std::fs::OpenOptions::new()
-            .append(true)
-            .open(format!("{}/{}/grub.cfg", boot_location,grub)).unwrap();
-        grubconf_file.write_all(gconf.as_bytes()).unwrap();
-        grubconf_file.write_all(b"}\n").unwrap();
-        grubconf_file.write_all(b"### END /etc/grub.d/41_custom ###").unwrap();
-        drop(grubconf_file);
-        Command::new("umount").arg(format!("{}", tmp_boot)).status().unwrap();
-    };
+    for boot_location in ["/.snapshots/rootfs/snapshot-deploy-aux/", &tmp_boot.to_str().unwrap()] {
+        let file_path = format!("{}/{}/grub.cfg", boot_location, grub);
+        let file = File::open(&file_path)?;
+        let reader = BufReader::new(file);
+        let mut gconf = String::new();
+        let mut in_10_linux = false;
+        let begin_str = "BEGIN /etc/grub.d/10_linux";
+        let end_str = "}";
+        let snapshot_str = "snapshot-";
+        for line in reader.lines() {
+            let line = line?;
+            if line.contains(begin_str) {
+                in_10_linux = true;
+            } else if in_10_linux {
+                if line.contains(end_str) {
+                    gconf.push_str(&line);
+                    break;
+                } else {
+                    gconf.push_str(&line);
+                }
+            }
+        }
+        if gconf.contains(snapshot_str) {
+            if gconf.contains("snapshot-deploy-aux") {
+                gconf = gconf.replace("snapshot-deploy-aux", "snapshot-deploy");
+            } else if gconf.contains("snapshot-deploy") {
+                gconf = gconf.replace("snapshot-deploy", "snapshot-deploy-aux");
+            }
+            gconf = gconf.replace(&detect_distro::distro_name(), &format!("{} last booted deployment (snapshot {})",
+                                                                          &detect_distro::distro_name(), snap));
+            while gconf.contains("snapshot ") {
+                let prefix = gconf.split("snapshot ").next().unwrap();
+                let suffix = gconf.split("snapshot ").skip(1).next().unwrap();
+                let snapshot_num = suffix.split(' ').next().unwrap();
+                let suffix = suffix.replacen(snapshot_num, "", 1);
+                gconf = format!("{}{}", prefix, suffix);
+            }
+        }
+        let mut file = File::create(&file_path)?;
+        for line in BufReader::new(gconf.as_bytes()).lines() {
+            writeln!(file, "{}", line?)?;
+        }
+        writeln!(file, "}}")?;
+        writeln!(file, "### END /etc/grub.d/41_custom ###")?;
+    }
+
+    // Umount boot partition
+    umount2(Path::new(&format!("{}", tmp_boot.as_os_str().to_str().unwrap())),
+            MntFlags::MNT_DETACH)?;
+
+    Ok(())
 }
 
 // Sync time
@@ -1784,27 +1933,28 @@ pub fn tmp_clear() {
 }
 
 // Clean tmp dirs
-pub fn tmp_delete() {
+pub fn tmp_delete(secondary: bool) -> std::io::Result<()> {
+    // Get tmp
     let tmp = get_tmp();
-    if tmp.contains("deploy-aux") {
-        let tmp = "deploy";
-        Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/boot/boot-{}", tmp)).output().unwrap();
-        Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/etc/etc-{}", tmp)).output().unwrap();
-        Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/rootfs/snapshot-{}/*", tmp)).output().unwrap();
-        Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/rootfs/snapshot-{}", tmp)).output().unwrap();
-    } else {
-        let tmp = "deploy-aux";
-        Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/boot/boot-{}", tmp)).output().unwrap();
-        Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/etc/etc-{}", tmp)).output().unwrap();
-        Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/rootfs/snapshot-{}/*", tmp)).output().unwrap();
-        Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/rootfs/snapshot-{}", tmp)).output().unwrap();
+    let tmp = get_aux_tmp(tmp, secondary);
+
+    // Clean tmp
+    if remove_dir_content(format!("/.snapshots/boot/boot-{}", tmp).as_str()).is_ok() {
+        delete_subvolume(&format!("/.snapshots/boot/boot-{}", tmp), DeleteSubvolumeFlags::empty()).unwrap();
     }
+    if remove_dir_content(format!("/.snapshots/etc/etc-{}", tmp).as_str()).is_ok() {
+        delete_subvolume(&format!("/.snapshots/etc/etc-{}", tmp), DeleteSubvolumeFlags::empty()).unwrap();
+    }
+    if remove_dir_content(format!("/.snapshots/rootfs/snapshot-{}", tmp).as_str()).is_ok() {
+        delete_subvolume(&format!("/.snapshots/rootfs/snapshot-{}", tmp), DeleteSubvolumeFlags::empty()).unwrap();
+    }
+    Ok(())
 }
 
 // Triage functions for argparse method //REVIEW
-pub fn triage_install(snapshot: &str, live: bool, profile: &str, pkg: &str) {
+pub fn triage_install(snapshot: &str, live: bool, profile: &str, pkg: &str, force: bool) {
     if !profile.is_empty() {
-        install_profile(snapshot, profile);
+        install_profile(snapshot, profile, force);
     } else if !pkg.is_empty() {
         let package = pkg.to_string() + " ";
         install(snapshot, &package);
@@ -1857,42 +2007,58 @@ pub fn uninstall_package(snapshot: &str, pkg: &str) {
 }
 
 // Update boot
-pub fn update_boot(snapshot: &str) {
-    let grub =  String::from_utf8(Command::new("sh").arg("-c")
-                                  .arg("ls /boot | grep grub")
-                                  .output().unwrap().stdout).unwrap().trim().to_string();
+pub fn update_boot(snapshot: &str, secondary: bool) -> std::io::Result<()> {
+    // Path to grub directory
+    let grub = get_grub().unwrap();
+
+    // Make sure snapshot does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Cannot update boot as snapshot {} doesn't exist.", snapshot)
+        return Err(Error::new(ErrorKind::NotFound, format!("Cannot update boot as snapshot {} doesn't exist.", snapshot)));
+
     } else {
+        // Get tmp
         let tmp = get_tmp();
+        let tmp = if secondary {
+            if tmp.contains("secondary") {
+                tmp.replace("-secondary", "")
+            } else {
+                format!("{}-secondary", tmp)
+            }
+        } else {
+                tmp
+        };
+
+        // Partition path
         let part = get_part();
-        prepare(snapshot).unwrap();
-        if Path::new(&format!("/boot/{}/BAK/", grub)).try_exists().unwrap() {
-            Command::new("sh").arg("-c")
-                              .arg("find")
-                              .arg(format!(r"/boot/{}/BAK/. -mtime +30 -exec rm -rf' + ' {} \;", grub,"{}"))
-                              .status().unwrap(); // Delete 30-day-old grub.cfg.DATE files
+
+        // Prepare for update
+        prepare(snapshot)?;
+        // Remove grub configurations older than 30 days.
+        if Path::new(&format!("{}/BAK/", grub)).try_exists().unwrap() {
+            delete_old_grub_files(&format!("{}", grub).as_str())?;
         }
-        Command::new("cp").arg(format!("/boot/{}/grub.cfg", grub))
-                          .arg(format!("/boot/{}/BAK/grub.cfg.`date '+%Y%m%d-%H%M%S'`", grub))
-                          .status().unwrap();
-        Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                              .arg("sh")
-                              .arg("-c")
-                              .arg(format!("{}-mkconfig {} -o /boot/{}/grub.cfg", grub,part,grub))
-                              .status().unwrap();
-        Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                              .arg("sh")
-                              .arg("-c")
-                              .arg(format!("sed -i 's|snapshot-chr{}|snapshot-{}|g' /boot/{}/grub.cfg", snapshot,tmp,grub))
-                              .status().unwrap();
-        Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                              .arg("sh")
-                              .arg("-c")
-                              .arg(format!(r"sed -i '0,\|{}| s||{} snapshot {}|' /boot/{}/grub.cfg", detect::distro_name(),detect::distro_name(),snapshot,grub))
-                              .status().unwrap();
-        post_transactions(snapshot).unwrap();
+        // Get current time
+        let time = time::OffsetDateTime::now_utc();
+        let formatted = time.format(&time::format_description::parse("[year][month][day]-[hour][minute][second]").unwrap()).unwrap();
+        // Copy backup
+        copy(format!("{}/grub.cfg", grub), format!("{}/BAK/grub.cfg.{}", grub,formatted))?;
+
+        // Run update commands in chroot
+        let mkconfig = format!("grub-mkconfig {} -o {}/grub.cfg", part,grub);
+        let sed_snap = format!("sed -i 's|snapshot-chr{}|snapshot-{}|g' {}/grub.cfg", snapshot,tmp,grub);
+        let sed_distro = format!("sed -i '0,\\|{}| s||{} snapshot {}|' {}/grub.cfg",
+                                 detect::distro_name(),detect::distro_name(),snapshot,grub);
+        let cmds = [mkconfig, sed_snap, sed_distro];
+        for cmd in cmds {
+            Command::new("sh").arg("-c")
+                              .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,cmd))
+                              .output()?;
+        }
+
+        // Finish the update
+        post_transactions(snapshot)?;
     }
+    Ok(())
 }
 
 // Saves changes made to /etc to snapshot
@@ -1977,9 +2143,8 @@ pub fn write_desc(snapshot: &str, desc: &str) -> std::io::Result<()> {
     let mut descfile = OpenOptions::new().append(true)
                                          .create(true)
                                          .read(true)
-                                         .open(format!("/.snapshots/ash/snapshots/{}-desc", snapshot))
-                                         .unwrap();
-    descfile.write_all(desc.as_bytes()).unwrap();
+                                         .open(format!("/.snapshots/ash/snapshots/{}-desc", snapshot))?;
+    descfile.write_all(desc.as_bytes())?;
     Ok(())
 }
 

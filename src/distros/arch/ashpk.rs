@@ -1,4 +1,3 @@
-use alpm::Alpm;
 use std::path::Path;
 use std::process::{Command, ExitStatus};
 use crate::{check_mutability, chr_delete, immutability_disable, immutability_enable, prepare, post_transactions,
@@ -59,19 +58,6 @@ pub fn cache_copy(snapshot: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-// Check installed package version
-pub fn check_pkg_version() -> Option<String> {
-    // Read database of installed packages
-    let root = "/";
-    let db_path = "/var/lib/pacman";
-    let alpm = Alpm::new2(root, &db_path).unwrap();
-
-    // Search for package name in database and return its version
-    let package_name = "ash";
-    let db = alpm.localdb();
-    db.pkg(package_name).ok().map(|pkg| pkg.version().to_string())
-}
-
 // Fix signature invalid error
 pub fn fix_package_db(snapshot: &str) {
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
@@ -118,10 +104,10 @@ pub fn fix_package_db(snapshot: &str) {
 // Delete init system files (Systemd, OpenRC, etc.)
 pub fn init_system_clean(snapshot: &str, from: &str) -> std::io::Result<()> {
     if from == "prepare" {
-        remove_dir_content(format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/", snapshot).as_str()).unwrap();
+        remove_dir_content(format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/", snapshot).as_str())?;
     } else if from == "deploy" {
-        remove_dir_content("/var/lib/systemd/").unwrap();
-        remove_dir_content(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", snapshot).as_str()).unwrap();
+        remove_dir_content("/var/lib/systemd/")?;
+        remove_dir_content(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", snapshot).as_str())?;
     }
     Ok(())
 }
