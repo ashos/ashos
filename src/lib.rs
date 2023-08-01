@@ -738,11 +738,6 @@ pub fn deploy(snapshot: &str, secondary: bool) -> std::io::Result<()> {
     Ok(())
 }
 
-// Show diff of packages between 2 snapshots
-pub fn diff(snapshot1:  &str, snapshot2: &str) {
-    snapshot_diff(snapshot1, snapshot2).unwrap();
-}
-
 // Find new unused snapshot dir
 pub fn find_new() -> i32 {
     let mut i = 0;
@@ -1415,7 +1410,7 @@ pub fn refresh(snapshot: &str) {
 }
 
 // Remove directory contents
-fn remove_dir_content(dir_path: &str) -> std::io::Result<()> {
+pub fn remove_dir_content(dir_path: &str) -> std::io::Result<()> {
     // Specify the path to the directory to remove contents from
     let path = PathBuf::from(dir_path);
 

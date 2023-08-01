@@ -1,8 +1,9 @@
 use crate::{check_mutability, chr_delete, immutability_disable, immutability_enable, prepare, post_transactions,
-            remove_dir_content, snapshot_config_get, sync_time, WalkDir};
+            remove_dir_content, snapshot_config_get, sync_time};
 use std::io::{Error, ErrorKind};
 use std::path::Path;
 use std::process::{Command, ExitStatus};
+use walkdir::WalkDir;
 
 // Check if AUR is setup right
 pub fn aur_check(snapshot: &str) -> bool {
@@ -25,8 +26,8 @@ pub fn auto_upgrade(snapshot: &str) -> std::io::Result<()> {
     prepare(snapshot)?;
     if !aur_check(snapshot) {
         let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                           .args(["pacman", "--noconfirm", "-Syyu"]).output()?;
-        if excode.status.success() {
+                                           .args(["pacman", "--noconfirm", "-Syyu"]).status()?;
+        if excode.success() {
             post_transactions(snapshot)?;
             Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").output()?;
             Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").output()?;
@@ -38,8 +39,8 @@ pub fn auto_upgrade(snapshot: &str) -> std::io::Result<()> {
     } else {
         let excode = Command::new("sh").arg("-c")
                                        .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} su aur -c 'paru --noconfirm -Syy'", snapshot))
-                                       .output()?;
-        if excode.status.success() {
+                                       .status()?;
+        if excode.success() {
             post_transactions(snapshot)?;
             Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").output()?;
             Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").output()?;
@@ -181,11 +182,20 @@ pub fn install_package_live(snapshot: &str, tmp: &str, pkg: &str) -> std::io::Re
     Ok(())
 }
 
+//  Distro-specific function to setup snapshot based on preset parameters
+//def presets_helper(prof_cp, snap): ### TODO before: prof_section
+    //if prof_cp.has_option('presets', 'enable_aur'):
+//###        if aur is not already set to True: ### TODO IMPORTANT, concat generic preset and distro preset and paste it in /.snapshots/etc
+        //print("Opening snapshot's config file... Please change AUR to True")
+        //snapshot_config_edit(snap, False, False) ### TODO move to core.py ? Run prepare but skip post transaction (Optimize code) Update: post_tran need to run too
+        //aur_install(snap, False, False) ### Skip prepare, but run post transaction (Optimize code) ### update: because of last step, had to run prepare again too!
+
+
 // Get list of packages installed in a snapshot
-pub fn pkg_list(chr: &str, snap: &str) -> Vec<String> {
-    let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}{}", chr,snap))
-                          .args(["pacman", "-Qq"])
-                          .output().unwrap();
+pub fn pkg_list(snapshot: &str, chr: &str) -> Vec<String> {
+    let excode = Command::new("sh").arg("-c")
+                                   .arg(format!("chroot /.snapshots/rootfs/snapshot-{}{} pacman -Qq", chr,snapshot))
+                                   .output().unwrap();
     let stdout = String::from_utf8_lossy(&excode.stdout).trim().to_string();
     stdout.split('\n').map(|s| s.to_string()).collect()
 }

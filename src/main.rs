@@ -1,5 +1,6 @@
 extern crate lib;
 mod cli;
+mod distros;
 
 use cli::*;
 use lib::*;
@@ -29,7 +30,19 @@ fn main() {
         let matches = cli().get_matches();
         // Call relevant functions
         match matches.subcommand() {
-            Some(("auto-upgrade", _matches)) => {
+            Some(("auto-upgrade", auto_upgrade_matches)) => {
+                // Get snapshot value
+                let snapshot = if auto_upgrade_matches.contains_id("SNAPSHOT") {
+                    let snap = auto_upgrade_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Run auto_upgrade
+                crate::distros::auto_upgrade(snapshot.as_str()).unwrap();
             }
             Some(("base-update", _matches)) => {
             }
@@ -218,7 +231,7 @@ fn main() {
                 let snapshot2 = format!("{}", snap2);
 
                 // Run diff
-                diff(snapshot1.as_str(), snapshot2.as_str());
+                crate::distros::snapshot_diff(snapshot1.as_str(), snapshot2.as_str()).unwrap();
             }
             Some(("dist", _matches)) => {
             }
@@ -277,6 +290,26 @@ fn main() {
                 match run {
                     Ok(_) => println!("Snapshot {} successfully made immutable.", snapshot),
                     Err(e) => eprintln!("{}", e),
+                }
+            }
+            Some(("list", list_matches)) => {
+                // Get snapshot value
+                let snapshot = if list_matches.contains_id("SNAPSHOT") {
+                    let snap = list_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // chr value
+                let chr = "";
+
+                // Run pkg_list
+                let run = crate::distros::pkg_list(snapshot.as_str(), chr);
+                for pkg in run {
+                    println!("{}", pkg);
                 }
             }
             Some(("live-chroot", _matches)) => {
