@@ -13,6 +13,10 @@ path = "src/main.rs"
 name = "lib"
 path = "src/lib.rs"
 
+[features]
+default = ["arch"]
+arch = []
+
 [dependencies]
 clap = "4.1.8"
 cpython = "0.7"

@@ -63,46 +63,73 @@ pub fn cache_copy(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Fix signature invalid error
-pub fn fix_package_db(snapshot: &str) {
+pub fn fix_package_db(snapshot: &str) -> std::io::Result<()> {
+    // Make sure snapshot does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Cannot fix package man database as snapshot {} doesn't exist.", snapshot);
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot);
+        return Err(Error::new(ErrorKind::NotFound,
+                              format!("Cannot fix package man database as snapshot {} doesn't exist.", snapshot)));
+
+        // Make sure snapshot is not in use
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        return Err(
+            Error::new(ErrorKind::Unsupported,
+                       format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.",
+                               snapshot,snapshot)));
+
+    } else if snapshot == "0" {
+        // Base snapshot unsupported
+        return Err(Error::new(ErrorKind::Unsupported, format!("Snapshot 0 (base) should not be modified.")));
+
     } else {
-        let p = if snapshot == "0" {//REVIEW // I think this is wrong. It should be check if snapshot = current-deployed-snapshot, then this.
-            "".to_string()
-        } else {
-            format!("chroot /.snapshots/rootfs/snapshot-chr{}", snapshot)
-        };
-        let flip = if check_mutability(snapshot) { // Snapshot is mutable so do not make it immutable after fixdb is done.
+        //let run_chroot: bool; // NOTE (disabled) Do we realy need non-chroot for current snapshot?
+        // If snapshot is current running
+        //run_chroot = if snapshot == get_current_snapshot() {
+            //false
+        //} else {
+            //true
+        //};
+
+        // Snapshot is mutable so do not make it immutable after fixdb is done
+        let flip = if check_mutability(snapshot) {
             false
         } else {
-            immutability_disable(snapshot).unwrap();
+            if immutability_disable(snapshot).is_ok() {
+                println!("Snapshot {} successfully made mutable", snapshot);
+            }
             true
         };
-        prepare(snapshot).unwrap();
-        if flip {
-            immutability_enable(snapshot).unwrap();
-        }
-        // this is ugly! //REVIEW
+
+        // Fix package database
+        prepare(snapshot)?;
+        let mut cmds: Vec<String> = Vec::new();
         let home_dir = std::env::var_os("HOME").unwrap();
-        let excode1 = Command::new("sh").arg("-c").arg(format!("{} rm -rf /etc/pacman.d/gnupg {}/.gnupg", p,home_dir.to_str().unwrap())).status().unwrap();
-        let excode2 = Command::new("sh").arg("-c").arg(format!("{} rm -r /var/lib/pacman/sync/*", p)).status().unwrap();
-        let excode3 = Command::new("sh").arg("-c").arg(format!("{} pacman -Syy", p)).status().unwrap();
-        let excode4 = Command::new("sh").arg("-c").arg(format!("{} gpg --refresh-keys", p)).status().unwrap();
-        let excode5 = Command::new("sh").arg("-c").arg(format!("{} killall gpg-agent", p)).status().unwrap();
-        let excode6 = Command::new("sh").arg("-c").arg(format!("{} pacman-key --init", p)).status().unwrap();
-        let excode7 = Command::new("sh").arg("-c").arg(format!("{} pacman-key --populate archlinux", p)).status().unwrap();
-        let excode8 = Command::new("sh").arg("-c").arg(format!("{} pacman -Syvv --noconfirm archlinux-keyring", p)).status().unwrap(); // REVIEW NEEDED? (maybe)
-        post_transactions(snapshot).unwrap();
-        if excode1.success() && excode2.success() && excode3.success() && excode4.success()
-            && excode5.success() && excode6.success() && excode7.success() && excode8.success() {
-            println!("Snapshot {}'s package manager database fixed successfully.", snapshot);
-        } else {
-            chr_delete(snapshot).unwrap();
-            println!("Fixing package manager database failed.");
+        cmds.push(format!("rm -rf /etc/pacman.d/gnupg {}/.gnupg", home_dir.to_str().unwrap()));
+        cmds.push(format!("rm -r /var/lib/pacman/sync/*")); // NOTE return No such file or directory!
+        cmds.push(format!("pacman -Syy"));
+        cmds.push(format!("gpg --refresh-keys"));
+        cmds.push(format!("killall gpg-agent"));
+        cmds.push(format!("pacman-key --init"));
+        cmds.push(format!("pacman-key --populate archlinux"));
+        cmds.push(format!("pacman -Syvv --noconfirm archlinux-keyring"));
+        for cmd in cmds {
+            //if run_chroot {
+                Command::new("sh").arg("-c")
+                                  .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}",
+                                               snapshot,cmd)).status()?;
+            //} else {
+                //Command::new("sh").arg("-c")
+                                  //.arg(cmd).status()?;
+            //}
+        }
+
+        // Return snapshot to immutable after fixdb is done if snapshot was immutable
+        if flip {
+            if immutability_enable(snapshot).is_ok() {
+                println!("Snapshot {} successfully made immutable", snapshot);
+            }
         }
     }
+    Ok(())
 }
 
 // Delete init system files (Systemd, OpenRC, etc.)
@@ -208,12 +235,12 @@ pub fn refresh_helper(snapshot: &str) -> ExitStatus {
 
 // Show diff of packages between 2 snapshots
 pub fn snapshot_diff(snapshot1: &str, snapshot2: &str) -> std::io::Result<()> {
-    // Make sure snapshot one does exists
+    // Make sure snapshot one does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot1)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Snapshot {} not found.", snapshot1)));
 
-        // Make sure snapshot two does exists
+        // Make sure snapshot two does exist
         } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot2)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Snapshot {} not found.", snapshot2)));

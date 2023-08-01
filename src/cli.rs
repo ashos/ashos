@@ -214,12 +214,14 @@ let matches = Command::new("ash")
         .subcommand(Command::new("etc-update")//REVIEW
                     .alias("etc")
                     .about("update /etc"))
-        // Fix db command ### MAYBE ash_unlock was needed?
-        .subcommand(Command::new("fixdb")//REVIEW
+        // Fix db commands
+        .subcommand(Command::new("fixdb")
                     .alias("fix")
                     .about("fix package database of a snapshot")
-                    .arg_required_else_help(true)
-                    .arg(Arg::new("snapshot")
+                    .arg(Arg::new("SNAPSHOT")
+                         .long("snapshot")
+                         .alias("snap")
+                         .short('s')
                          .value_parser(clap::value_parser!(i32))
                          .help("snapshot number"),),)
         // Hollow a node

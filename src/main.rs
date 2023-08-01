@@ -1,6 +1,5 @@
 extern crate lib;
 mod cli;
-mod distros;
 
 use cli::*;
 use lib::*;
@@ -42,7 +41,7 @@ fn main() {
                 };
 
                 // Run auto_upgrade
-                crate::distros::auto_upgrade(snapshot.as_str()).unwrap();
+                noninteractive_update(snapshot.as_str()).unwrap();
             }
             Some(("base-update", _matches)) => {
             }
@@ -231,12 +230,39 @@ fn main() {
                 let snapshot2 = format!("{}", snap2);
 
                 // Run diff
-                crate::distros::snapshot_diff(snapshot1.as_str(), snapshot2.as_str()).unwrap();
+                diff(snapshot1.as_str(), snapshot2.as_str()).unwrap();
             }
             Some(("dist", _matches)) => {
             }
             Some(("etc-update", _matches)) => {
                 update_etc();
+            }
+            Some(("fixdb", fixdb_matches)) => {
+                // Get snapshot value
+                let snapshot = if fixdb_matches.contains_id("SNAPSHOT") {
+                    let snap = fixdb_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                //Run fixdb
+                let run = fixdb(snapshot.as_str());
+                match run {
+                    Ok(_) => {
+                        if post_transactions(snapshot.as_str()).is_ok() {
+                            println!("Snapshot {}'s package manager database fixed successfully.", snapshot);
+                        } else {
+                            eprintln!("Fixing package manager database failed.");
+                        }
+                    },
+                    Err(e) => {
+                        chr_delete(snapshot.as_str()).unwrap();
+                        eprintln!("Fixing package manager database failed due to: {}", e);
+                    },
+                }
             }
             Some(("hollow", hollow_matches)) => {
                 // Get snapshot value
@@ -307,7 +333,7 @@ fn main() {
                 let chr = "";
 
                 // Run pkg_list
-                let run = crate::distros::pkg_list(snapshot.as_str(), chr);
+                let run = list(snapshot.as_str(), chr);
                 for pkg in run {
                     println!("{}", pkg);
                 }

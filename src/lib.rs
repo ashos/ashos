@@ -3,7 +3,6 @@ mod distros;
 mod tree;
 
 use crate::detect_distro as detect;
-use crate::distros::*;
 use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, delete_subvolume, DeleteSubvolumeFlags};
 use mktemp::Temp;
 use nix::mount::{mount, MntFlags, MsFlags, umount2};
@@ -16,6 +15,9 @@ use std::process::Command;
 use std::time::UNIX_EPOCH;
 use tree::*;
 use walkdir::{DirEntry, WalkDir};
+
+#[cfg(feature = "arch")]
+use distros::arch::ashpk::*;
 
 // Ash chroot mounts
 pub fn ash_mounts(i: &str, chr: &str) -> nix::Result<()> {
@@ -181,7 +183,7 @@ pub fn branch_create(snapshot: &str, desc: &str) -> std::io::Result<i32> {
         // Write description for snapshot
         if !desc.is_empty() {
             let description = desc.split("").collect::<Vec<&str>>().join(" ");
-            write_desc(i.to_string().as_str(), &description)?;
+            write_desc(i.to_string().as_str(), &description, true)?;
         }
     }
     Ok(i)
@@ -354,10 +356,10 @@ pub fn clone_as_tree(snapshot: &str, desc: &str) -> std::io::Result<i32> {
         // Write description for snapshot
         if desc.is_empty() {
             let description = format!("clone of {}.", snapshot);
-            write_desc(i.to_string().as_str(), &description)?;
+            write_desc(i.to_string().as_str(), &description, true)?;
         } else {
             let description = desc.split("").collect::<Vec<&str>>().join(" ");
-            write_desc(i.to_string().as_str(), &description)?;
+            write_desc(i.to_string().as_str(), &description, true)?;
         }
     }
     Ok(i)
@@ -404,7 +406,7 @@ pub fn clone_branch(snapshot: &str) -> std::io::Result<i32> {
         write_tree(&tree)?;
         // Write description for snapshot
         let desc = format!("clone of {}.", snapshot);
-        write_desc(i.to_string().as_str(), &desc)?;
+        write_desc(i.to_string().as_str(), &desc, true)?;
     }
     Ok(i)
 }
@@ -483,7 +485,7 @@ pub fn clone_under(snapshot: &str, branch: &str) -> std::io::Result<i32> {
         write_tree(&tree)?;
         // Write description for snapshot
         let desc = format!("clone of {}.", branch);
-        write_desc(i.to_string().as_str(), desc.as_str())?;
+        write_desc(i.to_string().as_str(), desc.as_str(), true)?;
     }
     Ok(i)
 }
@@ -541,7 +543,7 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> std::io:
             // Delete snapshot
             let tree = fstree().unwrap();
             let children = return_children(&tree, snapshot.as_str());
-            write_desc(snapshot, "")?;
+            write_desc(snapshot, "", true)?;
             delete_subvolume(format!("/.snapshots/boot/boot-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
             delete_subvolume(format!("/.snapshots/etc/etc-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
             delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
@@ -555,7 +557,7 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> std::io:
 
             for child in children {
                 // This deletes the node itself along with its children
-                write_desc(snapshot, "")?;
+                write_desc(snapshot, "", true)?;
                 delete_subvolume(format!("/.snapshots/boot/boot{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                 delete_subvolume(format!("/.snapshots/etc/etc-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                 delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
@@ -738,6 +740,11 @@ pub fn deploy(snapshot: &str, secondary: bool) -> std::io::Result<()> {
     Ok(())
 }
 
+// Show diff of packages
+pub fn diff(snapshot1: &str, snapshot2: &str) -> Result<(), Error> {
+    snapshot_diff(snapshot1, snapshot2)
+}
+
 // Find new unused snapshot dir
 pub fn find_new() -> i32 {
     let mut i = 0;
@@ -765,6 +772,11 @@ pub fn find_new() -> i32 {
                 break i;
         }
     }
+}
+
+// FixDB
+pub fn fixdb(snapshot: &str) -> Result<(), Error> {
+    fix_package_db(snapshot)
 }
 
 // Get aux tmp
@@ -935,7 +947,7 @@ pub fn immutability_disable(snapshot: &str) -> std::io::Result<()> {
                                      .arg("false")
                                      .output()?;
                 File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snapshot))?;
-                write_desc(snapshot, " MUTABLE ")?;
+                write_desc(snapshot, " MUTABLE ", false)?;
             }
         }
 
@@ -953,6 +965,7 @@ pub fn immutability_enable(snapshot: &str) -> std::io::Result<()> {
         // Make sure snapshot exists
         if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
             return Err(Error::new(ErrorKind::NotFound, format!("Snapshot {} doesn't exist.", snapshot)));
+
         } else {
             // Make sure snapshot is not already immutable
             if !check_mutability(snapshot) {
@@ -1027,7 +1040,7 @@ pub fn install_live(snapshot: &str, pkg: &str) -> std::io::Result<()> {
 }
 
 // Install a profile from a text file //REVIEW
-fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool, section_only: Option<String>) -> std::io::Result<()> {
+/*fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool, section_only: Option<String>) -> std::io::Result<()> {
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound,
@@ -1074,7 +1087,7 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool, 
         }
     }
     Ok(())
-}
+}*/
 
 // Install profile in live snapshot //REVIEW
 fn install_profile_live(snapshot: &str,profile: &str) -> i32 {
@@ -1105,7 +1118,7 @@ fn install_profile_live(snapshot: &str,profile: &str) -> i32 {
 }
 
 // Triage functions for argparse method //REVIEW
-pub fn install_triage(not_live: bool, live: bool, pkg: &str, profile: &str, snapshot: &str, force: bool) {
+/*pub fn install_triage(not_live: bool, live: bool, pkg: &str, profile: &str, snapshot: &str, force: bool) {
     if !profile.is_empty() {
         //install_profile(snapshot, profile, force);
     } else if !pkg.is_empty() {
@@ -1127,12 +1140,17 @@ pub fn install_triage(not_live: bool, live: bool, pkg: &str, profile: &str, snap
             install_live(snapshot, &package).unwrap();
         }
     }
-}
+}*/
 
 // Check EFI
 pub fn is_efi() -> bool {
     let is_efi = Path::new("/sys/firmware/efi").try_exists().unwrap();
     is_efi
+}
+
+// Package list
+pub fn list(snapshot: &str, chr: &str) -> Vec<String> {
+    pkg_list(snapshot, chr)
 }
 
 // List sub-volumes for the booted distro only
@@ -1189,13 +1207,17 @@ pub fn new_snapshot(desc: &str) {
     append_base_tree(&tree, i).unwrap();
     let excode = write_tree(&tree);
     if desc.is_empty() {
-        write_desc(i.to_string().as_str(), "clone of base.").unwrap();
+        write_desc(i.to_string().as_str(), "clone of base.", true).unwrap();
     } else {
-        write_desc(i.to_string().as_str(), desc).unwrap();
+        write_desc(i.to_string().as_str(), desc, true).unwrap();
     }
     if excode.is_ok() {
         println!("New tree {} created.", i);
     }
+}
+// Auto update
+pub fn noninteractive_update(snapshot: &str) -> Result<(), Error> {
+    auto_upgrade(snapshot)
 }
 
 // Post transaction function, copy from chroot dirs back to read only snapshot dir
@@ -1472,7 +1494,7 @@ pub fn rollback() {
     let tmp = get_tmp();
     let i = find_new();
     clone_as_tree(tmp.as_str(), "").unwrap(); // REVIEW clone_as_tree(tmp, "rollback") will do.
-    write_desc(i.to_string().as_str(), "rollback").unwrap();
+    write_desc(i.to_string().as_str(), " rollback ", false).unwrap();
     deploy(i.to_string().as_str(), false).unwrap();
 }
 
@@ -2112,11 +2134,19 @@ pub fn upgrade(snapshot:  &str) ->i32 {
 }
 
 // Write new description (default) or append to an existing one (i.e. toggle immutability)
-pub fn write_desc(snapshot: &str, desc: &str) -> std::io::Result<()> {
-    let mut descfile = OpenOptions::new().append(true)
-                                         .create(true)
-                                         .read(true)
-                                         .open(format!("/.snapshots/ash/snapshots/{}-desc", snapshot))?;
+pub fn write_desc(snapshot: &str, desc: &str, overwrite: bool) -> std::io::Result<()> {
+    let mut descfile = if overwrite {
+        OpenOptions::new().truncate(true)
+                          .create(true)
+                          .read(true)
+                          .write(true)
+                          .open(format!("/.snapshots/ash/snapshots/{}-desc", snapshot))?
+    } else {
+        OpenOptions::new().append(true)
+                          .create(true)
+                          .read(true)
+                          .open(format!("/.snapshots/ash/snapshots/{}-desc", snapshot))?
+    };
     descfile.write_all(desc.as_bytes())?;
     Ok(())
 }
