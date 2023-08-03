@@ -302,12 +302,15 @@ let matches = Command::new("ash")
                          .required(false)
                          .help("Description for the snapshot"),),)
         // Refresh
-        .subcommand(Command::new("refresh")//REVIEW
+        .subcommand(Command::new("refresh")
                     .alias("ref")
                     .about("Refresh package manager db of a snapshot")
-                    .arg_required_else_help(true)
-                    .arg(Arg::new("snapshot")
+                    .arg(Arg::new("SNAPSHOT")
+                         .long("snapshot")
+                         .alias("snap")
+                         .short('s')
                          .value_parser(clap::value_parser!(i32))
+                         .required(false)
                          .help("snapshot number"),),)
         // Rollback
         .subcommand(Command::new("rollback")//REVIEW
@@ -323,8 +326,8 @@ let matches = Command::new("ash")
                          .num_args(1..)
                          .help("command"),),)
         // Subvolumes list
-        .subcommand(Command::new("subs")//REVIEW
-                    .aliases(["sub", "subvol", "subvols", "subvolumes"])
+        .subcommand(Command::new("sub")
+                    .aliases(["subs", "subvol", "subvols", "subvolumes"])
                     .about("List subvolumes of active snapshot (currently booted)"))
         // Tree-Sync
         .subcommand(Command::new("sync")//REVIEW

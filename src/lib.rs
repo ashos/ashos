@@ -3,7 +3,7 @@ mod distros;
 mod tree;
 
 use crate::detect_distro as detect;
-use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, delete_subvolume, DeleteSubvolumeFlags};
+use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, create_subvolume, CreateSubvolumeFlags, delete_subvolume, DeleteSubvolumeFlags, QgroupInherit};
 use mktemp::Temp;
 use nix::mount::{mount, MntFlags, MsFlags, umount2};
 use partition_identity::{PartitionID, PartitionSource};
@@ -1148,6 +1148,15 @@ pub fn is_efi() -> bool {
     is_efi
 }
 
+// Return snapshot that has a package
+pub fn is_pkg_installed(snapshot: &str, pkg: &str) -> Option<String> {
+    if pkg_list(snapshot, "").contains(&pkg.to_string()) {
+        return Some(snapshot.to_string());
+    } else {
+        return None;
+    }
+}
+
 // Package list
 pub fn list(snapshot: &str, chr: &str) -> Vec<String> {
     pkg_list(snapshot, chr)
@@ -1161,60 +1170,14 @@ pub fn list_subvolumes() {
 }
 
 // Live unlocked shell
-pub fn live_unlock() {
+pub fn live_unlock() -> std::io::Result<()> {
     let tmp = get_tmp();
-    Command::new("mount").arg("--bind")
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp)).status().unwrap();
-    Command::new("mount").arg("--bind")
-                         .arg("/etc")
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}/etc", tmp)).status().unwrap();
-    Command::new("mount").arg("--bind")
-                         .arg("/home")
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}/home", tmp)).status().unwrap();
-    Command::new("mount").arg("--bind")
-                         .arg("/tmp")
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}/tmp", tmp)).status().unwrap();
-    Command::new("mount").arg("--bind")
-                         .arg("/var")
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}/var", tmp)).status().unwrap();
+    ash_mounts(&tmp, "")?;
     Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp)).status().unwrap();
-    Command::new("sh").arg("-c")
-                        .arg(format!("umount /.snapshots/rootfs/snapshot-{}/*", tmp)).output().unwrap();
-    Command::new("umount").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp)).status().unwrap();
-    // TODO prevent unlock if ash chroot is active
+    ash_umounts(&tmp, "")?;
+    Ok(())
 }
 
-// Creates new tree from base file
-pub fn new_snapshot(desc: &str) {
-    // immutability toggle not used as base should always be immutable
-    let i = find_new();
-    Command::new("btrfs").args(["sub", "snap", "-r"])
-                         .arg("/.snapshots/boot/boot-0")
-                         .arg(format!("/.snapshots/boot/boot-{}", i))
-                         .output().unwrap();
-    Command::new("btrfs").args(["sub", "snap", "-r"])
-                         .arg("/.snapshots/etc/etc-0")
-                         .arg(format!("/.snapshots/etc/etc-{}", i))
-                         .output().unwrap();
-    Command::new("btrfs").args(["sub", "snap", "-r"])
-                         .arg("/.snapshots/rootfs/snapshot-0")
-                         .arg(format!("/.snapshots/rootfs/snapshot-{}", i))
-                         .output().unwrap();
-    // Import tree file
-    let tree = fstree().unwrap();
-
-    append_base_tree(&tree, i).unwrap();
-    let excode = write_tree(&tree);
-    if desc.is_empty() {
-        write_desc(i.to_string().as_str(), "clone of base.", true).unwrap();
-    } else {
-        write_desc(i.to_string().as_str(), desc, true).unwrap();
-    }
-    if excode.is_ok() {
-        println!("New tree {} created.", i);
-    }
-}
 // Auto update
 pub fn noninteractive_update(snapshot: &str) -> Result<(), Error> {
     auto_upgrade(snapshot)
@@ -1225,19 +1188,19 @@ pub fn post_transactions(snapshot: &str) -> std::io::Result<()> {
     // Some operations were moved below to fix hollow functionality
     let tmp = get_tmp();
     //File operations in snapshot-chr
-    remove_dir_content(format!("/.snapshots/boot/boot-chr{}", snapshot).as_str()).unwrap();
+    remove_dir_content(format!("/.snapshots/boot/boot-chr{}", snapshot).as_str())?;
     Command::new("cp").args(["-r", "--reflink=auto"])
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/boot/", snapshot))
                       .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
-                      .output().unwrap();
-    remove_dir_content(format!("/.snapshots/etc/etc-chr{}", snapshot).as_str()).unwrap();
+                      .output()?;
+    remove_dir_content(format!("/.snapshots/etc/etc-chr{}", snapshot).as_str())?;
     Command::new("cp").args(["-r", "--reflink=auto"])
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/", snapshot))
                       .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
-                      .output().unwrap();
+                      .output()?;
 
     // Keep package manager's cache after installing packages. This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
-    cache_copy(snapshot).unwrap();
+    cache_copy(snapshot)?;
 
     // Delete old snapshot
     delete_subvolume(Path::new(&format!("/.snapshots/boot/boot-{}", snapshot)),
@@ -1257,7 +1220,7 @@ pub fn post_transactions(snapshot: &str) -> std::io::Result<()> {
                         format!("/.snapshots/etc/etc-{}", snapshot),
                         CreateSnapshotFlags::empty(), None).unwrap();
         // Copy init system files to shared
-        init_system_copy(tmp.as_str(), "post_transactions").unwrap();
+        init_system_copy(tmp.as_str(), "post_transactions")?;
         create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
                         format!("/.snapshots/rootfs/snapshot-{}", snapshot),
                         CreateSnapshotFlags::empty(), None).unwrap();
@@ -1270,7 +1233,7 @@ pub fn post_transactions(snapshot: &str) -> std::io::Result<()> {
                         format!("/.snapshots/etc/etc-{}", snapshot),
                         CreateSnapshotFlags::READ_ONLY, None).unwrap();
         // Copy init system files to shared
-        init_system_copy(tmp.as_str(), "post_transactions").unwrap();
+        init_system_copy(tmp.as_str(), "post_transactions")?;
         create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
                         format!("/.snapshots/rootfs/snapshot-{}", snapshot),
                         CreateSnapshotFlags::READ_ONLY, None).unwrap();
@@ -1313,6 +1276,66 @@ pub fn post_transactions(snapshot: &str) -> std::io::Result<()> {
     }
 
     // fix for hollow functionality
+    chr_delete(snapshot)?;
+    Ok(())
+}
+
+// IMPORTANT REVIEW 2023 older to revert if hollow introduces issues
+pub fn posttrans(snapshot: &str) -> std::io::Result<()> {
+    let etc = snapshot;
+    let tmp = get_tmp();
+    ash_umounts(snapshot, "chr")?;
+    delete_subvolume(Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)),
+                     DeleteSubvolumeFlags::empty()).unwrap();
+    remove_dir_content(format!("/.snapshots/etc/etc-chr{}", snapshot).as_str())?;
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/", snapshot))
+                      .arg(format!("/.snapshots/boot/etc-chr{}", snapshot))
+                      .output()?;
+    remove_dir_content(format!("/.snapshots/var/var-chr{}", snapshot).as_str())?;
+    DirBuilder::new().recursive(true)
+                     .create(format!("/.snapshots/var/var-chr{}/lib/systemd", snapshot))?;
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/", snapshot))
+                      .arg(format!("/.snapshots/var/var-chr{}/lib/systemd", snapshot))
+                      .output()?;
+    Command::new("cp").args(["-r", "-n", "--reflink=auto"])
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg/", snapshot))
+                      .arg("/var/cache/pacman/pkg/")
+                      .output()?;
+    remove_dir_content(format!("/.snapshots/boot/boot-chr{}",  snapshot).as_str())?;
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/boot/", snapshot))
+                      .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
+                      .output()?;
+    delete_subvolume(Path::new(&format!("/.snapshots/etc/etc-{}", etc)),
+                     DeleteSubvolumeFlags::empty()).unwrap();
+    delete_subvolume(Path::new(&format!("/.snapshots/var/var-{}", etc)),
+                     DeleteSubvolumeFlags::empty()).unwrap();
+    delete_subvolume(Path::new(&format!("/.snapshots/boot/boot-{}", etc)),
+                     DeleteSubvolumeFlags::empty()).unwrap();
+    create_snapshot(format!("/.snapshots/etc/etc-chr{}", snapshot),
+                    format!("/.snapshots/etc/etc-{}", etc),
+                    CreateSnapshotFlags::READ_ONLY, None).unwrap();
+    //create_subvolume(format!("/.snapshots/var/var-{}", etc), CreateSubvolumeFlags::empty(), QgroupInherit::new());
+        //os.system(f"btrfs sub create /.snapshots/var/var-{etc} >/dev/null 2>&1")
+    DirBuilder::new().recursive(true)
+                     .create(format!("/.snapshots/var/var-{}/lib/systemd", etc))?;
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/var/var-chr{}/lib/systemd/", snapshot))
+                      .arg(format!("/.snapshots/var/var-{}/lib/systemd", etc))
+                      .output()?;
+    remove_dir_content("/var/lib/systemd/")?;
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", tmp))
+                      .arg("/var/lib/systemd")
+                      .output()?;
+    create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
+                    format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                    CreateSnapshotFlags::READ_ONLY, None).unwrap();
+    create_snapshot(format!("/.snapshots/boot/boot-chr{}", snapshot),
+                    format!("/.snapshots/boot/boot-{}", etc),
+                    CreateSnapshotFlags::READ_ONLY, None).unwrap();
     chr_delete(snapshot)?;
     Ok(())
 }
@@ -1410,25 +1433,37 @@ pub fn prepare(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Refresh snapshot
-pub fn refresh(snapshot: &str) {
+pub fn refresh(snapshot: &str) -> std::io::Result<()> {
+    // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Cannot refresh as snapshot {} doesn't exist.", snapshot);
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
-        eprintln!("F: Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot)
-    } else if snapshot == "0" {
-        eprintln!("Changing base snapshot is not allowed.");
+        return Err(Error::new(ErrorKind::NotFound,
+                              format!("Cannot refresh as snapshot {} doesn't exist.", snapshot)));
+
+        // Make sure snapshot is not in use by another ash process
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        return Err(
+            Error::new(ErrorKind::Unsupported,
+                       format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.",
+                               snapshot,snapshot)));
+
+        // Make sure snapshot is not base snapshot
+        } else if snapshot == "0" {
+        return Err(Error::new(ErrorKind::Unsupported,
+                              format!("Changing base snapshot is not allowed.")));
+
     } else {
         //sync_time() // REVIEW At least required in virtualbox, otherwise error in package db update
-        prepare(snapshot).unwrap();
+        prepare(snapshot)?;
         let excode = refresh_helper(snapshot);
         if excode.success() {
-            post_transactions(snapshot).unwrap();
+            post_transactions(snapshot)?;
             println!("Snapshot {} refreshed successfully.", snapshot);
         } else {
-            chr_delete(snapshot).unwrap();
+            chr_delete(snapshot)?;
             eprintln!("Refresh failed and changes discarded.")
         }
     }
+    Ok(())
 }
 
 // Remove directory contents
@@ -1457,13 +1492,11 @@ pub fn remove_dir_content(dir_path: &str) -> std::io::Result<()> {
 }
 
 // Recursively remove package in tree //REVIEW
-pub fn remove_from_tree(treename: &str, pkg: &str, profile: &str) {
+pub fn remove_from_tree(tree: &cpython::PyObject, treename: &str, pkg: &str, profile: &str) {
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
         eprintln!("Cannot update as tree {} doesn't exist.", treename);
     } else {
         if !pkg.is_empty() {
-            // Import tree file
-            let tree = fstree().unwrap();
             uninstall_package(treename, pkg);
             let mut order = recurse_tree(&tree, treename);
             if order.len() > 2 {
@@ -1490,12 +1523,13 @@ pub fn remove_from_tree(treename: &str, pkg: &str, profile: &str) {
 }
 
 // Rollback last booted deployment
-pub fn rollback() {
+pub fn rollback() -> std::io::Result<()> {
     let tmp = get_tmp();
     let i = find_new();
-    clone_as_tree(tmp.as_str(), "").unwrap(); // REVIEW clone_as_tree(tmp, "rollback") will do.
-    write_desc(i.to_string().as_str(), " rollback ", false).unwrap();
-    deploy(i.to_string().as_str(), false).unwrap();
+    clone_as_tree(tmp.as_str(), "")?;
+    write_desc(i.to_string().as_str(), " rollback ", false)?;
+    deploy(i.to_string().as_str(), false)?;
+    Ok(())
 }
 
 // Recursively run an update in tree //REVIEW
@@ -1576,6 +1610,34 @@ pub fn show_fstree() {
     // Import tree file
     let tree = fstree().unwrap();
     print_tree(&tree);
+}
+
+// Creates new tree from base file
+pub fn snapshot_base_new(desc: &str) {
+    // immutability toggle not used as base should always be immutable
+    let i = find_new();
+    create_snapshot("/.snapshots/boot/boot-0",
+                    format!("/.snapshots/boot/boot-{}", i),
+                    CreateSnapshotFlags::READ_ONLY, None).unwrap();
+     create_snapshot("/.snapshots/etc/etc-0",
+                    format!("/.snapshots/etc/etc-{}", i),
+                    CreateSnapshotFlags::READ_ONLY, None).unwrap();
+     create_snapshot("/.snapshots/rootfs/snapshot-0",
+                    format!("/.snapshots/rootfs/snapshot-{}", i),
+                    CreateSnapshotFlags::READ_ONLY, None).unwrap();
+
+    // Import tree file
+    let tree = fstree().unwrap();
+
+    // Add to root tree
+    append_base_tree(&tree, i).unwrap();
+    // Write description
+    if desc.is_empty() {
+        write_desc(i.to_string().as_str(), "clone of base.", true).unwrap();
+    } else {
+        write_desc(i.to_string().as_str(), desc, true).unwrap();
+    }
+    //println!("New tree {} created.", i);
 }
 
 // Edit per-snapshot configuration
@@ -1673,6 +1735,7 @@ pub fn snapshot_unlock(snapshot: &str) {
     Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/boot/boot-chr{}", snapshot)).status().unwrap();
     Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/etc/etc-chr{}", snapshot)).status().unwrap();
     Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).status().unwrap();
+    // TODO prevent unlock if ash chroot is active
 }
 
 // Switch between distros

@@ -332,18 +332,32 @@ fn main() {
                 // chr value
                 let chr = "";
 
-                // Run pkg_list
+                // Run list
                 let run = list(snapshot.as_str(), chr);
                 for pkg in run {
                     println!("{}", pkg);
                 }
             }
             Some(("live-chroot", _matches)) => {
-                live_unlock();
+                live_unlock().unwrap();
+            }
+            Some(("refresh", refresh_matches)) => {
+                // Get snapshot value
+                let snapshot = if refresh_matches.contains_id("SNAPSHOT") {
+                    let snap = refresh_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Run refresh
+                refresh(snapshot.as_str()).unwrap();
             }
             Some(("rollback", _matches)) => {
             }
-            Some(("subs", _matches)) => {
+            Some(("sub", _matches)) => {
                 list_subvolumes();
             }
             Some(("tree", _matches)) => {
