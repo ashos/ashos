@@ -3,7 +3,7 @@ mod distros;
 mod tree;
 
 use crate::detect_distro as detect;
-use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, create_subvolume, CreateSubvolumeFlags, delete_subvolume, DeleteSubvolumeFlags, QgroupInherit};
+use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, create_subvolume, CreateSubvolumeFlags, delete_subvolume, DeleteSubvolumeFlags};
 use mktemp::Temp;
 use nix::mount::{mount, MntFlags, MsFlags, umount2};
 use partition_identity::{PartitionID, PartitionSource};
@@ -741,8 +741,12 @@ pub fn deploy(snapshot: &str, secondary: bool) -> std::io::Result<()> {
 }
 
 // Show diff of packages
-pub fn diff(snapshot1: &str, snapshot2: &str) -> Result<(), Error> {
-    snapshot_diff(snapshot1, snapshot2)
+pub fn diff(snapshot1: &str, snapshot2: &str) {
+    let diff = snapshot_diff(snapshot1, snapshot2);
+    match diff {
+        Ok(diff) => diff,
+        Err(e) => eprintln!("{}", e),
+    }
 }
 
 // Find new unused snapshot dir
@@ -1317,8 +1321,7 @@ pub fn posttrans(snapshot: &str) -> std::io::Result<()> {
     create_snapshot(format!("/.snapshots/etc/etc-chr{}", snapshot),
                     format!("/.snapshots/etc/etc-{}", etc),
                     CreateSnapshotFlags::READ_ONLY, None).unwrap();
-    //create_subvolume(format!("/.snapshots/var/var-{}", etc), CreateSubvolumeFlags::empty(), QgroupInherit::new());
-        //os.system(f"btrfs sub create /.snapshots/var/var-{etc} >/dev/null 2>&1")
+    create_subvolume(format!("/.snapshots/var/var-{}", etc), CreateSubvolumeFlags::empty(), None).unwrap();
     DirBuilder::new().recursive(true)
                      .create(format!("/.snapshots/var/var-{}/lib/systemd", etc))?;
     Command::new("cp").args(["-r", "--reflink=auto"])
@@ -1436,23 +1439,19 @@ pub fn prepare(snapshot: &str) -> std::io::Result<()> {
 pub fn refresh(snapshot: &str) -> std::io::Result<()> {
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        return Err(Error::new(ErrorKind::NotFound,
-                              format!("Cannot refresh as snapshot {} doesn't exist.", snapshot)));
+        eprintln!("Cannot refresh as snapshot {} doesn't exist.", snapshot);
 
         // Make sure snapshot is not in use by another ash process
         } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
-        return Err(
-            Error::new(ErrorKind::Unsupported,
-                       format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.",
-                               snapshot,snapshot)));
+        eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.",
+                  snapshot,snapshot);
 
         // Make sure snapshot is not base snapshot
         } else if snapshot == "0" {
-        return Err(Error::new(ErrorKind::Unsupported,
-                              format!("Changing base snapshot is not allowed.")));
+        eprintln!("Changing base snapshot is not allowed.");
 
     } else {
-        //sync_time() // REVIEW At least required in virtualbox, otherwise error in package db update
+        sync_time();
         prepare(snapshot)?;
         let excode = refresh_helper(snapshot);
         if excode.success() {
@@ -1491,35 +1490,42 @@ pub fn remove_dir_content(dir_path: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-// Recursively remove package in tree //REVIEW
-pub fn remove_from_tree(tree: &cpython::PyObject, treename: &str, pkg: &str, profile: &str) {
+// Recursively remove package in tree
+pub fn remove_from_tree(treename: &str, pkgs: Vec<String>, profiles: Vec<String>) -> std::io::Result<()> {
+    // Make sure treename exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
-        eprintln!("Cannot update as tree {} doesn't exist.", treename);
+        eprintln!("Cannot remove as tree {} doesn't exist.", treename);
+
     } else {
-        if !pkg.is_empty() {
-            uninstall_package(treename, pkg);
-            let mut order = recurse_tree(&tree, treename);
-            if order.len() > 2 {
-                order.remove(0);
-                order.remove(0);
-            }
-            loop {
-                if order.len() < 2 {
-                    break;
+        // Import tree value
+        let tree = fstree().unwrap();
+        if !pkgs.is_empty() {
+            for pkg in pkgs {
+                uninstall_package(treename, pkg.as_str())?;
+                let mut order = recurse_tree(&tree, treename);
+                if order.len() > 2 {
+                    order.remove(0);
+                    order.remove(0);
                 }
-                let arg = &order[0];
-                let sarg = &order[1];
-                println!("{}, {}", arg,sarg);
-                order.remove(0);
-                order.remove(0);
-                let snapshot = &order[1];
-                uninstall_package(snapshot, pkg);
+                loop {
+                    if order.len() < 2 {
+                        break;
+                    }
+                    let arg = &order[0];
+                    let sarg = &order[1];
+                    println!("{}, {}", arg,sarg);
+                    order.remove(0);
+                    order.remove(0);
+                    let snapshot = &order[1];
+                    uninstall_package(snapshot, pkg.as_str())?;
+                }
+                println!("Tree {} updated.", treename);
             }
-            println!("Tree {} updated.", treename);
-        } else if !profile.is_empty() {
-            println!("profile unsupported"); //TODO
-        }
+        } else if !profiles.is_empty() {
+            println!("profile unsupported yet."); //TODO add remove_profile function //REVIEW
+            }
     }
+    Ok(())
 }
 
 // Rollback last booted deployment
@@ -1530,48 +1536,6 @@ pub fn rollback() -> std::io::Result<()> {
     write_desc(i.to_string().as_str(), " rollback ", false)?;
     deploy(i.to_string().as_str(), false)?;
     Ok(())
-}
-
-// Recursively run an update in tree //REVIEW
-pub fn run_tree(treename: &str, cmd: &str) {
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
-        eprintln!("Cannot update as tree {} doesn't exist.", treename);
-    } else {
-        prepare(treename).unwrap();
-        Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", treename,cmd)).status().unwrap();
-        post_transactions(treename).unwrap();
-        // Import tree file
-        let tree = fstree().unwrap();
-
-        let mut order = recurse_tree(&tree, treename);
-        if order.len() > 2 {
-            order.remove(0);
-            order.remove(0);
-        }
-        loop {
-            if order.len() < 2 {
-                break;
-            }
-            let arg = &order[0];
-            let sarg = &order[1];
-            println!("{}, {}", arg,sarg);
-            order.remove(0);
-            order.remove(0);
-            let snapshot = &order[1];
-            if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
-                eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot);
-                eprintln!("Tree command canceled.");
-                break;
-            } else {
-                let sarg = &order[1];
-                prepare(sarg.as_str()).unwrap();
-                Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", sarg,cmd)).status().unwrap();
-                post_transactions(sarg.as_str()).unwrap();
-                println!("Tree {} updated.", treename);
-                break;
-            }
-        }
-    }
 }
 
 // Enable service(s) (Systemd, OpenRC, etc.) //REVIEW error handling
@@ -1738,7 +1702,7 @@ pub fn snapshot_unlock(snapshot: &str) {
     // TODO prevent unlock if ash chroot is active
 }
 
-// Switch between distros
+// Switch between distros //REVIEW
 fn switch_distro() -> std::io::Result<()> {
     let map_output = Command::new("sh")
         .arg("-c")
@@ -2033,34 +1997,91 @@ pub fn tmp_delete(secondary: bool) -> std::io::Result<()> {
     Ok(())
 }
 
-// Uninstall package(s)
-pub fn uninstall_package(snapshot: &str, pkg: &str) {
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Cannot remove as snapshot {} doesn't exist.", snapshot);
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot);
-    } else if snapshot == "0" {
-        eprintln!("Changing base snapshot is not allowed.");
+// Recursively run a command in tree //REVIEW
+pub fn tree_run(treename: &str, cmd: &str) {
+    // Make sure treename exist
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
+        eprintln!("Cannot update as tree {} doesn't exist.", treename);
     } else {
-        prepare(snapshot).unwrap();
+        prepare(treename).unwrap();
+        Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", treename,cmd)).status().unwrap();
+        post_transactions(treename).unwrap();
+        // Import tree file
+        let tree = fstree().unwrap();
+
+        let mut order = recurse_tree(&tree, treename);
+        if order.len() > 2 {
+            order.remove(0);
+            order.remove(0);
+        }
+        loop {
+            if order.len() < 2 {
+                break;
+            }
+            let arg = &order[0];
+            let sarg = &order[1];
+            println!("{}, {}", arg,sarg);
+            order.remove(0);
+            order.remove(0);
+            let snapshot = &order[1];
+            if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+                eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot);
+                eprintln!("Tree command canceled.");
+                break;
+            } else {
+                let sarg = &order[1];
+                prepare(sarg.as_str()).unwrap();
+                Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", sarg,cmd)).status().unwrap();
+                post_transactions(sarg.as_str()).unwrap();
+                println!("Tree {} updated.", treename);
+                break;
+            }
+        }
+    }
+}
+
+// Uninstall package(s)
+pub fn uninstall_package(snapshot: &str, pkg: &str) -> std::io::Result<()> {
+    // Make sure snapshot exists
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+        return Err(Error::new(ErrorKind::NotFound,
+                              format!("Cannot remove as snapshot {} doesn't exist.", snapshot)));
+
+        // Make sure snapshot is not in use by another ash process
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        return Err(
+            Error::new(ErrorKind::Unsupported,
+                       format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.",
+                               snapshot,snapshot)));
+
+        // Make sure snapshot is not base snapshot
+        } else if snapshot == "0" {
+        return Err(Error::new(ErrorKind::Unsupported,
+                              format!("Changing base snapshot is not allowed.")));
+
+    } else {
+        // Uninstall package
+        prepare(snapshot)?;
         let excode = uninstall_package_helper(snapshot, pkg);
         if excode.success() {
-            post_transactions(snapshot).unwrap();
+            post_transactions(snapshot)?;
             println!("Package {} removed from snapshot {} successfully.", pkg,snapshot);
         } else {
             chr_delete(snapshot).unwrap();
             eprintln!("Remove failed and changes discarded.");
         }
     }
+    Ok(())
 }
 
+// REVIEW & comment to function
 pub fn uninstall_triage(snapshot: &str, profile: &str, pkg: &str) { // TODO add live, not_live
     if !profile.is_empty() {
         //let excode = install_profile(snapshot, profile);
         println!("TODO");
     } else if !pkg.is_empty() {
         let package = pkg.to_string() + " ";
-        uninstall_package(snapshot,  &package);
+        uninstall_package(snapshot,  &package).unwrap();
     }
 }
 

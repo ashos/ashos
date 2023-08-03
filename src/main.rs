@@ -230,7 +230,7 @@ fn main() {
                 let snapshot2 = format!("{}", snap2);
 
                 // Run diff
-                diff(snapshot1.as_str(), snapshot2.as_str()).unwrap();
+                diff(snapshot1.as_str(), snapshot2.as_str());
             }
             Some(("dist", _matches)) => {
             }
@@ -356,6 +356,7 @@ fn main() {
                 refresh(snapshot.as_str()).unwrap();
             }
             Some(("rollback", _matches)) => {
+                rollback().unwrap();
             }
             Some(("sub", _matches)) => {
                 list_subvolumes();
@@ -364,6 +365,38 @@ fn main() {
             }
             Some(("tmp", _matches)) => {
                 tmp_clear();
+            }
+            Some(("tremove", tremove_matches)) => {
+                // Get treename value
+                let treename = if tremove_matches.contains_id("SNAPSHOT") {
+                    let snap = tremove_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Get pkg value
+                let pkgs = if tremove_matches.contains_id("PACKAGE") {
+                    let pkgs: Vec<String> = tremove_matches.get_many::<String>("PACKAGE").unwrap().map(|s| format!("{}", s)).collect();
+                    pkgs
+                } else {
+                    let pkgs: Vec<String> = Vec::new();
+                    pkgs
+                };
+
+                // Get profile value
+                let profiles = if tremove_matches.contains_id("PROFILE") {
+                    let profiles: Vec<String> = tremove_matches.get_many::<String>("PROFILE").unwrap().map(|s| format!("{}", s)).collect();
+                    profiles
+                } else {
+                    let profiles: Vec<String> = Vec::new();
+                    profiles
+                };
+
+                // Run remove_from_tree
+                remove_from_tree(treename.as_str(), pkgs, profiles).unwrap();
             }
             Some(("version", _matches)) => {
                 ash_version().unwrap();
