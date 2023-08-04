@@ -41,7 +41,7 @@ fn main() {
                 };
 
                 // Run auto_upgrade
-                noninteractive_update(snapshot.as_str()).unwrap();
+                noninteractive_update(&snapshot).unwrap();
             }
             Some(("base-update", _matches)) => {
             }
@@ -66,7 +66,7 @@ fn main() {
                 };
 
                 // Run barnch_create
-                let run = branch_create(snapshot.as_str(), desc.as_str());
+                let run = branch_create(&snapshot, &desc);
                 match run {
                     Ok(snapshot_num) => println!("Branch {} added under snapshot {}.", snapshot_num,snapshot),
                     Err(e) => eprintln!("{}", e),
@@ -121,7 +121,7 @@ fn main() {
                 };
 
                 // Run clone
-                let run = clone_as_tree(snapshot.as_str(), desc.as_str());
+                let run = clone_as_tree(&snapshot, &desc);
                 match run {
                     Ok(snapshot_num) => println!("Tree {} cloned from {}.", snapshot_num,snapshot),
                     Err(e) => eprintln!("{}", e),
@@ -140,7 +140,7 @@ fn main() {
                 };
 
                 // Run clone_branch
-                let run = clone_branch(snapshot.as_str());
+                let run = clone_branch(&snapshot);
                 match run {
                     Ok(snapshot_num) => println!("Branch {} added to parent of {}.", snapshot_num,snapshot),
                     Err(e) => eprintln!("{}", e),
@@ -159,7 +159,7 @@ fn main() {
                 };
 
                 // Run clone_recursive
-                let run = clone_recursive(snapshot.as_str());
+                let run = clone_recursive(&snapshot);
                 match run {
                     Ok(_) => println!("Snapshot {} was cloned recursively.", snapshot),
                     Err(e) => eprintln!("{}", e),
@@ -175,7 +175,7 @@ fn main() {
                 let branch = format!("{}", branch_i32);
 
                 // Run clone_under
-                let run = clone_under(snapshot.as_str(), branch.as_str());
+                let run = clone_under(&snapshot, &branch);
                 match run {
                     Ok(snapshot_num) => println!("Branch {} added to parent of {}.", snapshot_num,snapshot),
                     Err(e) => eprintln!("{}", e),
@@ -214,7 +214,7 @@ fn main() {
                 let secondary = deploy_matches.get_flag("secondary");
 
                 // Run deploy
-                let run = deploy(snapshot.as_str(), secondary);
+                let run = deploy(&snapshot, secondary);
                 match run {
                     Ok(_) => println!("Snapshot {} deployed to /.", snapshot),
                     Err(e) => eprintln!("{}", e),
@@ -230,9 +230,23 @@ fn main() {
                 let snapshot2 = format!("{}", snap2);
 
                 // Run diff
-                diff(snapshot1.as_str(), snapshot2.as_str());
+                diff(&snapshot1, &snapshot2);
             }
             Some(("dist", _matches)) => {
+            }
+            Some(("edit", edit_matches)) => {
+                // Get snapshot value
+                let snapshot = if edit_matches.contains_id("SNAPSHOT") {
+                    let snap = edit_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Run snapshot_config_edit
+                snapshot_config_edit(&snapshot).unwrap();
             }
             Some(("etc-update", _matches)) => {
                 update_etc();
@@ -249,17 +263,17 @@ fn main() {
                 };
 
                 //Run fixdb
-                let run = fixdb(snapshot.as_str());
+                let run = fixdb(&snapshot);
                 match run {
                     Ok(_) => {
-                        if post_transactions(snapshot.as_str()).is_ok() {
+                        if post_transactions(&snapshot).is_ok() {
                             println!("Snapshot {}'s package manager database fixed successfully.", snapshot);
                         } else {
                             eprintln!("Fixing package manager database failed.");
                         }
                     },
                     Err(e) => {
-                        chr_delete(snapshot.as_str()).unwrap();
+                        chr_delete(&snapshot).unwrap();
                         eprintln!("Fixing package manager database failed due to: {}", e);
                     },
                 }
@@ -276,7 +290,7 @@ fn main() {
                 };
 
                 // Run hollow
-                let run = hollow(snapshot.as_str());
+                let run = hollow(&snapshot);
                 match run {
                     Ok(_) => println!("Snapshot {} hollow operation succeeded. Please reboot!", snapshot),
                     Err(e) => eprintln!("{}", e),
@@ -294,7 +308,7 @@ fn main() {
                 };
 
                 // Run immutability_disable
-                let run = immutability_disable(snapshot.as_str());
+                let run = immutability_disable(&snapshot);
                 match run {
                     Ok(_) => println!("Snapshot {} successfully made mutable.", snapshot),
                     Err(e) => eprintln!("{}", e),
@@ -312,7 +326,7 @@ fn main() {
                 };
 
                 // Run immutability_enable
-                let run = immutability_enable(snapshot.as_str());
+                let run = immutability_enable(&snapshot);
                 match run {
                     Ok(_) => println!("Snapshot {} successfully made immutable.", snapshot),
                     Err(e) => eprintln!("{}", e),
@@ -333,13 +347,30 @@ fn main() {
                 let chr = "";
 
                 // Run list
-                let run = list(snapshot.as_str(), chr);
+                let run = list(&snapshot, chr);
                 for pkg in run {
                     println!("{}", pkg);
                 }
             }
             Some(("live-chroot", _matches)) => {
                 live_unlock().unwrap();
+            }
+            Some(("new", new_matches)) => {
+                // Get description value
+                let desc = if new_matches.contains_id("DESCRIPTION") {
+                    let desc = new_matches.get_one::<String>("DESCRIPTION").map(|s| s.as_str()).unwrap().to_string();
+                    desc
+                } else {
+                    let desc = String::new();
+                    desc
+                };
+
+                // Run snapshot_base_new
+                let run = snapshot_base_new(&desc);
+                match run {
+                    Ok(snap_num) => println!("New tree {} created.", snap_num),
+                    Err(e) => eprintln!("{}", e),
+                }
             }
             Some(("refresh", refresh_matches)) => {
                 // Get snapshot value
@@ -353,7 +384,7 @@ fn main() {
                 };
 
                 // Run refresh
-                refresh(snapshot.as_str()).unwrap();
+                refresh(&snapshot).unwrap();
             }
             Some(("rollback", _matches)) => {
                 rollback().unwrap();
@@ -362,6 +393,7 @@ fn main() {
                 list_subvolumes();
             }
             Some(("tree", _matches)) => {
+                tree_show();
             }
             Some(("tmp", _matches)) => {
                 tmp_clear();
@@ -396,7 +428,7 @@ fn main() {
                 };
 
                 // Run remove_from_tree
-                remove_from_tree(treename.as_str(), pkgs, profiles).unwrap();
+                remove_from_tree(&treename, pkgs, profiles).unwrap();
             }
             Some(("version", _matches)) => {
                 ash_version().unwrap();

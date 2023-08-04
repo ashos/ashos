@@ -133,53 +133,6 @@ fn import_tree_file(treename: &str) -> Result<cpython::PyObject, cpython::PyErr>
     tree_file
 }
 
-// Print out tree with descriptions
-pub fn print_tree(tree: &PyObject) {
-    let snapshot = get_current_snapshot();
-    let gil = Python::acquire_gil();
-    let py = gil.python();
-
-    // From anytree import AsciiStyle, RenderTree
-    let anytree =  py.import("anytree").unwrap();
-    let asciistyle = anytree.call(py, "AsciiStyle", NoArgs, None).unwrap();
-    let style = PyDict::new(py);
-    style.set_item(py, "style", asciistyle).unwrap();
-    let rendertree = anytree.call(py, "RenderTree", (&tree,), Some(&style)).unwrap();
-
-    for row in rendertree.iter(py).unwrap() {
-        let node = row.as_ref().unwrap().getattr(py, "node").unwrap();
-        if Path::new(&format!("/.snapshots/ash/snapshots/{}-desc", node.getattr(py, "name").unwrap().to_string())).is_file() {
-            let desc = read_to_string(format!("/.snapshots/ash/snapshots/{}-desc", node.getattr(py, "name").unwrap().to_string())).unwrap();
-            if snapshot != node.getattr(py, "name").unwrap().to_string() {
-                println!("{}{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
-            } else {
-                println!("{}*{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
-            }
-        } else if node.getattr(py, "name").unwrap().to_string() == "0" {
-            let desc = "base snapshot";
-            if snapshot != node.getattr(py, "name").unwrap().to_string() {
-                println!("{}{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
-            } else {
-                println!("{}*{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
-            }
-        } else if node.getattr(py, "name").unwrap().to_string() == "root" {
-            let desc = "";
-            if snapshot != node.getattr(py, "name").unwrap().to_string() {
-                println!("{}{} {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
-            } else {
-                println!("{}*{} {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
-            }
-        } else {
-            let desc = "";
-            if snapshot != node.getattr(py, "name").unwrap().to_string() {
-                println!("{}{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
-            } else {
-                println!("{}*{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
-            }
-        }
-    }
-}
-
 // Return order to recurse tree
 pub fn recurse_tree(tree: &PyObject, cid: &str) -> Vec<String> {
     let mut order: Vec<String> = Vec::new();
@@ -244,6 +197,53 @@ pub fn return_children(tree: &PyObject, id: &str) -> Vec<String> {
         children.remove(index);
     }
     children
+}
+
+// Print out tree with descriptions
+pub fn tree_print(tree: &PyObject) {
+    let snapshot = get_current_snapshot();
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+
+    // From anytree import AsciiStyle, RenderTree
+    let anytree =  py.import("anytree").unwrap();
+    let asciistyle = anytree.call(py, "AsciiStyle", NoArgs, None).unwrap();
+    let style = PyDict::new(py);
+    style.set_item(py, "style", asciistyle).unwrap();
+    let rendertree = anytree.call(py, "RenderTree", (&tree,), Some(&style)).unwrap();
+
+    for row in rendertree.iter(py).unwrap() {
+        let node = row.as_ref().unwrap().getattr(py, "node").unwrap();
+        if Path::new(&format!("/.snapshots/ash/snapshots/{}-desc", node.getattr(py, "name").unwrap().to_string())).is_file() {
+            let desc = read_to_string(format!("/.snapshots/ash/snapshots/{}-desc", node.getattr(py, "name").unwrap().to_string())).unwrap();
+            if snapshot != node.getattr(py, "name").unwrap().to_string() {
+                println!("{}{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
+            } else {
+                println!("{}*{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
+            }
+        } else if node.getattr(py, "name").unwrap().to_string() == "0" {
+            let desc = "base snapshot";
+            if snapshot != node.getattr(py, "name").unwrap().to_string() {
+                println!("{}{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
+            } else {
+                println!("{}*{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
+            }
+        } else if node.getattr(py, "name").unwrap().to_string() == "root" {
+            let desc = "";
+            if snapshot != node.getattr(py, "name").unwrap().to_string() {
+                println!("{}{} {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
+            } else {
+                println!("{}*{} {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
+            }
+        } else {
+            let desc = "";
+            if snapshot != node.getattr(py, "name").unwrap().to_string() {
+                println!("{}{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
+            } else {
+                println!("{}*{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
+            }
+        }
+    }
 }
 
 // Save tree to file

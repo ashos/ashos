@@ -575,19 +575,21 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> std::io:
     Ok(())
 }
 
-// Delete tree or branch
+// Delete deploys subvolumes
 pub fn delete_deploys() -> std::io::Result<()> {
     for snap in ["deploy", "deploy-aux"] {
-        delete_subvolume(format!("/.snapshots/boot/boot-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
-        delete_subvolume(format!("/.snapshots/etc/etc-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
-        delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+        if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap)).try_exists().unwrap() {
+            delete_subvolume(format!("/.snapshots/boot/boot-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(format!("/.snapshots/etc/etc-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+        }
+
         // Make sure temporary chroot directories are deleted as well
         if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snap)).try_exists().unwrap() {
             delete_subvolume(format!("/.snapshots/boot/boot-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
             delete_subvolume(format!("/.snapshots/etc/etc-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
             delete_subvolume(format!("/.snapshots/rootfs/snapshot-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
         }
-        //print(f"Snapshot {snap} removed.")
     }
     Ok(())
 }
@@ -1569,15 +1571,8 @@ fn service_enable(snapshot: &str, profile: &str, tmp_prof: &str) -> i32 {
     }
 }
 
-// Calls print function
-pub fn show_fstree() {
-    // Import tree file
-    let tree = fstree().unwrap();
-    print_tree(&tree);
-}
-
 // Creates new tree from base file
-pub fn snapshot_base_new(desc: &str) {
+pub fn snapshot_base_new(desc: &str) -> std::io::Result<i32> {
     // immutability toggle not used as base should always be immutable
     let i = find_new();
     create_snapshot("/.snapshots/boot/boot-0",
@@ -1601,29 +1596,35 @@ pub fn snapshot_base_new(desc: &str) {
     } else {
         write_desc(i.to_string().as_str(), desc, true).unwrap();
     }
-    //println!("New tree {} created.", i);
+    Ok(i)
 }
 
 // Edit per-snapshot configuration
-pub fn snapshot_config_edit(snapshot: &str) {
+pub fn snapshot_config_edit(snapshot: &str) -> std::io::Result<()> {
+    // Make sure snapshot exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         eprintln!("Cannot chroot as snapshot {} doesn't exist.", snapshot);
+
     } else if snapshot == "0" {
+        // Make sure is not base snapshot
         eprintln!("Changing base snapshot is not allowed.")
+
     } else {
-        prepare(snapshot).unwrap();
-        if std::env::var_os("EDITOR").is_some() { // REVIEW always return None
+        // Edit ash config
+        prepare(snapshot)?;
+        if std::env::var("EDITOR").is_ok() {
         Command::new("sh").arg("-c")
                           .arg(format!("$EDITOR /.snapshots/rootfs/snapshot-chr{}/etc/ash.conf", snapshot))
-                          .status().unwrap();// usage: sudo -E ash edit X
+                          .status()?;
             } else {
             // nano available
+            println!("You can use the default editor by running 'sudo -E ash edit'.");
             if Command::new("sh").arg("-c")
                                  .arg("[ -x \"$(command -v nano)\" ]")
                                  .status().unwrap().success() {
                                      Command::new("sh").arg("-c")
                                                        .arg(format!("nano /.snapshots/rootfs/snapshot-chr{}/etc/ash.conf", snapshot))
-                                                       .status().unwrap();
+                                                       .status()?;
                                  }
             // vi available
             else if Command::new("sh").arg("-c")
@@ -1631,7 +1632,7 @@ pub fn snapshot_config_edit(snapshot: &str) {
                                       .status().unwrap().success() {
                                           Command::new("sh").arg("-c")
                                                             .arg(format!("vi /.snapshots/rootfs/snapshot-chr{}/etc/ash.conf", snapshot))
-                                                            .status().unwrap();
+                                                            .status()?;
                                       }
             // vim available
             else if Command::new("sh").arg("-c")
@@ -1639,7 +1640,7 @@ pub fn snapshot_config_edit(snapshot: &str) {
                                       .status().unwrap().success() {
                                           Command::new("sh").arg("-c")
                                                             .arg(format!("vim /.snapshots/rootfs/snapshot-chr{}/etc/ash.conf", snapshot))
-                                                            .status().unwrap();
+                                                            .status()?;
                                       }
             // neovim
             else if Command::new("sh").arg("-c")
@@ -1647,7 +1648,7 @@ pub fn snapshot_config_edit(snapshot: &str) {
                                       .status().unwrap().success() {
                                           Command::new("sh").arg("-c")
                                                             .arg(format!("nvim /.snapshots/rootfs/snapshot-chr{}/etc/ash.conf", snapshot))
-                                                            .status().unwrap();
+                                                            .status()?;
                                       }
             // micro
             else if Command::new("sh").arg("-c")
@@ -1655,14 +1656,15 @@ pub fn snapshot_config_edit(snapshot: &str) {
                                       .status().unwrap().success() {
                                           Command::new("sh").arg("-c")
                                                             .arg(format!("micro /.snapshots/rootfs/snapshot-chr{}/etc/ash.conf", snapshot))
-                                                            .status().unwrap();
+                                                            .status()?;
                                       }
             else {
                 eprintln!("No text editor available!");
             }
-            post_transactions(snapshot).unwrap();
+            post_transactions(snapshot)?;
         }
     }
+    Ok(())
 }
 
 // Get per-snapshot configuration options
@@ -2040,6 +2042,13 @@ pub fn tree_run(treename: &str, cmd: &str) {
     }
 }
 
+// Calls print function
+pub fn tree_show() {
+    // Import tree file
+    let tree = fstree().unwrap();
+    tree_print(&tree);
+}
+
 // Uninstall package(s)
 pub fn uninstall_package(snapshot: &str, pkg: &str) -> std::io::Result<()> {
     // Make sure snapshot exists
@@ -2236,7 +2245,7 @@ pub fn write_desc(snapshot: &str, desc: &str, overwrite: bool) -> std::io::Resul
 }
 
 // Generic yes no prompt
-fn yes_no(msg: &str) -> bool {
+pub fn yes_no(msg: &str) -> bool {
     loop {
         println!("{} (y/n)", msg);
         let mut reply = String::new();
