@@ -428,12 +428,15 @@ let matches = Command::new("ash")
                          .conflicts_with("pkg")
                          .help("profile(s) to be uninstalled"),),)
         // Unlock a snapshot
-        .subcommand(Command::new("unlock")//REVIEW
+        .subcommand(Command::new("unlock")
                     .alias("ul")
                     .about("Unlock a snapshot")
-                    .arg_required_else_help(true)
-                    .arg(Arg::new("snap")
+                    .arg(Arg::new("SNAPSHOT")
+                         .long("snapshot")
+                         .alias("snap")
+                         .short('s')
                          .value_parser(clap::value_parser!(i32))
+                         .required(false)
                          .help("snapshot number"),),)
         // Upgrade a snapshot
         .subcommand(Command::new("upgrade")//REVIEW

@@ -430,6 +430,20 @@ fn main() {
                 // Run remove_from_tree
                 remove_from_tree(&treename, pkgs, profiles).unwrap();
             }
+            Some(("unlock", unlock_matches)) => {
+                // Get snapshot value
+                let snapshot = if unlock_matches.contains_id("SNAPSHOT") {
+                    let snap = unlock_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Run snapshot_unlock
+                snapshot_unlock(&snapshot).unwrap();
+            }
             Some(("version", _matches)) => {
                 ash_version().unwrap();
             }

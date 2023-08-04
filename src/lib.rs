@@ -7,6 +7,7 @@ use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, create_subvolume, Creat
 use mktemp::Temp;
 use nix::mount::{mount, MntFlags, MsFlags, umount2};
 use partition_identity::{PartitionID, PartitionSource};
+use proc_mounts::MountIter;
 use std::collections::HashMap;
 use std::fs::{copy, DirBuilder, File, metadata, OpenOptions, read_dir, read_to_string};
 use std::io::{BufRead, BufReader, Error, ErrorKind, Read, stdin, Write};
@@ -1154,6 +1155,19 @@ pub fn is_efi() -> bool {
     is_efi
 }
 
+// Check if path is mounted
+fn is_mounted(path: &Path) -> bool {
+    let mount_iter = MountIter::new().unwrap();
+    for mount in mount_iter {
+        if let Ok(mount) = mount {
+            if mount.dest == path {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 // Return snapshot that has a package
 pub fn is_pkg_installed(snapshot: &str, pkg: &str) -> Option<String> {
     if pkg_list(snapshot, "").contains(&pkg.to_string()) {
@@ -1697,11 +1711,20 @@ pub fn snapshot_config_get(snapshot: &str) -> HashMap<String, String> {
 
 // Remove temporary chroot for specified snapshot only
 // This unlocks the snapshot for use by other functions
-pub fn snapshot_unlock(snapshot: &str) {
-    Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/boot/boot-chr{}", snapshot)).status().unwrap();
-    Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/etc/etc-chr{}", snapshot)).status().unwrap();
-    Command::new("btrfs").args(["sub", "del"]).arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).status().unwrap();
-    // TODO prevent unlock if ash chroot is active
+pub fn snapshot_unlock(snapshot: &str) -> std::io::Result<()> {
+    let print_path = format!("/.snapshots/rootfs/snapshot-chr{}", snapshot);
+    let path = Path::new(&print_path);
+    if path.try_exists().unwrap() {
+        // Make sure snapshot is not used
+        if !is_mounted(path) {
+            delete_subvolume(&format!("/.snapshots/boot/boot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(&format!("/.snapshots/etc/etc-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+        } else {
+            eprintln!("{} is busy", path.to_str().unwrap());
+        }
+    }
+    Ok(())
 }
 
 // Switch between distros //REVIEW
