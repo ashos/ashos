@@ -294,7 +294,7 @@ pub fn upgrade_helper(snapshot: &str) -> ExitStatus {
         excode
     } else {
         let excode = Command::new("sh").arg("-c")
-                                       .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} su aur -c 'paru -Syyu", snapshot))
+                                       .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} su aur -c 'paru -Syyu'", snapshot))
                                        .status().unwrap();
         excode
     }

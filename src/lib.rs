@@ -6,6 +6,7 @@ use crate::detect_distro as detect;
 use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, create_subvolume, CreateSubvolumeFlags, delete_subvolume, DeleteSubvolumeFlags};
 use mktemp::Temp;
 use nix::mount::{mount, MntFlags, MsFlags, umount2};
+use ofiles::opath;
 use partition_identity::{PartitionID, PartitionSource};
 use proc_mounts::MountIter;
 use std::collections::HashMap;
@@ -1714,7 +1715,7 @@ pub fn snapshot_config_get(snapshot: &str) -> HashMap<String, String> {
 
 // Remove temporary chroot for specified snapshot only
 // This unlocks the snapshot for use by other functions
-pub fn snapshot_unlock(snapshot: &str) -> std::io::Result<()> {
+pub fn snapshot_unlock(snapshot: &str, force: bool) -> std::io::Result<()> {
     let print_path = format!("/.snapshots/rootfs/snapshot-chr{}", snapshot);
     let path = Path::new(&print_path);
     if path.try_exists().unwrap() {
@@ -1723,6 +1724,17 @@ pub fn snapshot_unlock(snapshot: &str) -> std::io::Result<()> {
             delete_subvolume(&format!("/.snapshots/boot/boot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
             delete_subvolume(&format!("/.snapshots/etc/etc-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
             delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+        } else if force {
+            let busy = opath(path).unwrap();
+            if busy.is_empty() {
+                umount2(path,
+                        MntFlags::MNT_DETACH)?;
+                delete_subvolume(&format!("/.snapshots/boot/boot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(&format!("/.snapshots/etc/etc-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+            } else {
+                eprintln!("{} is busy.", path.to_str().unwrap());
+            }
         } else {
             eprintln!("{} is busy.", path.to_str().unwrap());
         }
@@ -2059,6 +2071,7 @@ pub fn tmp_delete(secondary: bool) -> std::io::Result<()> {
 }
 
 // Recursively run an update in tree //REVIEW
+//fn tree_run
 /*pub fn update_tree(treename: &str) {
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
         eprintln!("Cannot update as tree {} doesn't exist.", treename);
@@ -2246,6 +2259,7 @@ pub fn update_etc() -> std::io::Result<()> {
 
     // Remove old /etc
     delete_subvolume(&format!("/.snapshots/etc/etc-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+
     // Check mutability
     let immutability: CreateSnapshotFlags = if check_mutability(&snapshot) {
         CreateSnapshotFlags::empty()
@@ -2261,7 +2275,7 @@ pub fn update_etc() -> std::io::Result<()> {
 }
 
 // Upgrade snapshot
-pub fn upgrade(snapshot:  &str) -> std::io::Result<()> {
+pub fn upgrade(snapshot:  &str, baseup: bool) -> std::io::Result<()> {
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound,
@@ -2275,7 +2289,7 @@ pub fn upgrade(snapshot:  &str) -> std::io::Result<()> {
                                snapshot,snapshot)));
 
         // Make sure snapshot is not base snapshot
-        } else if snapshot == "0" {
+        } else if snapshot == "0" && !baseup {
         return Err(Error::new(ErrorKind::Unsupported,
                               format!("Changing base snapshot is not allowed.")));
 

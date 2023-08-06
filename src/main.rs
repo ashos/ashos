@@ -44,6 +44,12 @@ fn main() {
                 noninteractive_update(&snapshot).unwrap();
             }
             Some(("base-update", _matches)) => {
+                // Run upgrade(0)
+                let run = upgrade("0", true);
+                match run {
+                    Ok(_) => {},
+                    Err(e) => eprintln!("{}", e),
+                }
             }
             Some(("branch", branch_matches)) => {
                 // Get snapshot value
@@ -249,7 +255,7 @@ fn main() {
                 snapshot_config_edit(&snapshot).unwrap();
             }
             Some(("etc-update", _matches)) => {
-                update_etc();
+                update_etc().unwrap();
             }
             Some(("fixdb", fixdb_matches)) => {
                 // Get snapshot value
@@ -396,6 +402,7 @@ fn main() {
                 tree_show();
             }
             Some(("tmp", _matches)) => {
+                temp_snapshots_clear().unwrap();
             }
             Some(("tremove", tremove_matches)) => {
                 // Get treename value
@@ -440,8 +447,29 @@ fn main() {
                     snap
                 };
 
+                // Get force value
+                let force = unlock_matches.get_flag("force");
+
                 // Run snapshot_unlock
-                snapshot_unlock(&snapshot).unwrap();
+                snapshot_unlock(&snapshot, force).unwrap();
+            }
+            Some(("upgrade", upgrade_matches)) => {
+                // Get snapshot value
+                let snapshot = if upgrade_matches.contains_id("SNAPSHOT") {
+                    let snap = upgrade_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Run upgrade
+                let run = upgrade(&snapshot, false);
+                match run {
+                    Ok(_) => {},
+                    Err(e) => eprintln!("{}", e),
+                }
             }
             Some(("version", _matches)) => {
                 ash_version().unwrap();

@@ -24,6 +24,7 @@ csv = "1.2.2"
 libbtrfsutil = "0.5.2"
 mktemp = "0.5.0"
 nix = "0.26.2"
+ofiles = "0.2.0"
 partition-identity = "0.3.0"
 proc-mounts = "0.3.0"
 time = {version = "0.3.22", features = ["formatting", "local-offset", "macros"]}
