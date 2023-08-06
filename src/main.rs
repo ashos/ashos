@@ -93,17 +93,11 @@ fn main() {
                     snap
                 };
 
-                // Get description value
-                let cmd = if chroot_matches.contains_id("COMMAND") {
-                    let cmd = chroot_matches.get_one::<String>("COMMAND").map(|s| s.as_str()).unwrap().to_string();
-                    cmd
-                } else {
-                    let cmd = String::new();
-                    cmd
-                };
+                // Get cmd value
+                let cmd: Vec<String> = Vec::new();
 
                 // Run chroot
-                chroot(format!("{}", snapshot).as_str(), cmd.as_str()).unwrap();
+                chroot(&snapshot, cmd).unwrap();
             }
             // Clone
             Some(("clone", clone_matches)) => {
@@ -394,6 +388,24 @@ fn main() {
             }
             Some(("rollback", _matches)) => {
                 rollback().unwrap();
+            }
+            Some(("run", run_matches)) => {
+                // Get snapshot value
+                let snapshot = if run_matches.contains_id("SNAPSHOT") {
+                    let snap = run_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Get cmds value
+                let cmds: Vec<String> = run_matches.get_many::<String>("COMMAND").unwrap().map(|s| format!("{}", s)).collect();
+
+                // Run chroot
+                chroot(&snapshot, cmds).unwrap();
+
             }
             Some(("sub", _matches)) => {
                 list_subvolumes();

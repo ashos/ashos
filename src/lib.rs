@@ -241,7 +241,7 @@ pub fn chr_delete(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Run command in snapshot
-pub fn chroot(snapshot: &str, cmd: &str) -> std::io::Result<()> {
+pub fn chroot(snapshot: &str, cmds: Vec<String>) -> std::io::Result<()> {
     // Make sure snapshot does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", snapshot)));
@@ -259,28 +259,35 @@ pub fn chroot(snapshot: &str, cmd: &str) -> std::io::Result<()> {
 
     } else {
         // Prepare snapshot for chroot and run command if existed
-        if prepare(snapshot).is_ok() && !cmd.is_empty() {
+        if !cmds.is_empty() {
             // Chroot to snapshot path
-            let chroot_and_exec = Command::new("sh").arg("-c")
-                                                    .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,cmd))
-                                                    .status().unwrap();
-            if chroot_and_exec.success() {
-                // Exit chroot
-                Command::new("sh").arg("-c").arg("exit").output().unwrap();
-                // Make sure post_transactions exit properly
-                match post_transactions(snapshot) {
-                    Ok(()) => {
-                    }
-                    Err(error) => {
-                        eprintln!("post_transactions error: {}", error);
-                        // Clean chroot mount directories if command failed
+            for  cmd in cmds {
+                if prepare(snapshot).is_ok() {
+                    let chroot_and_exec = Command::new("sh").arg("-c")
+                                                            .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,cmd))
+                                                            .status().unwrap();
+                    if chroot_and_exec.success() {
+                        // Exit chroot
+                        Command::new("sh").arg("-c").arg("exit").output().unwrap();
+                        // Make sure post_transactions exit properly
+                        match post_transactions(snapshot) {
+                            Ok(()) => {
+                            }
+                            Err(error) => {
+                                eprintln!("post_transactions error: {}", error);
+                                // Clean chroot mount directories if command failed
+                                chr_delete(snapshot)?;
+                            }
+                        }
+                    } else {
+                        // Exit chroot and unlock snapshot
+                        Command::new("sh").arg("-c").arg("exit").output().unwrap();
                         chr_delete(snapshot)?;
                     }
+                } else {
+                    // Unlock snapshot
+                    chr_delete(snapshot)?;
                 }
-            } else {
-                // Exit chroot and unlock snapshot
-                Command::new("sh").arg("-c").arg("exit").output().unwrap();
-                chr_delete(snapshot)?;
             }
         } else if prepare(snapshot).is_ok() {
             // chroot
