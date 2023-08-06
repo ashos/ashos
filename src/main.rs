@@ -449,6 +449,13 @@ fn main() {
             Some(("whichtmp", _matches)) => {
                 println!("{}", get_tmp());
             }
+            Some(("whichsnap", whichsnap_matches)) => {
+                // Get pkg value
+                let pkgs: Vec<String> = whichsnap_matches.get_many::<String>("PACKAGE").unwrap().map(|s| format!("{}", s)).collect();
+
+                // Run which_snapshot_has
+                which_snapshot_has(pkgs);
+            }
             _=> unreachable!(), // If all subcommands called, anything else is unreachable
         }
     }

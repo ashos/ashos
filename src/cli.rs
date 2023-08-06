@@ -473,15 +473,17 @@ let matches = Command::new("ash")
                     .aliases(["whichdep", "which"])
                     .about("Show which deployment snapshot is in use"))
         // Which snapshot(s) contain a package
-        .subcommand(Command::new("whichsnap") //REVIEW
+        .subcommand(Command::new("whichsnap")
                     .alias("ws")
                     .about("Which snapshot has a package installed")
+                    .arg_required_else_help(true)
                     .arg(Arg::new("PACKAGE")
                          .long("package")
                          .alias("pkg")
                          .short('p')
                          .num_args(1..)
                          .value_parser(clap::value_parser!(String))
+                         .required(true)
                          .help("a package"),),);
-    return matches;
+        return matches;
 }

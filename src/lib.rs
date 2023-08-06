@@ -2296,45 +2296,28 @@ pub fn upgrade(snapshot:  &str) -> std::io::Result<()> {
     Ok(())
 }
 
-// Return snapshot that has a package //REVIEW
-pub fn which_snapshot_has(pkgs: Vec<&str>) {
-    let mut i = 0;
-    // Collect snapshots numbers
-    let boots = read_dir("/.snapshots/boot")
-        .unwrap().map(|entry| entry.unwrap().path()).collect::<Vec<_>>();
-    let etcs = read_dir("/.snapshots/etc")
-        .unwrap().map(|entry| entry.unwrap().path()).collect::<Vec<_>>();
-    //let vars = read_dir("/.snapshots/var")
-        //.unwrap().map(|entry| entry.unwrap().path()).collect::<Vec<_>>(); // Can this be deleted?
+// Return snapshot that has a package
+pub fn which_snapshot_has(pkgs: Vec<String>) {
+    // Collect snapshots
     let mut snapshots = read_dir("/.snapshots/rootfs")
         .unwrap().map(|entry| entry.unwrap().path()).collect::<Vec<_>>();
-    // Ignore etc-deploy and etc-deploy-aux
-    if !etcs.contains(&Path::new("/.snapshots/etc/etc-deploy").to_path_buf()) ||
-        !etcs.contains(&Path::new("/.snapshots/etc/etc-deploy-aux").to_path_buf()) {
-            snapshots.append(&mut etcs.clone());
-        }
-    //snapshots.append(&mut vars.clone());
-    // Ignore boot-deploy and boot-deploy-aux
-    if !boots.contains(&Path::new("/.snapshots/boot/boot-deploy").to_path_buf()) ||
-        !boots.contains(&Path::new("/.snapshots/boot/boot-deploy-aux").to_path_buf()) {
-            snapshots.append(&mut boots.clone());
-        }
     // Ignore deploy and deploy-aux
-    snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/deploy").to_path_buf());
-    snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/deploy-aux").to_path_buf());
+    snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/snapshot-deploy").to_path_buf());
+    snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/snapshot-deploy-aux").to_path_buf());
 
     // Search snapshots for package
     let i_max = snapshots.len();
-    let mut snapshot: Vec<String> = Vec::new();
     for pkg in pkgs {
+        let mut snapshot: Vec<String> = Vec::new();
+        let mut i = 0;
         while i < i_max {
-            if is_pkg_installed(&i.to_string(), pkg) {
-                snapshot.push(i.to_string());
+            if is_pkg_installed(&i.to_string(), &pkg) {
+                snapshot.push(format!("snapshot-{}", i.to_string()));
             }
             i += 1;
         }
         if !snapshot.is_empty() {
-            println!("package {} installed in {}", pkg,i);
+            println!("package {} installed in {snapshot:?}", pkg);
         }
     }
 }
