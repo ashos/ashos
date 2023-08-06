@@ -21,9 +21,9 @@ use nix::unistd::Uid;
 
 fn main() {
     if !Uid::effective().is_root() {
-        panic!("sudo/doas is required to run ash!");
+        eprintln!("sudo/doas is required to run ash!");
     } else if chroot_check() {
-        panic!("Please don't use ash inside a chroot!");
+        eprintln!("Please don't use ash inside a chroot!");
     } else {
         // Call cli matches
         let matches = cli().get_matches();
@@ -216,7 +216,7 @@ fn main() {
                 // Run deploy
                 let run = deploy(&snapshot, secondary);
                 match run {
-                    Ok(_) => println!("Snapshot {} deployed to /.", snapshot),
+                    Ok(_) => println!("Snapshot {} deployed to '/'.", snapshot),
                     Err(e) => eprintln!("{}", e),
                 }
             }
@@ -396,7 +396,6 @@ fn main() {
                 tree_show();
             }
             Some(("tmp", _matches)) => {
-                tmp_clear();
             }
             Some(("tremove", tremove_matches)) => {
                 // Get treename value

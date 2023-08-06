@@ -6,6 +6,17 @@ let matches = Command::new("ash")
         .about("Any Snapshot Hierarchical OS")
         .subcommand_required(true)
         .arg_required_else_help(true)
+        // Ash update
+        .subcommand(Command::new("ash-update") //REVIEW
+                    .alias("upme")
+                    .about("Update ash itself")
+                    .arg(Arg::new("debug")
+                         .long("debug")
+                         .aliases(["dbg", "test"])
+                         .short('d')
+                         .action(ArgAction::SetTrue)
+                         .required(false)
+                         .help("Enable live install for snapshot"),),)
         // Auto upgrade
         .subcommand(Command::new("auto-upgrade")
                     .aliases(["au", "autoup"])
@@ -201,6 +212,10 @@ let matches = Command::new("ash")
                          .value_parser(clap::value_parser!(i32))
                          .required(true)
                          .help("target snapshot"),),)
+        // Switch distros
+        .subcommand(Command::new("dist") //REVIEW
+                    .alias("distro")
+                    .about("Switch to another distribution"))
         // Edit Ash configuration
         .subcommand(Command::new("edit")
                     .alias("edit-conf")
@@ -225,6 +240,9 @@ let matches = Command::new("ash")
                          .short('s')
                          .value_parser(clap::value_parser!(i32))
                          .help("snapshot number"),),)
+        // Switch to Windows (semi plausible deniability)
+        .subcommand(Command::new("hide") //REVIEW
+                    .about("Hide AshOS and switch to Windows"))
         // Hollow a node
         .subcommand(Command::new("hollow")
                     .about("Make a snapshot hollow (vulnerable)")
@@ -453,6 +471,17 @@ let matches = Command::new("ash")
         // Which deployment is active
         .subcommand(Command::new("whichtmp")//REVIEW
                     .aliases(["whichdep", "which"])
-                    .about("Show which deployment snapshot is in use"));
+                    .about("Show which deployment snapshot is in use"))
+        // Which snapshot(s) contain a package
+        .subcommand(Command::new("whichsnap") //REVIEW
+                    .alias("ws")
+                    .about("Which snapshot has a package installed")
+                    .arg(Arg::new("PACKAGE")
+                         .long("package")
+                         .alias("pkg")
+                         .short('p')
+                         .num_args(1..)
+                         .value_parser(clap::value_parser!(String))
+                         .help("a package"),),);
     return matches;
 }

@@ -119,6 +119,9 @@ pub fn ash_umounts(i: &str, chr: &str) -> nix::Result<()> {
     Ok(())
 }
 
+// Update ash itself //REVIEW
+//pub fn ash_update(dbg) {}
+
 //Ash version
 pub fn ash_version() -> std::io::Result<String> {
     //let ash_bin_path = std::env::current_exe().unwrap(); //https://doc.rust-lang.org/std/env/fn.current_exe.html#security
@@ -1168,12 +1171,12 @@ fn is_mounted(path: &Path) -> bool {
     false
 }
 
-// Return snapshot that has a package
-pub fn is_pkg_installed(snapshot: &str, pkg: &str) -> Option<String> {
+// Return if package installed in snapshot
+pub fn is_pkg_installed(snapshot: &str, pkg: &str) -> bool {
     if pkg_list(snapshot, "").contains(&pkg.to_string()) {
-        return Some(snapshot.to_string());
+        return true;
     } else {
-        return None;
+        return false;
     }
 }
 
@@ -1721,7 +1724,7 @@ pub fn snapshot_unlock(snapshot: &str) -> std::io::Result<()> {
             delete_subvolume(&format!("/.snapshots/etc/etc-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
             delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
         } else {
-            eprintln!("{} is busy", path.to_str().unwrap());
+            eprintln!("{} is busy.", path.to_str().unwrap());
         }
     }
     Ok(())
@@ -1898,6 +1901,11 @@ pub fn switch_tmp(secondary: bool) -> std::io::Result<()> {
     Ok(())
 }
 
+// No comment //REVIEW
+//pub fn switch_to_windows() {
+    //os.system(f"efibootmgr -c -L 'Windows' -l '\\EFI\\BOOT\\BOOTX64.efi'")
+//}
+
 // Sync time
 pub fn sync_time() {
     Command::new("sh")
@@ -1907,12 +1915,12 @@ pub fn sync_time() {
 }
 
 // Sync tree and all its snapshots //REVIEW
-pub fn sync_tree(treename: &str, force_offline: bool, live: bool) {
+pub fn tree_sync(treename: &str, force_offline: bool, live: bool) {
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
         println!("Cannot sync as tree {} doesn't exist.", treename);
     } else {
         if !force_offline { // Syncing tree automatically updates it, unless 'force-sync' is used
-            update_tree(treename);
+            //tree_update(treename);
         }
         // Import tree file
         let tree = fstree().unwrap();
@@ -1938,9 +1946,9 @@ pub fn sync_tree(treename: &str, force_offline: bool, live: bool) {
                 println!("Tree sync canceled.");
             } else {
                 prepare(snap_to_order).unwrap();
-                sync_tree_helper("chr", snap_from_order, snap_to_order).unwrap(); // Pre-sync
+                tree_sync_helper("chr", snap_from_order, snap_to_order).unwrap(); // Pre-sync
                 if live && snap_to_order == get_current_snapshot().as_str() { // Live sync
-                    sync_tree_helper("", snap_from_order, get_tmp().as_str()).unwrap(); // Post-sync
+                    tree_sync_helper("", snap_from_order, get_tmp().as_str()).unwrap(); // Post-sync
                     }
                 post_transactions(snap_to_order).unwrap(); // Moved here from the line immediately after first sync_tree_helper
             }
@@ -1951,7 +1959,7 @@ pub fn sync_tree(treename: &str, force_offline: bool, live: bool) {
 }
 
 // Sync tree helper function // REVIEW might need to put it in distro-specific ashpk.py
-fn sync_tree_helper(chr: &str, s_f: &str, s_t: &str) -> std::io::Result<()>  {
+fn tree_sync_helper(chr: &str, s_f: &str, s_t: &str) -> std::io::Result<()>  {
     Command::new("mkdir").arg("-p").arg("/.snapshots/tmp-db/local/").status().unwrap(); // REVIEW Still resembling Arch pacman folder structure!
     Command::new("rm").arg("-rf").arg("/.snapshots/tmp-db/local/*").status().unwrap(); // REVIEW
     let pkg_list_to = pkg_list(chr, s_t);
@@ -1988,19 +1996,47 @@ fn sync_tree_helper(chr: &str, s_f: &str, s_t: &str) -> std::io::Result<()>  {
 }
 
 // Clear all temporary snapshots
-pub fn tmp_clear() {
-    Command::new("sh").arg("-c")
-                        .arg(format!("btrfs sub del /.snapshots/boot/boot-chr*"))
-                        .status().unwrap();
-    Command::new("sh").arg("-c")
-                        .arg(format!("btrfs sub del /.snapshots/etc/etc-chr*"))
-                        .status().unwrap();
-    Command::new("sh").arg("-c")
-                        .arg(format!("btrfs sub del '/.snapshots/rootfs/snapshot-chr*/*'"))
-                        .status().unwrap();
-    Command::new("sh").arg("-c")
-                        .arg(format!("btrfs sub del /.snapshots/rootfs/snapshot-chr*"))
-                        .status().unwrap();
+pub fn temp_snapshots_clear() -> std::io::Result<()> {
+    // Collect snapshots numbers
+    let boots = read_dir("/.snapshots/boot")
+        .unwrap().map(|entry| entry.unwrap().path()).collect::<Vec<_>>();
+    let etcs = read_dir("/.snapshots/etc")
+        .unwrap().map(|entry| entry.unwrap().path()).collect::<Vec<_>>();
+    //let vars = read_dir("/.snapshots/var")
+        //.unwrap().map(|entry| entry.unwrap().path()).collect::<Vec<_>>(); // Can this be deleted?
+    let mut snapshots = read_dir("/.snapshots/rootfs")
+        .unwrap().map(|entry| entry.unwrap().path()).collect::<Vec<_>>();
+    snapshots.append(&mut etcs.clone());
+    //snapshots.append(&mut vars.clone());
+    snapshots.append(&mut boots.clone());
+
+    // Clear temp if exist
+    for snapshot in snapshots {
+        if snapshot.to_str().unwrap().contains("snapshot-chr") {
+            // Make sure the path isn't being used
+            if !is_mounted(&snapshot) {
+                delete_subvolume(&snapshot, DeleteSubvolumeFlags::empty()).unwrap();
+            } else {
+                eprintln!("{} is busy.", snapshot.to_str().unwrap());
+            }
+        } else if snapshot.to_str().unwrap().contains("etc-chr") {
+            // Make sure the path isn't being used
+            if !is_mounted(&snapshot) {
+                delete_subvolume(&snapshot, DeleteSubvolumeFlags::empty()).unwrap();
+            } else {
+                eprintln!("{} is busy.", snapshot.to_str().unwrap());
+            }
+        //} else if snapshot.to_str().unwrap().contains("var") {
+        } else if snapshot.to_str().unwrap().contains("boot-chr") {
+            // Make sure the path isn't being used
+            if !is_mounted(&snapshot) {
+                delete_subvolume(&snapshot, DeleteSubvolumeFlags::empty()).unwrap();
+            } else {
+                eprintln!("{} is busy.", snapshot.to_str().unwrap());
+            }
+        }
+    }
+    Ok(())
 }
 
 // Clean tmp dirs
@@ -2022,6 +2058,37 @@ pub fn tmp_delete(secondary: bool) -> std::io::Result<()> {
     Ok(())
 }
 
+// Recursively run an update in tree //REVIEW
+/*pub fn update_tree(treename: &str) {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
+        eprintln!("Cannot update as tree {} doesn't exist.", treename);
+    } else {
+        upgrade(treename).unwrap();
+        // Import tree file
+        let tree = fstree().unwrap();
+
+        let mut order = recurse_tree(&tree, treename);
+        if order.len() > 2 {
+            order.remove(0);
+            order.remove(0);
+        }
+        loop {
+            if order.len() < 2 {
+                break;
+            } else {
+                let arg = &order[0];
+                let sarg = &order[1];
+                println!("{}, {}", arg, sarg);
+                order.remove(0);
+                order.remove(0);
+                let snapshot = &order[1];
+                auto_upgrade(snapshot).unwrap();
+            }
+        }
+        println!("Tree {} updated.", treename)
+    }
+}*/
+// Recursively run an update in tree //REVIEW
 // Recursively run a command in tree //REVIEW
 pub fn tree_run(treename: &str, cmd: &str) {
     // Make sure treename exist
@@ -2144,7 +2211,7 @@ pub fn update_boot(snapshot: &str, secondary: bool) -> std::io::Result<()> {
 
         // Prepare for update
         prepare(snapshot)?;
-        // Remove grub configurations older than 30 days.
+        // Remove grub configurations older than 30 days
         if Path::new(&format!("{}/BAK/", grub)).try_exists().unwrap() {
             delete_old_grub_files(&format!("{}", grub).as_str())?;
         }
@@ -2173,78 +2240,101 @@ pub fn update_boot(snapshot: &str, secondary: bool) -> std::io::Result<()> {
 }
 
 // Saves changes made to /etc to snapshot
-pub fn update_etc() {
+pub fn update_etc() -> std::io::Result<()> {
     let snapshot = get_current_snapshot();
     let tmp = get_tmp();
-    Command::new("btrfs").args(["sub", "del"])
-                         .arg(format!("/.snapshots/etc/etc-{}", snapshot)).output().unwrap();
-    if check_mutability(&snapshot) {
-        let immutability = "";
-        Command::new("btrfs").args(["sub", "snap"]).arg(format!("{}", immutability))
-                                                   .arg(format!("/.snapshots/etc/etc-{}", tmp))
-                                                   .arg(format!("/.snapshots/etc/etc-{}", snapshot)).output().unwrap();
-    } else {
-        let immutability = "-r";
-        Command::new("btrfs").args(["sub", "snap"]).arg(format!("{}", immutability))
-                                                   .arg(format!("/.snapshots/etc/etc-{}", tmp))
-                                                   .arg(format!("/.snapshots/etc/etc-{}", snapshot)).output().unwrap();
-    }
-}
 
-// Recursively run an update in tree //REVIEW
-pub fn update_tree(treename: &str) {
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
-        eprintln!("Cannot update as tree {} doesn't exist.", treename);
+    // Remove old /etc
+    delete_subvolume(&format!("/.snapshots/etc/etc-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+    // Check mutability
+    let immutability: CreateSnapshotFlags = if check_mutability(&snapshot) {
+        CreateSnapshotFlags::empty()
     } else {
-        upgrade(treename);
-        // Import tree file
-        let tree = fstree().unwrap();
+        CreateSnapshotFlags::READ_ONLY
+    };
 
-        let mut order = recurse_tree(&tree, treename);
-        if order.len() > 2 {
-            order.remove(0);
-            order.remove(0);
-        }
-        loop {
-            if order.len() < 2 {
-                break;
-            } else {
-                let arg = &order[0];
-                let sarg = &order[1];
-                println!("{}, {}", arg, sarg);
-                order.remove(0);
-                order.remove(0);
-                let snapshot = &order[1];
-                auto_upgrade(snapshot).unwrap();
-            }
-        }
-        println!("Tree {} updated.", treename)
-    }
+    // Create new /etc
+    create_snapshot(format!("/.snapshots/etc/etc-{}", tmp),
+                    format!("/.snapshots/etc/etc-{}", snapshot),
+                    immutability, None).unwrap();
+    Ok(())
 }
 
 // Upgrade snapshot
-pub fn upgrade(snapshot:  &str) ->i32 {
+pub fn upgrade(snapshot:  &str) -> std::io::Result<()> {
+    // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Cannot upgrade as snapshot {} doesn't exist.", snapshot);
-        return 1;
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot);
-        return 1;
-    } else if snapshot == "0" {
-        eprintln!("Changing base snapshot is not allowed.");
-        return 1;
+        return Err(Error::new(ErrorKind::NotFound,
+                              format!("Cannot upgrade as snapshot {} doesn't exist.", snapshot)));
+
+        // Make sure snapshot is not in use by another ash process
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        return Err(
+            Error::new(ErrorKind::Unsupported,
+                       format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.",
+                               snapshot,snapshot)));
+
+        // Make sure snapshot is not base snapshot
+        } else if snapshot == "0" {
+        return Err(Error::new(ErrorKind::Unsupported,
+                              format!("Changing base snapshot is not allowed.")));
+
+
     } else {
-        // prepare(snapshot) // REVIEW Moved to a distro-specific function as it needs to go after setup_aur_if_enabled()
         // Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
         let excode = upgrade_helper(snapshot);
         if excode.success() {
-            post_transactions(snapshot).unwrap();
-            println!("Snapshot {} upgraded successfully.", snapshot);
-            return 0;
+            if post_transactions(snapshot).is_ok() {
+                println!("Snapshot {} upgraded successfully.", snapshot);
+            }
         } else {
             chr_delete(snapshot).unwrap();
-            eprintln!("Upgrade failed and changes discarded.");
-            return 1;
+            return Err(Error::new(ErrorKind::Other,
+                                  format!("Upgrade failed and changes discarded.")));
+        }
+    }
+    Ok(())
+}
+
+// Return snapshot that has a package //REVIEW
+pub fn which_snapshot_has(pkgs: Vec<&str>) {
+    let mut i = 0;
+    // Collect snapshots numbers
+    let boots = read_dir("/.snapshots/boot")
+        .unwrap().map(|entry| entry.unwrap().path()).collect::<Vec<_>>();
+    let etcs = read_dir("/.snapshots/etc")
+        .unwrap().map(|entry| entry.unwrap().path()).collect::<Vec<_>>();
+    //let vars = read_dir("/.snapshots/var")
+        //.unwrap().map(|entry| entry.unwrap().path()).collect::<Vec<_>>(); // Can this be deleted?
+    let mut snapshots = read_dir("/.snapshots/rootfs")
+        .unwrap().map(|entry| entry.unwrap().path()).collect::<Vec<_>>();
+    // Ignore etc-deploy and etc-deploy-aux
+    if !etcs.contains(&Path::new("/.snapshots/etc/etc-deploy").to_path_buf()) ||
+        !etcs.contains(&Path::new("/.snapshots/etc/etc-deploy-aux").to_path_buf()) {
+            snapshots.append(&mut etcs.clone());
+        }
+    //snapshots.append(&mut vars.clone());
+    // Ignore boot-deploy and boot-deploy-aux
+    if !boots.contains(&Path::new("/.snapshots/boot/boot-deploy").to_path_buf()) ||
+        !boots.contains(&Path::new("/.snapshots/boot/boot-deploy-aux").to_path_buf()) {
+            snapshots.append(&mut boots.clone());
+        }
+    // Ignore deploy and deploy-aux
+    snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/deploy").to_path_buf());
+    snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/deploy-aux").to_path_buf());
+
+    // Search snapshots for package
+    let i_max = snapshots.len();
+    let mut snapshot: Vec<String> = Vec::new();
+    for pkg in pkgs {
+        while i < i_max {
+            if is_pkg_installed(&i.to_string(), pkg) {
+                snapshot.push(i.to_string());
+            }
+            i += 1;
+        }
+        if !snapshot.is_empty() {
+            println!("package {} installed in {}", pkg,i);
         }
     }
 }
@@ -2272,11 +2362,11 @@ pub fn yes_no(msg: &str) -> bool {
     loop {
         println!("{} (y/n)", msg);
         let mut reply = String::new();
-        stdin().read_line(&mut reply).expect("Failed to read input");
+        stdin().read_line(&mut reply).unwrap();
         match reply.trim().to_lowercase().as_str() {
             "yes" | "y" => return true,
             "no" | "n" => return false,
-            _ => println!("F: Invalid choice!"),
+            _ => eprintln!("Invalid choice!"),
         }
     }
 }
