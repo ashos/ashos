@@ -220,6 +220,23 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            Some(("desc", desc_matches)) => {
+                // Get snapshot value
+                let snapshot = if desc_matches.contains_id("SNAPSHOT") {
+                    let snap = desc_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Get description value
+                let desc = desc_matches.get_one::<String>("DESCRIPTION").map(|s| s.as_str()).unwrap().to_string();
+
+                // Run write_desc
+                write_desc(&snapshot, &desc, true).unwrap();
+            }
             Some(("diff", diff_matches)) => {
                 // Get snapshot one value
                 let snap1 = diff_matches.get_one::<i32>("SNAPSHOT-1").unwrap();
