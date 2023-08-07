@@ -339,7 +339,7 @@ let matches = Command::new("ash")
         // Rollback
         .subcommand(Command::new("rollback")
                     .about("Revert the deployment to the last booted snapshot"))
-        // Run a command
+        // Chroot run
         .subcommand(Command::new("run")
                     .about("Run command(s) inside another snapshot (chrooted)")
                     .arg_required_else_help(true)

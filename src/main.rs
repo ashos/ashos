@@ -51,6 +51,24 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            Some(("boot", boot_matches)) => {
+                // Get snapshot value
+                let snapshot = if boot_matches.contains_id("SNAPSHOT") {
+                    let snap = boot_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Run update-boot
+                let run = update_boot(&snapshot, false);
+                match run {
+                    Ok(_) => println!("Bootloader updated successfully."),
+                    Err(e) => eprintln!("{}", e),
+                }
+            }
             Some(("branch", branch_matches)) => {
                 // Get snapshot value
                 let snapshot = if branch_matches.contains_id("SNAPSHOT") {
