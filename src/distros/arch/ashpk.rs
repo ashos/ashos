@@ -1,5 +1,6 @@
 use crate::{check_mutability, chr_delete, immutability_disable, immutability_enable, prepare, post_transactions,
             remove_dir_content, snapshot_config_get, sync_time};
+
 use std::io::{Error, ErrorKind};
 use std::path::Path;
 use std::process::{Command, ExitStatus};
@@ -22,7 +23,7 @@ pub fn aur_check(snapshot: &str) -> bool {
 // Noninteractive update
 pub fn auto_upgrade(snapshot: &str) -> std::io::Result<()> {
     // Required in virtualbox, otherwise error in package db update
-    sync_time();
+    sync_time()?;
     prepare(snapshot)?;
     if !aur_check(snapshot) {
         let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
@@ -135,10 +136,10 @@ pub fn fix_package_db(snapshot: &str) -> std::io::Result<()> {
 // Delete init system files (Systemd, OpenRC, etc.)
 pub fn init_system_clean(snapshot: &str, from: &str) -> std::io::Result<()> {
     if from == "prepare" {
-        remove_dir_content(format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/", snapshot).as_str())?;
+        remove_dir_content(&format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/", snapshot))?;
     } else if from == "deploy" {
         remove_dir_content("/var/lib/systemd/")?;
-        remove_dir_content(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", snapshot).as_str())?;
+        remove_dir_content(&format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", snapshot))?;
     }
     Ok(())
 }
@@ -156,67 +157,71 @@ pub fn init_system_copy(snapshot: &str, from: &str) -> std::io::Result<()> {
 }
 
 // Install atomic-operation
-pub fn install_package(snapshot:&str, pkg: &str) -> std::io::Result<()> {
-    // This extra pacman check is to avoid unwantedly triggering AUR if package is official
-    let excode = Command::new("pacman").arg("-Si")
-                          .arg(format!("{}", pkg))
-                          .output()?; // --sysroot
-    if !excode.status.success() {
-        // Use paru if aur is enabled
-        if aur_check(snapshot) {
-            Command::new("sh")
-                .arg("-c")
-                .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} su aur -c \'paru -S {} --needed --overwrite '/var/*''\'", snapshot,pkg))
-                .status()?;
+pub fn install_package(snapshot:&str, pkgs: &Vec<String>) -> std::io::Result<()> {
+    for pkg in pkgs {
+        // This extra pacman check is to avoid unwantedly triggering AUR if package is official
+        let excode = Command::new("pacman").arg("-Si")
+                                           .arg(format!("{}", pkg))
+                                           .output()?; // --sysroot
+        if !excode.status.success() {
+            // Use paru if aur is enabled
+            if aur_check(snapshot) {
+                Command::new("sh")
+                    .arg("-c")
+                    .arg(
+                        format!(
+                            "chroot /.snapshots/rootfs/snapshot-chr{} su aur -c \'paru -S {} --needed --overwrite '/var/*''\'",
+                            snapshot,pkg))
+                    .status()?;
+            } else {
+                return Err(Error::new(ErrorKind::Unsupported,
+                                      format!("AUR is not enabled!")));
+            }
         } else {
-            return Err(Error::new(ErrorKind::NotFound,
-                                  format!("AUR is not enabled!")));
+            prepare(snapshot)?;
+            Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                  .args(["pacman", "-S"])
+                                  .arg(format!("{}", pkg))
+                                  .args(["--needed", "--overwrite", "'/var/*'"])
+                                  .status()?;
         }
-    } else {
-        prepare(snapshot)?;
-        Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                              .args(["pacman", "-S"])
-                              .arg(format!("{}", pkg))
-                              .args(["--needed", "--overwrite", "'/var/*'"])
-                              .status()?;
     }
     Ok(())
 }
 
 // Install atomic-operation in live snapshot
-pub fn install_package_live(snapshot: &str, tmp: &str, pkg: &str) -> std::io::Result<()> {
-    // This extra pacman check is to avoid unwantedly triggering AUR if package is official
-    let excode = Command::new("pacman").arg("-Si")
-                                       .arg(format!("{}", pkg))
-                                       .output()?; // --sysroot
-    if excode.status.success() {
-        Command::new("sh")
-            .arg("-c")
-            .arg(format!("chroot /.snapshots/rootfs/snapshot-{} pacman -Sy --overwrite '*' --noconfirm {}", tmp,pkg))
-            .status()?;
-    } else {
-        // Use paru if aur is enabled
-        if aur_check(snapshot) {
+pub fn install_package_live(snapshot: &str, tmp: &str, pkgs: &Vec<String>) -> std::io::Result<()> {
+    for pkg in pkgs {
+        // This extra pacman check is to avoid unwantedly triggering AUR if package is official
+        let excode = Command::new("pacman").arg("-Si")
+                                           .arg(format!("{}", pkg))
+                                           .output()?; // --sysroot
+        if excode.status.success() {
             Command::new("sh")
                 .arg("-c")
-                .arg(format!("chroot /.snapshots/rootfs/snapshot-{} su aur -c 'paru -Sy --overwrite '*' --noconfirm {}'", tmp,pkg))
+                .arg(
+                    format!(
+                        "chroot /.snapshots/rootfs/snapshot-{} pacman -Sy --overwrite '*' --noconfirm {}",
+                        tmp,pkg))
                 .status()?;
         } else {
-            return Err(Error::new(ErrorKind::NotFound,
-                                  format!("AUR is not enabled!")));
+            // Use paru if aur is enabled
+            if aur_check(snapshot) {
+                Command::new("sh")
+                    .arg("-c")
+                    .arg(
+                        format!(
+                            "chroot /.snapshots/rootfs/snapshot-{} su aur -c 'paru -Sy --overwrite '*' --noconfirm {}'",
+                            tmp,pkg))
+                    .status()?;
+            } else {
+                return Err(Error::new(ErrorKind::Unsupported,
+                                      format!("AUR is not enabled!")));
+            }
         }
     }
     Ok(())
 }
-
-//  Distro-specific function to setup snapshot based on preset parameters
-//def presets_helper(prof_cp, snap): ### TODO before: prof_section
-    //if prof_cp.has_option('presets', 'enable_aur'):
-//###        if aur is not already set to True: ### TODO IMPORTANT, concat generic preset and distro preset and paste it in /.snapshots/etc
-        //print("Opening snapshot's config file... Please change AUR to True")
-        //snapshot_config_edit(snap, False, False) ### TODO move to core.py ? Run prepare but skip post transaction (Optimize code) Update: post_tran need to run too
-        //aur_install(snap, False, False) ### Skip prepare, but run post transaction (Optimize code) ### update: because of last step, had to run prepare again too!
-
 
 // Get list of packages installed in a snapshot
 pub fn pkg_list(snapshot: &str, chr: &str) -> Vec<String> {

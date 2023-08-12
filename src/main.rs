@@ -80,7 +80,7 @@ fn main() {
                     snap
                 };
 
-                // Get description value
+                // Get desc value
                 let desc = if branch_matches.contains_id("DESCRIPTION") {
                     let desc = branch_matches.get_one::<String>("DESCRIPTION").map(|s| s.as_str()).unwrap().to_string();
                     desc
@@ -129,7 +129,7 @@ fn main() {
                     snap
                 };
 
-                // Get description value
+                // Get desc value
                 let desc = if clone_matches.contains_id("DESCRIPTION") {
                     let desc = clone_matches.get_one::<String>("DESCRIPTION").map(|s| s.as_str()).unwrap().to_string();
                     desc
@@ -228,7 +228,7 @@ fn main() {
                     snap
                 };
 
-                // Optional values
+                // Optional value
                 let secondary = deploy_matches.get_flag("secondary");
 
                 // Run deploy
@@ -249,7 +249,7 @@ fn main() {
                     snap
                 };
 
-                // Get description value
+                // Get desc value
                 let desc = desc_matches.get_one::<String>("DESCRIPTION").map(|s| s.as_str()).unwrap().to_string();
 
                 // Run write_desc
@@ -313,6 +313,9 @@ fn main() {
                     },
                 }
             }
+            Some(("hide", _matches)) => {
+                switch_to_windows();
+            }
             Some(("hollow", hollow_matches)) => {
                 // Get snapshot value
                 let snapshot = if hollow_matches.contains_id("SNAPSHOT") {
@@ -367,6 +370,42 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            Some(("install", install_matches)) => {
+                // Get snapshot value
+                let snapshot = if install_matches.contains_id("SNAPSHOT") {
+                    let snap = install_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Get pkgs value
+                let pkgs = if install_matches.contains_id("PACKAGE") {
+                    let pkgs: Vec<String> = install_matches.get_many::<String>("PACKAGE").unwrap().map(|s| format!("{}", s)).collect();
+                    pkgs
+                } else {
+                    let pkgs: Vec<String> = Vec::new();
+                    pkgs
+                };
+
+                let profile = if install_matches.contains_id("PROFILE") {
+                    let profile = install_matches.get_many::<String>("PROFILE").unwrap().map(|s| format!("{}", s)).collect();
+                    profile
+                } else {
+                    let profile = String::new();
+                    profile
+                };
+
+                // Optional values
+                let live = install_matches.get_flag("live");
+                let force = install_matches.get_flag("force");
+
+                // Run install_triage
+                install_triage(&snapshot, live, pkgs, &profile, force).unwrap();
+
+            }
             Some(("list", list_matches)) => {
                 // Get snapshot value
                 let snapshot = if list_matches.contains_id("SNAPSHOT") {
@@ -391,7 +430,7 @@ fn main() {
                 live_unlock().unwrap();
             }
             Some(("new", new_matches)) => {
-                // Get description value
+                // Get desc value
                 let desc = if new_matches.contains_id("DESCRIPTION") {
                     let desc = new_matches.get_one::<String>("DESCRIPTION").map(|s| s.as_str()).unwrap().to_string();
                     desc
@@ -462,7 +501,7 @@ fn main() {
                     snap
                 };
 
-                // Get pkg value
+                // Get pkgs value
                 let pkgs = if tremove_matches.contains_id("PACKAGE") {
                     let pkgs: Vec<String> = tremove_matches.get_many::<String>("PACKAGE").unwrap().map(|s| format!("{}", s)).collect();
                     pkgs
@@ -471,7 +510,7 @@ fn main() {
                     pkgs
                 };
 
-                // Get profile value
+                // Get profiles value
                 let profiles = if tremove_matches.contains_id("PROFILE") {
                     let profiles: Vec<String> = tremove_matches.get_many::<String>("PROFILE").unwrap().map(|s| format!("{}", s)).collect();
                     profiles
@@ -494,11 +533,8 @@ fn main() {
                     snap
                 };
 
-                // Get force value
-                let force = unlock_matches.get_flag("force");
-
                 // Run snapshot_unlock
-                snapshot_unlock(&snapshot, force).unwrap();
+                snapshot_unlock(&snapshot).unwrap();
             }
             Some(("upgrade", upgrade_matches)) => {
                 // Get snapshot value
@@ -525,7 +561,7 @@ fn main() {
                 println!("{}", get_tmp());
             }
             Some(("whichsnap", whichsnap_matches)) => {
-                // Get pkg value
+                // Get pkgs value
                 let pkgs: Vec<String> = whichsnap_matches.get_many::<String>("PACKAGE").unwrap().map(|s| format!("{}", s)).collect();
 
                 // Run which_snapshot_has
