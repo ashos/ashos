@@ -1,6 +1,7 @@
-use crate::{check_mutability, chr_delete, immutability_disable, immutability_enable, prepare, post_transactions,
+use crate::{check_mutability, chr_delete, get_current_snapshot, immutability_disable, immutability_enable, prepare, post_transactions,
             remove_dir_content, snapshot_config_get, sync_time};
 
+use std::fs::read_dir;
 use std::io::{Error, ErrorKind};
 use std::path::Path;
 use std::process::{Command, ExitStatus};
@@ -25,7 +26,14 @@ pub fn auto_upgrade(snapshot: &str) -> std::io::Result<()> {
     // Required in virtualbox, otherwise error in package db update
     sync_time()?;
     prepare(snapshot)?;
+
+    // Avoid invalid or corrupted package (PGP signature) error
+    Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                          .args(["pacman", "-Sy", "--noconfirm", "archlinux-keyring"])
+                          .status().unwrap();
+
     if !aur_check(snapshot) {
+        // Use pacman
         let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                                            .args(["pacman", "--noconfirm", "-Syyu"]).status()?;
         if excode.success() {
@@ -38,9 +46,11 @@ pub fn auto_upgrade(snapshot: &str) -> std::io::Result<()> {
             Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").output()?;
         }
     } else {
-        let excode = Command::new("sh").arg("-c")
-                                       .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} su aur -c 'paru --noconfirm -Syy'", snapshot))
-                                       .status()?;
+        // Use paru if aur is enabled
+        let args = format!("paru -Syyu --noconfirm");
+        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr1"))
+                                           .args(["su", "aur", "-c", &args])
+                                           .status().unwrap();
         if excode.success() {
             post_transactions(snapshot)?;
             Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").output()?;
@@ -82,13 +92,13 @@ pub fn fix_package_db(snapshot: &str) -> std::io::Result<()> {
         return Err(Error::new(ErrorKind::Unsupported, format!("Snapshot 0 (base) should not be modified.")));
 
     } else {
-        //let run_chroot: bool; // NOTE (disabled) Do we realy need non-chroot for current snapshot?
+        let run_chroot: bool;
         // If snapshot is current running
-        //run_chroot = if snapshot == get_current_snapshot() {
-            //false
-        //} else {
-            //true
-        //};
+        run_chroot = if snapshot == get_current_snapshot() {
+            false
+        } else {
+            true
+        };
 
         // Snapshot is mutable so do not make it immutable after fixdb is done
         let flip = if check_mutability(snapshot) {
@@ -113,14 +123,13 @@ pub fn fix_package_db(snapshot: &str) -> std::io::Result<()> {
         cmds.push(format!("pacman-key --populate archlinux"));
         cmds.push(format!("pacman -Syvv --noconfirm archlinux-keyring"));
         for cmd in cmds {
-            //if run_chroot {
+            if run_chroot {
+                Command::new("sh").arg("-c").arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}",
+                                                   snapshot,cmd)).status()?;
+            } else {
                 Command::new("sh").arg("-c")
-                                  .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}",
-                                               snapshot,cmd)).status()?;
-            //} else {
-                //Command::new("sh").arg("-c")
-                                  //.arg(cmd).status()?;
-            //}
+                                  .arg(cmd).status()?;
+            }
         }
 
         // Return snapshot to immutable after fixdb is done if snapshot was immutable
@@ -157,70 +166,123 @@ pub fn init_system_copy(snapshot: &str, from: &str) -> std::io::Result<()> {
 }
 
 // Install atomic-operation
-pub fn install_package(snapshot:&str, pkgs: &Vec<String>) -> std::io::Result<()> {
-    for pkg in pkgs {
-        // This extra pacman check is to avoid unwantedly triggering AUR if package is official
-        let excode = Command::new("pacman").arg("-Si")
-                                           .arg(format!("{}", pkg))
-                                           .output()?; // --sysroot
-        if !excode.status.success() {
-            // Use paru if aur is enabled
-            if aur_check(snapshot) {
-                Command::new("sh")
-                    .arg("-c")
-                    .arg(
-                        format!(
-                            "chroot /.snapshots/rootfs/snapshot-chr{} su aur -c \'paru -S {} --needed --overwrite '/var/*''\'",
-                            snapshot,pkg))
-                    .status()?;
-            } else {
-                return Err(Error::new(ErrorKind::Unsupported,
-                                      format!("AUR is not enabled!")));
-            }
-        } else {
-            prepare(snapshot)?;
-            Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                  .args(["pacman", "-S"])
-                                  .arg(format!("{}", pkg))
-                                  .args(["--needed", "--overwrite", "'/var/*'"])
-                                  .status()?;
-        }
-    }
-    Ok(())
-}
-
-// Install atomic-operation in live snapshot
-pub fn install_package_live(snapshot: &str, tmp: &str, pkgs: &Vec<String>) -> std::io::Result<()> {
+pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
+    prepare(snapshot)?;
     for pkg in pkgs {
         // This extra pacman check is to avoid unwantedly triggering AUR if package is official
         let excode = Command::new("pacman").arg("-Si")
                                            .arg(format!("{}", pkg))
                                            .output()?; // --sysroot
         if excode.status.success() {
-            Command::new("sh")
-                .arg("-c")
-                .arg(
-                    format!(
-                        "chroot /.snapshots/rootfs/snapshot-{} pacman -Sy --overwrite '*' --noconfirm {}",
-                        tmp,pkg))
-                .status()?;
-        } else {
-            // Use paru if aur is enabled
-            if aur_check(snapshot) {
-                Command::new("sh")
-                    .arg("-c")
-                    .arg(
-                        format!(
-                            "chroot /.snapshots/rootfs/snapshot-{} su aur -c 'paru -Sy --overwrite '*' --noconfirm {}'",
-                            tmp,pkg))
-                    .status()?;
+            let pacman_args = if noconfirm {
+                format!("pacman -S --noconfirm --needed --overwrite '/var/*' {}", pkg)
             } else {
-                return Err(Error::new(ErrorKind::Unsupported,
-                                      format!("AUR is not enabled!")));
-            }
+                format!("pacman -S --needed --overwrite '/var/*' {}", pkg)
+            };
+            Command::new("sh").arg("-c")
+                              .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,pacman_args))
+                              .status()?;
+        } else if aur_check(snapshot) {
+            // Use paru if aur is enabled
+            let paru_args = if noconfirm {
+                format!("paru -S --noconfirm --needed --overwrite '/var/*' {}", pkg)
+            } else {
+                format!("paru -S --needed --overwrite '/var/*' {}", pkg)
+            };
+            Command::new("chroot")
+                .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                .args(["su", "aur", "-c"])
+                .arg(&paru_args)
+                .status()?;
+        }
+
+        // Check if succeeded
+        if !is_package_installed(snapshot, &pkg) {
+            return Err(Error::new(ErrorKind::NotFound,
+                                  format!("Failed to install {}", pkg)));
         }
     }
     Ok(())
+}
+
+// Install atomic-operation in live snapshot
+pub fn install_package_helper_live(snapshot: &str, tmp: &str, pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
+    for pkg in pkgs {
+        // This extra pacman check is to avoid unwantedly triggering AUR if package is official
+        let excode = Command::new("pacman").arg("-Si")
+                                           .arg(format!("{}", pkg))
+                                           .output()?; // --sysroot
+        if excode.status.success() {
+            let pacman_args = if noconfirm {
+                format!("pacman -Sy --noconfirm --overwrite '*' {}", pkg)
+            } else {
+                format!("pacman -Sy --overwrite '*' {}", pkg)
+            };
+            Command::new("sh")
+                .arg("-c")
+                .arg(format!("chroot /.snapshots/rootfs/snapshot-{} {}", tmp,pacman_args))
+                .status()?;
+        } else if aur_check(snapshot) {
+            // Use paru if aur is enabled
+            let paru_args = if noconfirm {
+                format!("paru -Sy --noconfirm --overwrite '*' {}", pkg)
+            } else {
+                format!("paru -Sy --overwrite '*' {}", pkg)
+            };
+            Command::new("chroot")
+                .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
+                .args(["su", "aur", "-c"])
+                .arg(&paru_args)
+                .status()?;
+        }
+
+        // Check if succeeded
+        if !is_package_live_installed(&pkg) {
+            return Err(Error::new(ErrorKind::NotFound,
+                                  format!("Failed to install {}", pkg)));
+        }
+    }
+    Ok(())
+}
+
+// Check if package installed
+fn is_package_installed(snapshot: &str, pkg: &str) -> bool {
+    let package_db_path = format!("/.snapshots/rootfs/snapshot-chr{}/usr/share/ash/db/local", snapshot);
+
+    if let Ok(entries) = read_dir(package_db_path) {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                let file_name = entry.file_name();
+                if let Some(file_name_str) = file_name.to_str() {
+                    if file_name_str.starts_with(pkg) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    false
+}
+
+// Check if package installed
+fn is_package_live_installed(pkg: &str) -> bool {
+    let package_db_path = format!("/usr/share/ash/db/local");
+
+    if let Ok(entries) = read_dir(package_db_path) {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                let file_name = entry.file_name();
+                if let Some(file_name_str) = file_name.to_str() {
+                    if file_name_str.starts_with(pkg) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    false
 }
 
 // Get list of packages installed in a snapshot
@@ -234,8 +296,13 @@ pub fn pkg_list(snapshot: &str, chr: &str) -> Vec<String> {
 
 // Refresh snapshot atomic-operation
 pub fn refresh_helper(snapshot: &str) -> ExitStatus {
+    let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                       .args(["pacman", "-Syy"]).status().unwrap();
+    // Avoid invalid or corrupted package (PGP signature) error
     Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                          .args(["pacman", "-Syy"]).status().unwrap()
+                          .args(["pacman", "-S", "--noconfirm", "archlinux-keyring"])
+                          .status().unwrap();
+    return excode;
 }
 
 // Show diff of packages between 2 snapshots
@@ -282,16 +349,68 @@ pub fn snapshot_diff(snapshot1: &str, snapshot2: &str) -> std::io::Result<()> {
 }
 
 // Uninstall package(s) atomic-operation
-pub fn uninstall_package_helper(snapshot: &str, pkg: &str) -> ExitStatus {
-    let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                       .args(["pacman", "--noconfirm", "-Rns"])
-                                       .arg(format!("{}", pkg)).status().unwrap();
-    excode
+pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
+    for pkg in pkgs {
+        // Check if package installed
+        if !is_package_installed(snapshot, &pkg) {
+            return Err(Error::new(ErrorKind::NotFound,
+                                  format!("Package {} is not installed", pkg)));
+        } else {
+            let pacman_args = if noconfirm {
+                ["pacman", "--noconfirm", "-Rns"]
+            } else {
+                ["pacman", "--confirm", "-Rns"]
+            };
+
+            Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                  .args(pacman_args)
+                                  .arg(format!("{}", pkg)).status()?;
+
+            // Check if package uninstalled successfully
+            if is_package_installed(snapshot, &pkg) {
+                return Err(Error::new(ErrorKind::AlreadyExists,
+                                      format!("Failed to uninstall {}", pkg)));
+            }
+        }
+    }
+    Ok(())
+}
+
+// Uninstall package(s) atomic-operation live snapshot
+pub fn uninstall_package_helper_live(tmp: &str, pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
+    for pkg in pkgs {
+        // Check if package installed
+        if !is_package_live_installed(&pkg) {
+            return Err(Error::new(ErrorKind::NotFound,
+                                  format!("Package {} is not installed", pkg)));
+        } else {
+            let pacman_args = if noconfirm {
+                ["pacman", "--noconfirm", "-Rns"]
+            } else {
+                ["pacman", "--confirm", "-Rns"]
+            };
+
+            Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
+                                  .args(pacman_args)
+                                  .arg(format!("{}", pkg)).status()?;
+
+            // Check if package uninstalled successfully
+            if is_package_live_installed(&pkg) {
+                return Err(Error::new(ErrorKind::AlreadyExists,
+                                      format!("Failed to uninstall {}", pkg)));
+            }
+        }
+    }
+    Ok(())
 }
 
 // Upgrade snapshot atomic-operation
 pub fn upgrade_helper(snapshot: &str) -> ExitStatus {
     prepare(snapshot).unwrap();
+    // Avoid invalid or corrupted package (PGP signature) error
+    Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                          .args(["pacman", "-Syy", "archlinux-keyring"])
+                          .status().unwrap();
     if !aur_check(snapshot) {
         let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                                            .args(["pacman", "-Syyu"])
@@ -301,6 +420,27 @@ pub fn upgrade_helper(snapshot: &str) -> ExitStatus {
         let excode = Command::new("sh").arg("-c")
                                        .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} su aur -c 'paru -Syyu'", snapshot))
                                        .status().unwrap();
+        excode
+    }
+}
+
+// Live upgrade snapshot atomic-operation
+pub fn upgrade_helper_live(snapshot: &str) -> ExitStatus {
+    // Avoid invalid or corrupted package (PGP signature) error
+    Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
+                          .args(["pacman", "-Sy", "--noconfirm", "archlinux-keyring"])
+                          .status().unwrap();
+    if !aur_check(snapshot) {
+        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
+                                           .args(["pacman", "--noconfirm", "-Syyu"])
+                                           .status().unwrap();
+        excode
+    } else {
+        let excode = Command::new("sh")
+            .arg("-c")
+            .arg(format!("chroot /.snapshots/rootfs/snapshot-{} su aur -c 'paru --noconfirm -Syyu'",
+                         snapshot))
+            .status().unwrap();
         excode
     }
 }

@@ -17,6 +17,7 @@ use nix::unistd::Uid;
 // /.snapshots/ash/snapshots/*-desc  : descriptions
 // /usr/share/ash                    : files that store current snapshot info
 // /usr/share/ash/db                 : package database
+// /use/share/ash/profiles           : default desktop environments profiles path
 // /var/lib/ash(/fstree)             : ash files, stores fstree, symlink to /.snapshots/ash
 
 fn main() {
@@ -97,6 +98,7 @@ fn main() {
                 }
             }
             Some(("check", _matches)) => {
+                // Run check_update
                 check_update().unwrap();
             }
             // Chroot
@@ -115,7 +117,11 @@ fn main() {
                 let cmd: Vec<String> = Vec::new();
 
                 // Run chroot
-                chroot(&snapshot, cmd).unwrap();
+                let run = chroot(&snapshot, cmd);
+                match run {
+                    Ok(_) => (),
+                    Err(e) => eprintln!("{}", e),
+                }
             }
             // Clone
             Some(("clone", clone_matches)) => {
@@ -284,6 +290,7 @@ fn main() {
                 snapshot_config_edit(&snapshot).unwrap();
             }
             Some(("etc-update", _matches)) => {
+                // Run etc-update
                 update_etc().unwrap();
             }
             Some(("fixdb", fixdb_matches)) => {
@@ -314,6 +321,7 @@ fn main() {
                 }
             }
             Some(("hide", _matches)) => {
+                // Run switch_to_windows
                 switch_to_windows();
             }
             Some(("hollow", hollow_matches)) => {
@@ -390,6 +398,7 @@ fn main() {
                     pkgs
                 };
 
+                // Get profile value
                 let profile = if install_matches.contains_id("PROFILE") {
                     let profile = install_matches.get_many::<String>("PROFILE").unwrap().map(|s| format!("{}", s)).collect();
                     profile
@@ -398,13 +407,23 @@ fn main() {
                     profile
                 };
 
+                // Get user-profile value
+                let user_profile = if install_matches.contains_id("USER_PROFILE") {
+                    let user_profile = install_matches.get_many::<String>("USER_PROFILE").unwrap().map(|s| format!("{}", s)).collect();
+                    user_profile
+                } else {
+                    let user_profile = String::new();
+                    user_profile
+                };
+
                 // Optional values
                 let live = install_matches.get_flag("live");
+                let noconfirm = install_matches.get_flag("noconfirm");
                 let force = install_matches.get_flag("force");
+                let  secondary= install_matches.get_flag("secondary");
 
                 // Run install_triage
-                install_triage(&snapshot, live, pkgs, &profile, force).unwrap();
-
+                install_triage(&snapshot, live, pkgs, &profile, force, &user_profile, noconfirm, secondary).unwrap();
             }
             Some(("list", list_matches)) => {
                 // Get snapshot value
@@ -427,6 +446,7 @@ fn main() {
                 }
             }
             Some(("live-chroot", _matches)) => {
+                // Run live_unlock
                 live_unlock().unwrap();
             }
             Some(("new", new_matches)) => {
@@ -461,6 +481,7 @@ fn main() {
                 refresh(&snapshot).unwrap();
             }
             Some(("rollback", _matches)) => {
+                // Run rollback
                 rollback().unwrap();
             }
             Some(("run", run_matches)) => {
@@ -478,16 +499,22 @@ fn main() {
                 let cmds: Vec<String> = run_matches.get_many::<String>("COMMAND").unwrap().map(|s| format!("{}", s)).collect();
 
                 // Run chroot
-                chroot(&snapshot, cmds).unwrap();
-
+                let run = chroot(&snapshot, cmds);
+                match run {
+                    Ok(_) => (),
+                    Err(e) => eprintln!("{}", e),
+                }
             }
             Some(("sub", _matches)) => {
+                // Print subvolumes in list
                 list_subvolumes();
             }
             Some(("tree", _matches)) => {
+                // Print tree
                 tree_show();
             }
             Some(("tmp", _matches)) => {
+                // Run temp_snapshots_clear
                 temp_snapshots_clear().unwrap();
             }
             Some(("tremove", tremove_matches)) => {
@@ -519,8 +546,66 @@ fn main() {
                     profiles
                 };
 
+                // Get user-profiles value
+                let user_profiles = if tremove_matches.contains_id("USER_PROFILE") {
+                    let user_profiles: Vec<String> = tremove_matches.get_many::<String>("USER_PROFILE").unwrap().map(|s| format!("{}", s)).collect();
+                    user_profiles
+                } else {
+                    let user_profiles: Vec<String> = Vec::new();
+                    user_profiles
+                };
+
                 // Run remove_from_tree
-                remove_from_tree(&treename, pkgs, profiles).unwrap();
+                let run = remove_from_tree(&treename, &pkgs, &profiles, &user_profiles);
+                match run {
+                    Ok(_) => println!("Tree {} updated.", treename),
+                    Err(e) => eprintln!("{}", e),
+                }
+            }
+            Some(("uninstall", uninstall_matches)) => {
+                                // Get snapshot value
+                let snapshot = if uninstall_matches.contains_id("SNAPSHOT") {
+                    let snap = uninstall_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Get pkgs value
+                let pkgs = if uninstall_matches.contains_id("PACKAGE") {
+                    let pkgs: Vec<String> = uninstall_matches.get_many::<String>("PACKAGE").unwrap().map(|s| format!("{}", s)).collect();
+                    pkgs
+                } else {
+                    let pkgs: Vec<String> = Vec::new();
+                    pkgs
+                };
+
+                // Get profile value
+                let profile = if uninstall_matches.contains_id("PROFILE") {
+                    let profile = uninstall_matches.get_many::<String>("PROFILE").unwrap().map(|s| format!("{}", s)).collect();
+                    profile
+                } else {
+                    let profile = String::new();
+                    profile
+                };
+
+                // Get user-profile value
+                let user_profile = if uninstall_matches.contains_id("USER_PROFILE") {
+                    let user_profile = uninstall_matches.get_many::<String>("USER_PROFILE").unwrap().map(|s| format!("{}", s)).collect();
+                    user_profile
+                } else {
+                    let user_profile = String::new();
+                    user_profile
+                };
+
+                // Optional values
+                let live = uninstall_matches.get_flag("live");
+                let noconfirm = uninstall_matches.get_flag("noconfirm");
+
+                // Run uninstall_triage
+                uninstall_triage(&snapshot, live, pkgs, &profile, &user_profile, noconfirm).unwrap();
             }
             Some(("unlock", unlock_matches)) => {
                 // Get snapshot value
@@ -555,9 +640,11 @@ fn main() {
                 }
             }
             Some(("version", _matches)) => {
+                // Print version
                 ash_version().unwrap();
             }
             Some(("whichtmp", _matches)) => {
+                // Print tmp
                 println!("{}", get_tmp());
             }
             Some(("whichsnap", whichsnap_matches)) => {

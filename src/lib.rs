@@ -13,7 +13,7 @@ use partition_identity::{PartitionID, PartitionSource};
 use proc_mounts::MountIter;
 use std::collections::HashMap;
 use std::fs::{copy, DirBuilder, File, metadata, OpenOptions, read_dir, read_to_string};
-use std::io::{BufRead, BufReader, Error, ErrorKind, Read, stdin, stdout, Write};
+use std::io::{BufRead, BufReader, Error, ErrorKind, Read, stdin, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::UNIX_EPOCH;
@@ -122,7 +122,7 @@ pub fn ash_umounts(i: &str, chr: &str) -> nix::Result<()> {
     Ok(())
 }
 
-// Update ash itself //REVIEW
+// Update ash itself //TODO //REVIEW
 //pub fn ash_update(dbg) {}
 
 //Ash version
@@ -265,12 +265,13 @@ pub fn chroot(snapshot: &str, cmds: Vec<String>) -> std::io::Result<()> {
             // Chroot to snapshot path
             for  cmd in cmds {
                 if prepare(snapshot).is_ok() {
-                    let chroot_and_exec = Command::new("sh").arg("-c")
-                                                            .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,cmd))
-                                                            .status().unwrap();
+                    let chroot_and_exec = Command::new("sh")
+                        .arg("-c")
+                        .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,cmd))
+                        .status()?;
                     if chroot_and_exec.success() {
                         // Exit chroot
-                        Command::new("sh").arg("-c").arg("exit").output().unwrap();
+                        Command::new("sh").arg("-c").arg("exit").output()?;
                         // Make sure post_transactions exit properly
                         match post_transactions(snapshot) {
                             Ok(()) => {
@@ -283,7 +284,7 @@ pub fn chroot(snapshot: &str, cmds: Vec<String>) -> std::io::Result<()> {
                         }
                     } else {
                         // Exit chroot and unlock snapshot
-                        Command::new("sh").arg("-c").arg("exit").output().unwrap();
+                        Command::new("sh").arg("-c").arg("exit").output()?;
                         chr_delete(snapshot)?;
                     }
                 } else {
@@ -294,7 +295,7 @@ pub fn chroot(snapshot: &str, cmds: Vec<String>) -> std::io::Result<()> {
         } else if prepare(snapshot).is_ok() {
             // chroot
             let chroot = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                               .status().unwrap();
+                                               .status()?;
             if chroot.code().is_some() {
                 // Make sure post_transactions exit properly
                 match post_transactions(snapshot) {
@@ -589,7 +590,7 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> std::io:
     Ok(())
 }
 
-// Delete deploys subvolumes
+// Delete deploys subvolumes //TODO //REVIEW
 pub fn delete_deploys() -> std::io::Result<()> {
     for snap in ["deploy", "deploy-aux"] {
         if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap)).try_exists().unwrap() {
@@ -676,11 +677,11 @@ pub fn deploy(snapshot: &str, secondary: bool) -> std::io::Result<()> {
                          .create(format!("/.snapshots/rootfs/snapshot-{}/etc", tmp))?;
         std::fs::remove_dir_all(&format!("/.snapshots/rootfs/snapshot-{}/var", tmp))?;
         Command::new("cp").args(["-r", "--reflink=auto"])
-                          .arg(format!("/.snapshots/boot/boot-{}/", snapshot))
+                          .arg(format!("/.snapshots/boot/boot-{}/.", snapshot))
                           .arg(format!("/.snapshots/rootfs/snapshot-{}/boot", tmp))
                           .output()?;
         Command::new("cp").args(["-r", "--reflink=auto"])
-                          .arg(format!("/.snapshots/etc/etc-{}/", snapshot))
+                          .arg(format!("/.snapshots/etc/etc-{}/.", snapshot))
                           .arg(format!("/.snapshots/rootfs/snapshot-{}/etc", tmp))
                           .output()?;
 
@@ -1018,7 +1019,7 @@ pub fn immutability_enable(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Install packages
-pub fn install(snapshot: &str, pkgs: &Vec<String>) -> std::io::Result<()> {
+pub fn install(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound,
@@ -1038,7 +1039,7 @@ pub fn install(snapshot: &str, pkgs: &Vec<String>) -> std::io::Result<()> {
 
         // Install package
         } else {
-        if install_package(snapshot, &pkgs).is_ok() {
+        if install_package_helper(snapshot, &pkgs, noconfirm).is_ok() {
             post_transactions(snapshot)?;
             } else {
             chr_delete(snapshot)?;
@@ -1050,23 +1051,22 @@ pub fn install(snapshot: &str, pkgs: &Vec<String>) -> std::io::Result<()> {
 }
 
 // Install live
-pub fn install_live(/*snapshot: &str,*/ pkgs: &Vec<String>) -> std::io::Result<()> {
+pub fn install_live(pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
     let snapshot = &get_current_snapshot();
     let tmp = get_tmp();
     ash_mounts(&tmp, "").unwrap();
-    install_package_live(snapshot, &tmp, &pkgs)?;
+    install_package_helper_live(snapshot, &tmp, &pkgs, noconfirm)?;
     //println!("Please wait as installation is finishing.");
     ash_umounts(&tmp, "").unwrap();
     Ok(())
 }
 
 // Install a profile from a text file
-fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool, /*section_only: Option<String>*/) -> std::io::Result<bool> {
-    let https = "https://raw.githubusercontent.com/ashos/ashos/main/src";
+fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool, /*section_only: Option<String>,*/
+                   user_profile: &str, noconfirm: bool) -> std::io::Result<bool> {
+    // Get some values
     let dist = detect::distro_id();
-    let url = format!("{}/profiles/{}/{}.conf", https, profile, dist);
-    let tmp = Temp::new_dir_in("/.snapshots/tmp")?;
-    let cfile_path = format!("{}/{}.conf", tmp.to_str().unwrap(),profile);
+    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist);
 
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
@@ -1096,33 +1096,14 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool, 
         profconf.set_comment_symbols(&['#']);
         profconf.set_multiline(true);
         // Load profile if exist
-        if !Path::new(&cfile_path).try_exists().unwrap() && !force {
-            profconf.load(&cfile_path).unwrap();
-        } else {
-            // Download profile if not exist
-            println!("Downloading profile {} from AshOS...", profile);
-            // Use curl to download profile
-            let mut handle = Easy::new();
-            handle.url(&url).expect("Failed to set URL");
-            let mut resp = Vec::new(); // Target buffer
-            {
-                let mut transfer = handle.transfer();
-                transfer.write_function(|data| {
-                    resp.extend_from_slice(data);
-                    Ok(data.len())
-                }).expect("Failed to set write function");
-                transfer.perform().expect("Failed to perform request");
-            }
-            let mut cfile = OpenOptions::new().create(true)
-                                              .truncate(true)
-                                              .read(true)
-                                              .write(true)
-                                              .open(&cfile_path)?;
-            // Save download to profile path
-            cfile.write_all(&resp)?;
-            stdout().flush()?;
-            // Load profile
-            profconf.load(&cfile_path).unwrap();
+        if !Path::new(&cfile).try_exists().unwrap() && !force && user_profile.is_empty() {
+            profconf.load(&cfile).unwrap();
+        } else if force {
+            println!("Installing AshOS profiles.");
+            install_package_helper(snapshot, &vec!["ash-profiles".to_string()], true)?;
+            profconf.load(&cfile).unwrap();
+        } else if !user_profile.is_empty() {
+            profconf.load(user_profile).unwrap();
         }
 
         // Read presets section in configuration file
@@ -1134,112 +1115,109 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool, 
         }
 
         // Read packages section in configuration file
-        let mut pkgs: Vec<String> = Vec::new();
-        for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
-            pkgs.push(pkg.to_string());
+        if profconf.sections().contains(&"packages".to_string()) {
+            let mut pkgs: Vec<String> = Vec::new();
+            for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+                pkgs.push(pkg.to_string());
+            }
+            // Install package(s)
+            install_package_helper(snapshot, &pkgs, noconfirm)?;
         }
 
-        // install package(s)
-        install_package(snapshot, &pkgs).unwrap();
-
         // Read commands section in configuration file
-        for cmd in profconf.get_map().unwrap().get("commands").unwrap().keys() {
-            Command::new("sh").arg("-c")
-                              .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}",
-                                           snapshot,cmd)).status().unwrap();
+        if profconf.sections().contains(&"install-commands".to_string()) {
+            for cmd in profconf.get_map().unwrap().get("install-commands").unwrap().keys() {
+                Command::new("sh").arg("-c").arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}",
+                                                         snapshot,cmd)).status()?;
+            }
         }
     }
     Ok(secondary)
 }
 
 // Install profile in live snapshot
-fn install_profile_live(snapshot: &str,profile: &str, force: bool) -> std::io::Result<()> {
+fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile: &str, noconfirm: bool) -> std::io::Result<()> {
     // Get some values
-    let https = "https://raw.githubusercontent.com/ashos/ashos/main/src";
     let dist = detect::distro_id();
-    let url = format!("{}/profiles/{}/{}.conf", https, profile, dist);
-    let temp = Temp::new_dir_in("/.snapshots/tmp")?;
-    let cfile_path = format!("{}/{}.conf", temp.to_str().unwrap(),profile);
+    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist);
     let tmp = get_tmp();
 
     // Prepare
-    ash_mounts(tmp.as_str(), "")?;
-    println!("Updating the system before installing profile {}.", profile);
-    auto_upgrade(tmp.as_str())?;
-
-    // profile configurations
-    let mut profconf = Ini::new();
-    profconf.set_comment_symbols(&['#']);
-    profconf.set_multiline(true);
-    // TODO add local profile from custome path or /usr/share/ash/profiles
-    // Load profile if exist
-    if !Path::new(&cfile_path).try_exists().unwrap() && !force {
-        profconf.load(&cfile_path).unwrap();
+    if user_profile.is_empty() {
+        println!("Updating the system before installing profile {}.", profile);
     } else {
-        // Download profile if not exist
-        println!("Downloading profile {} from AshOS...", profile);
-        // Use curl to download profile
-        let mut handle = Easy::new();
-        handle.url(&url).expect("Failed to set URL");
-        let mut resp = Vec::new(); // Target buffer
-        {
-            let mut transfer = handle.transfer();
-            transfer.write_function(|data| {
-                resp.extend_from_slice(data);
-                Ok(data.len())
-            }).expect("Failed to set write function");
-            transfer.perform().expect("Failed to perform request");
+        println!("Updating the system before installing profile {}.", user_profile);
+    }
+    ash_mounts(tmp.as_str(), "")?;
+    if upgrade_helper_live(tmp.as_str()).success() {
+
+        // profile configurations
+        let mut profconf = Ini::new();
+        profconf.set_comment_symbols(&['#']);
+        profconf.set_multiline(true);
+
+        // Load profile if exist
+        if !Path::new(&cfile).try_exists().unwrap() && !force && user_profile.is_empty() {
+            profconf.load(&cfile).unwrap();
+        } else if force {
+            println!("Installing AshOS profiles.");
+            install_package_helper_live(snapshot, tmp.as_str(), &vec!["ash-profiles".to_string()], true)?;
+            profconf.load(&cfile).unwrap();
+        } else if !user_profile.is_empty() {
+            profconf.load(user_profile).unwrap();
         }
-        let mut cfile = OpenOptions::new().create(true)
-                                          .truncate(true)
-                                          .read(true)
-                                          .write(true)
-                                          .open(&cfile_path)?;
-        // Save download to profile path
-        cfile.write_all(&resp)?;
-        stdout().flush()?;
-        // Load profile
-        // TODO add security check before loading file
-        profconf.load(&cfile_path).unwrap();
-    }
 
-    // Read presets section in configuration file
-    if profconf.sections().contains(&"presets".to_string()) {
-        if !aur_check(snapshot) {
-            return Err(Error::new(ErrorKind::Unsupported,
-                                  format!("Please enable AUR.")));
+        // Read presets section in configuration file
+        if profconf.sections().contains(&"presets".to_string()) {
+            if !aur_check(snapshot) {
+                return Err(Error::new(ErrorKind::Unsupported,
+                                      format!("Please enable AUR.")));
+            }
         }
-    }
 
-    // Read packages section in configuration file
-    let mut pkgs: Vec<String> = Vec::new();
-    for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
-        pkgs.push(pkg.to_string());
-    }
+        // Read packages section in configuration file
+        if profconf.sections().contains(&"packages".to_string()) {
+            let mut pkgs: Vec<String> = Vec::new();
+            for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+                pkgs.push(pkg.to_string());
+            }
+            // Install package(s)
+            install_package_helper_live(snapshot, &tmp, &pkgs, noconfirm)?;
+        }
 
-    // install package(s)
-    install_package_live(snapshot, &tmp, &pkgs)?;
-    // Read commands section in configuration file
-    for cmd in profconf.get_map().unwrap().get("commands").unwrap().keys() {
-        Command::new("sh").arg("-c")
-                          .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}",
-                                       snapshot,cmd)).status().unwrap();
+        // Read commands section in configuration file
+        if profconf.sections().contains(&"install-commands".to_string()) {
+            for cmd in profconf.get_map().unwrap().get("install-commands").unwrap().keys() {
+                Command::new("sh").arg("-c").arg(format!("chroot /.snapshots/rootfs/snapshot-{} {}",
+                                                         snapshot,cmd)).status()?;
+            }
+        }
+    } else {
+        return Err(Error::new(ErrorKind::Interrupted,
+                              format!("System update failed.")));
     }
 
     // Umounts tmp
     ash_umounts(tmp.as_str(), "").unwrap();
+
     Ok(())
 }
 
-// Triage functions for argparse method //REVIEW
-pub fn install_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &str, force: bool) -> std::io::Result<()> {
-    if !live || snapshot != get_current_snapshot() {
+// Triage functions for argparse method
+pub fn install_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &str, force: bool,
+                      user_profile: &str, noconfirm: bool, secondary: bool) -> std::io::Result<()> {
+    let p = if user_profile.is_empty() {
+        profile
+    } else {
+        user_profile
+    };
+    if !live {
         if !profile.is_empty() {
-            let excode = install_profile(snapshot, profile, force, false);
+            let excode = install_profile(snapshot, profile, force, secondary, user_profile, true);
             match excode {
                 Ok(secondary) => {
                     if post_transactions(snapshot).is_ok() {
-                        println!("Profile {} installed in snapshot {} successfully.", profile,snapshot);
+                        println!("Profile {} installed in snapshot {} successfully.", p,snapshot);
                         println!("Deploying snapshot {}.", snapshot);
                         if deploy(snapshot, secondary).is_ok() {
                             println!("Snapshot {} deployed to '/'.", snapshot);
@@ -1255,25 +1233,53 @@ pub fn install_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &s
                 },
             }
         } else if !pkgs.is_empty() {
-            let excode = install(snapshot, &pkgs);
+            let excode = install(snapshot, &pkgs, noconfirm);
             match excode {
                 Ok(_) => println!("Package(s) {pkgs:?} installed in snapshot {} successfully.", snapshot),
                 Err(e) => eprintln!("{}", e),
             }
+        } else if !user_profile.is_empty() {
+            let excode = install_profile(snapshot, profile, force, secondary, user_profile, true);
+            match excode {
+                Ok(secondary) => {
+                    if post_transactions(snapshot).is_ok() {
+                        println!("Profile {} installed in snapshot {} successfully.", p,snapshot);
+                        println!("Deploying snapshot {}.", snapshot);
+                        if deploy(snapshot, secondary).is_ok() {
+                            println!("Snapshot {} deployed to '/'.", snapshot);
+                        }
+                    } else {
+                        chr_delete(snapshot)?;
+                        eprintln!("Install failed and changes discarded!");
+                    }
+                },
+                Err(_) => {
+                    chr_delete(snapshot)?;
+                    eprintln!("Install failed and changes discarded!");
+                },
+            }
         }
-    } else {
+    } else if live && snapshot != get_current_snapshot() {
+        eprintln!("Can't use the live option with any other snapshot than the current one.");
+    } else if live && snapshot == get_current_snapshot() {
         // Do live install only if: live flag is used OR target snapshot is current
         if !profile.is_empty() {
-            let excode = install_profile_live(snapshot, profile, force);
+            let excode = install_profile_live(snapshot, profile, force, user_profile, true);
             match excode {
-                Ok(_) => println!("Profile {} installed in current/live snapshot.", profile),
-                Err(_) => eprintln!("Install failed"),
+                Ok(_) => println!("Profile {} installed in current/live snapshot.", p),
+                Err(e) => eprintln!("{}", e),
             }
         } else if !pkgs.is_empty() {
-            let excode = install_live(/*snapshot,*/ &pkgs);
+            let excode = install_live(&pkgs, noconfirm);
             match excode {
                 Ok(_) => println!("Package(s) {pkgs:?} installed in snapshot {} successfully.", snapshot),
-                Err(_) => eprintln!("Live installation failed!"),
+                Err(e) => eprintln!("{}", e),
+            }
+        } else if !user_profile.is_empty() {
+            let excode = install_profile_live(snapshot, profile, force, user_profile, true);
+            match excode {
+                Ok(_) => println!("Profile {} installed in current/live snapshot.", p),
+                Err(e) => eprintln!("{}", e),
             }
         }
     }
@@ -1341,12 +1347,12 @@ pub fn post_transactions(snapshot: &str) -> std::io::Result<()> {
     //File operations in snapshot-chr
     remove_dir_content(format!("/.snapshots/boot/boot-chr{}", snapshot).as_str())?;
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/boot/", snapshot))
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/boot/.", snapshot))
                       .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
                       .output()?;
     remove_dir_content(format!("/.snapshots/etc/etc-chr{}", snapshot).as_str())?;
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/", snapshot))
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/.", snapshot))
                       .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
                       .output()?;
 
@@ -1431,7 +1437,7 @@ pub fn post_transactions(snapshot: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-// IMPORTANT REVIEW 2023 older to revert if hollow introduces issues
+// TODO IMPORTANT REVIEW 2023 older to revert if hollow introduces issues
 pub fn posttrans(snapshot: &str) -> std::io::Result<()> {
     let etc = snapshot;
     let tmp = get_tmp();
@@ -1440,23 +1446,23 @@ pub fn posttrans(snapshot: &str) -> std::io::Result<()> {
                      DeleteSubvolumeFlags::empty()).unwrap();
     remove_dir_content(format!("/.snapshots/etc/etc-chr{}", snapshot).as_str())?;
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/", snapshot))
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/*", snapshot))
                       .arg(format!("/.snapshots/boot/etc-chr{}", snapshot))
                       .output()?;
     remove_dir_content(format!("/.snapshots/var/var-chr{}", snapshot).as_str())?;
     DirBuilder::new().recursive(true)
                      .create(format!("/.snapshots/var/var-chr{}/lib/systemd", snapshot))?;
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/", snapshot))
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/*", snapshot))
                       .arg(format!("/.snapshots/var/var-chr{}/lib/systemd", snapshot))
                       .output()?;
     Command::new("cp").args(["-r", "-n", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg/", snapshot))
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg/*", snapshot))
                       .arg("/var/cache/pacman/pkg/")
                       .output()?;
     remove_dir_content(format!("/.snapshots/boot/boot-chr{}",  snapshot).as_str())?;
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/boot/", snapshot))
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/boot/*", snapshot))
                       .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
                       .output()?;
     delete_subvolume(Path::new(&format!("/.snapshots/etc/etc-{}", etc)),
@@ -1472,12 +1478,12 @@ pub fn posttrans(snapshot: &str) -> std::io::Result<()> {
     DirBuilder::new().recursive(true)
                      .create(format!("/.snapshots/var/var-{}/lib/systemd", etc))?;
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/var/var-chr{}/lib/systemd/", snapshot))
+                      .arg(format!("/.snapshots/var/var-chr{}/lib/systemd/*", snapshot))
                       .arg(format!("/.snapshots/var/var-{}/lib/systemd", etc))
                       .output()?;
     remove_dir_content("/var/lib/systemd/")?;
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", tmp))
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/*", tmp))
                       .arg("/var/lib/systemd")
                       .output()?;
     create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
@@ -1511,11 +1517,11 @@ pub fn prepare(snapshot: &str) -> std::io::Result<()> {
                     format!("/.snapshots/etc/etc-chr{}", snapshot),
                     CreateSnapshotFlags::empty(), None).unwrap();
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/boot/boot-chr{}/", snapshot))
+                      .arg(format!("/.snapshots/boot/boot-chr{}/.", snapshot))
                       .arg(format!("{}/boot", snapshot_chr))
                       .output()?;
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/etc/etc-chr{}/", snapshot))
+                      .arg(format!("/.snapshots/etc/etc-chr{}/.", snapshot))
                       .arg(format!("{}/etc", snapshot_chr))
                       .output()?;
 
@@ -1638,7 +1644,7 @@ pub fn remove_dir_content(dir_path: &str) -> std::io::Result<()> {
 }
 
 // Recursively remove package in tree
-pub fn remove_from_tree(treename: &str, pkgs: Vec<String>, profiles: Vec<String>) -> std::io::Result<()> {
+pub fn remove_from_tree(treename: &str, pkgs: &Vec<String>, profiles: &Vec<String>, user_profiles: &Vec<String>) -> std::io::Result<()> {
     // Make sure treename exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
         eprintln!("Cannot remove as tree {} doesn't exist.", treename);
@@ -1646,9 +1652,10 @@ pub fn remove_from_tree(treename: &str, pkgs: Vec<String>, profiles: Vec<String>
     } else {
         // Import tree value
         let tree = fstree().unwrap();
+        // Remove packages
         if !pkgs.is_empty() {
             for pkg in pkgs {
-                uninstall_package(treename, pkg.as_str())?;
+                uninstall(treename, &vec![pkg.to_string()], true)?;
                 let mut order = recurse_tree(&tree, treename);
                 if order.len() > 2 {
                     order.remove(0);
@@ -1664,13 +1671,68 @@ pub fn remove_from_tree(treename: &str, pkgs: Vec<String>, profiles: Vec<String>
                     order.remove(0);
                     order.remove(0);
                     let snapshot = &order[1];
-                    uninstall_package(snapshot, pkg.as_str())?;
+                    uninstall(snapshot, &vec![pkg.to_string()], true)?;
                 }
-                println!("Tree {} updated.", treename);
             }
         } else if !profiles.is_empty() {
-            println!("profile unsupported yet."); //TODO add remove_profile function //REVIEW
+            // Remove profiles
+            for profile in profiles {
+                let user_profile = "";
+                uninstall_profile(treename, &profile, &user_profile, true)?;
+                let mut order = recurse_tree(&tree, treename);
+                if order.len() > 2 {
+                    order.remove(0);
+                    order.remove(0);
+                }
+                loop {
+                    if order.len() < 2 {
+                        break;
+                    }
+                    let arg = &order[0];
+                    let sarg = &order[1];
+                    println!("{}, {}", arg,sarg);
+                    order.remove(0);
+                    order.remove(0);
+                    let snapshot = &order[1];
+                    if uninstall_profile(snapshot, &profile, &user_profile, true).is_ok() {
+                        post_transactions(snapshot)?;
+                    } else {
+                        chr_delete(snapshot)?;
+                        return Err(Error::new(ErrorKind::Other,
+                                              format!("Failed to remove and changes discarded.")));
+                    }
+                }
             }
+        } else if !user_profiles.is_empty() {
+            // Remove profiles
+            for user_profile in user_profiles {
+                let profile = "";
+                uninstall_profile_live(treename, &profile, &user_profile, true)?;
+                let mut order = recurse_tree(&tree, treename);
+                if order.len() > 2 {
+                    order.remove(0);
+                    order.remove(0);
+                }
+                loop {
+                    if order.len() < 2 {
+                        break;
+                    }
+                    let arg = &order[0];
+                    let sarg = &order[1];
+                    println!("{}, {}", arg,sarg);
+                    order.remove(0);
+                    order.remove(0);
+                    let snapshot = &order[1];
+                    if uninstall_profile(snapshot, &profile, &user_profile, true).is_ok() {
+                        post_transactions(snapshot)?;
+                    } else {
+                        chr_delete(snapshot)?;
+                        return Err(Error::new(ErrorKind::Other,
+                                              format!("Failed to remove and changes discarded.")));
+                    }
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -1928,7 +1990,7 @@ pub fn switch_tmp(secondary: bool) -> std::io::Result<()> {
     let source_dep = get_tmp();
     let target_dep = get_aux_tmp(source_dep.to_string(), secondary);
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-{}/boot/", target_dep))
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/boot/.", target_dep))
                       .arg(format!("{}", tmp_boot.to_str().unwrap()))
                       .output().unwrap();
 
@@ -2035,8 +2097,8 @@ pub fn switch_tmp(secondary: bool) -> std::io::Result<()> {
 
 // No comment
 pub fn switch_to_windows() -> std::process::ExitStatus {
-    Command::new("sh").arg("-c")
-                      .arg(format!("efibootmgr -c -L 'Windows' -l '\\EFI\\BOOT\\BOOTX64.efi'")).status().unwrap()
+    Command::new("efibootmgr").args(["-c", "-L"])
+                      .arg(format!("'Windows' -l '\\EFI\\BOOT\\BOOTX64.efi'")).status().unwrap()
 }
 
 // Sync time
@@ -2074,8 +2136,7 @@ pub fn sync_time() -> std::io::Result<()> {
     let date = &date_str[2..6].join(" ");
 
     // Set time
-    Command::new("sh").arg("-c").arg(format!("date -s \"({})Z\"", date))
-                                .output()?;
+    Command::new("date").arg("-s").arg(format!("\"({})Z\"", date)).output()?;
     Ok(())
 }
 
@@ -2211,15 +2272,9 @@ pub fn tmp_delete(secondary: bool) -> std::io::Result<()> {
     let tmp = get_aux_tmp(tmp, secondary);
 
     // Clean tmp
-    if remove_dir_content(format!("/.snapshots/boot/boot-{}", tmp).as_str()).is_ok() {
-        delete_subvolume(&format!("/.snapshots/boot/boot-{}", tmp), DeleteSubvolumeFlags::empty()).unwrap();
-    }
-    if remove_dir_content(format!("/.snapshots/etc/etc-{}", tmp).as_str()).is_ok() {
-        delete_subvolume(&format!("/.snapshots/etc/etc-{}", tmp), DeleteSubvolumeFlags::empty()).unwrap();
-    }
-    if remove_dir_content(format!("/.snapshots/rootfs/snapshot-{}", tmp).as_str()).is_ok() {
-        delete_subvolume(&format!("/.snapshots/rootfs/snapshot-{}", tmp), DeleteSubvolumeFlags::empty()).unwrap();
-    }
+    delete_subvolume(&format!("/.snapshots/boot/boot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
+    delete_subvolume(&format!("/.snapshots/etc/etc-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
+    delete_subvolume(&format!("/.snapshots/rootfs/snapshot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
     Ok(())
 }
 
@@ -2306,7 +2361,7 @@ pub fn tree_show() {
 }
 
 // Uninstall package(s)
-pub fn uninstall_package(snapshot: &str, pkg: &str) -> std::io::Result<()> {
+pub fn uninstall(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound,
@@ -2327,10 +2382,10 @@ pub fn uninstall_package(snapshot: &str, pkg: &str) -> std::io::Result<()> {
     } else {
         // Uninstall package
         prepare(snapshot)?;
-        let excode = uninstall_package_helper(snapshot, pkg);
-        if excode.success() {
+        let excode = uninstall_package_helper(snapshot, &pkgs, noconfirm);
+        if excode.is_ok() {
             post_transactions(snapshot)?;
-            println!("Package {} removed from snapshot {} successfully.", pkg,snapshot);
+            println!("Package(s) {pkgs:?} removed from snapshot {} successfully.", snapshot);
         } else {
             chr_delete(snapshot).unwrap();
             eprintln!("Remove failed and changes discarded.");
@@ -2339,13 +2394,187 @@ pub fn uninstall_package(snapshot: &str, pkg: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+// Uninstall live
+pub fn uninstall_live(pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
+    let tmp = get_tmp();
+    ash_mounts(&tmp, "").unwrap();
+    uninstall_package_helper_live(&tmp, &pkgs, noconfirm)?;
+    ash_umounts(&tmp, "").unwrap();
+    Ok(())
+}
+
+// Uninstall a profile from a text file
+fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfirm: bool) -> std::io::Result<()> {
+    // Get some values
+    let dist = detect::distro_id();
+    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist);
+
+    // Make sure snapshot exists
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+        return Err(Error::new(ErrorKind::NotFound,
+                              format!("Cannot uninstall as snapshot {} doesn't exist.", snapshot)));
+
+        // Make sure snapshot is not in use by another ash process
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        return Err(
+            Error::new(ErrorKind::Unsupported,
+                       format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.",
+                               snapshot,snapshot)));
+
+        // Make sure snapshot is not base snapshot
+        } else if snapshot == "0" {
+        return Err(Error::new(ErrorKind::Unsupported,
+                              format!("Changing base snapshot is not allowed.")));
+    } else {
+        // Uninstall profile
+        // Prepare
+        prepare(snapshot)?;
+
+        // profile configurations
+        let mut profconf = Ini::new();
+        profconf.set_comment_symbols(&['#']);
+        profconf.set_multiline(true);
+        // Load profile if exist
+        if !Path::new(&cfile).try_exists().unwrap() && user_profile.is_empty() {
+            profconf.load(&cfile).unwrap();
+        } else if !user_profile.is_empty() {
+            profconf.load(user_profile).unwrap();
+        }
+
+        // Read packages section in configuration file
+        if profconf.sections().contains(&"packages".to_string()) {
+            let mut pkgs: Vec<String> = Vec::new();
+            for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+                pkgs.push(pkg.to_string());
+            }
+            // Install package(s)
+            uninstall_package_helper(snapshot, &pkgs, noconfirm)?;
+        }
+
+        // Read commands section in configuration file
+        if profconf.sections().contains(&"uninstall-commands".to_string()) {
+            for cmd in profconf.get_map().unwrap().get("uninstall-commands").unwrap().keys() {
+                Command::new("sh").arg("-c").arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}",
+                                                         snapshot,cmd)).status()?;
+            }
+        }
+    }
+    Ok(())
+}
+
+// Uninstall profile in live snapshot
+fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noconfirm: bool) -> std::io::Result<()> {
+    // Get some values
+    let dist = detect::distro_id();
+    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist);
+    let tmp = get_tmp();
+
+    // Prepare
+    ash_mounts(tmp.as_str(), "")?;
+
+    // profile configurations
+    let mut profconf = Ini::new();
+    profconf.set_comment_symbols(&['#']);
+    profconf.set_multiline(true);
+
+    // Load profile if exist
+    if !Path::new(&cfile).try_exists().unwrap() && user_profile.is_empty() {
+        profconf.load(&cfile).unwrap();
+    } else if !user_profile.is_empty() {
+        profconf.load(user_profile).unwrap();
+    }
+
+    // Read packages section in configuration file
+    if profconf.sections().contains(&"packages".to_string()) {
+        let mut pkgs: Vec<String> = Vec::new();
+        for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+            pkgs.push(pkg.to_string());
+        }
+        // Install package(s)
+        uninstall_package_helper_live(&tmp, &pkgs, noconfirm)?;
+    }
+
+    // Read commands section in configuration file
+    if profconf.sections().contains(&"uninstall-commands".to_string()) {
+        for cmd in profconf.get_map().unwrap().get("uninstall-commands").unwrap().keys() {
+            Command::new("sh").arg("-c").arg(format!("chroot /.snapshots/rootfs/snapshot-{} {}",
+                                                     snapshot,cmd)).status()?;
+        }
+    }
+
+    // Umounts tmp
+    ash_umounts(tmp.as_str(), "").unwrap();
+
+    Ok(())
+}
+
 // Triage functions for argparse method
-pub fn uninstall_triage(snapshot: &str, profile: &str, pkg: &str) -> std::io::Result<()> { // TODO add live, not_live
-    if !profile.is_empty() {
-        //let excode = uninstall_profile(snapshot, profile);
-        println!("TODO");
-    } else if !pkg.is_empty() {
-        uninstall_package(snapshot, pkg)?;
+pub fn uninstall_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &str,
+                        user_profile: &str, noconfirm: bool) -> std::io::Result<()> {
+    let p = if user_profile.is_empty() {
+        profile
+    } else {
+        user_profile
+    };
+    if !live {
+        if !profile.is_empty() {
+            let excode = uninstall_profile(snapshot, profile, user_profile, true);
+            match excode {
+                Ok(_) => {
+                    if post_transactions(snapshot).is_ok() {
+                        println!("Profile {} removed from snapshot {} successfully.", p,snapshot);
+                    } else {
+                        chr_delete(snapshot)?;
+                        eprintln!("Uninstall failed and changes discarded!");
+                    }
+                },
+                Err(_) => {
+                    chr_delete(snapshot)?;
+                    eprintln!("Uninstall failed and changes discarded!");
+                },
+            }
+        } else if !pkgs.is_empty() {
+            uninstall(snapshot, &pkgs, noconfirm)?;
+        } else if !user_profile.is_empty() {
+            let excode = uninstall_profile(snapshot, profile, user_profile, true);
+            match excode {
+                Ok(_) => {
+                    if post_transactions(snapshot).is_ok() {
+                        println!("Profile {} removed from snapshot {} successfully.", p,snapshot);
+                    } else {
+                        chr_delete(snapshot)?;
+                        eprintln!("Uninstall failed and changes discarded!");
+                    }
+                },
+                Err(_) => {
+                    chr_delete(snapshot)?;
+                    eprintln!("uninstall failed and changes discarded!");
+                },
+            }
+        }
+    } else if live && snapshot != get_current_snapshot() {
+        eprintln!("Can't use the live option with any other snapshot than the current one.");
+    } else if live && snapshot == get_current_snapshot() {
+        // Do live install only if: live flag is used OR target snapshot is current
+        if !profile.is_empty() {
+            let excode = uninstall_profile_live(snapshot, profile, user_profile, true);
+            match excode {
+                Ok(_) => println!("Profile {} removed from current/live snapshot.", p),
+                Err(e) => eprintln!("{}", e),
+            }
+        } else if !pkgs.is_empty() {
+            let excode = uninstall_live(&pkgs, noconfirm);
+            match excode {
+                Ok(_) => println!("Package(s) {pkgs:?} removed from snapshot {} successfully.", snapshot),
+                Err(e) => eprintln!("{}", e),
+            }
+        } else if !user_profile.is_empty() {
+            let excode = uninstall_profile_live(snapshot, profile, user_profile, true);
+            match excode {
+                Ok(_) => println!("Profile {} removed from current/live snapshot.", p),
+                Err(e) => eprintln!("{}", e),
+            }
+        }
     }
     Ok(())
 }
@@ -2395,8 +2624,7 @@ pub fn update_boot(snapshot: &str, secondary: bool) -> std::io::Result<()> {
         let cmds = [mkconfig, sed_snap, sed_distro];
         for cmd in cmds {
             Command::new("sh").arg("-c")
-                              .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,cmd))
-                              .output()?;
+                              .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,cmd)).output()?;
         }
 
         // Finish the update
