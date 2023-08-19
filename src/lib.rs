@@ -590,7 +590,7 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
     Ok(())
 }
 
-// Delete deploys subvolumes //TODO //REVIEW
+// Delete deploys subvolumes //TODO
 pub fn delete_deploys() -> Result<(), Error> {
     for snap in ["deploy", "deploy-aux"] {
         if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap)).try_exists().unwrap() {
@@ -1437,7 +1437,7 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
     Ok(())
 }
 
-// TODO IMPORTANT REVIEW 2023 older to revert if hollow introduces issues
+// TODO IMPORTANT review 2023 older to revert if hollow introduces issues
 pub fn posttrans(snapshot: &str) -> Result<(), Error> {
     let etc = snapshot;
     let tmp = get_tmp();
@@ -1744,7 +1744,7 @@ pub fn rollback() -> Result<(), Error> {
     Ok(())
 }
 
-// Enable service(s) (Systemd, OpenRC, etc.) //TODO //REVIEW
+// Enable service(s) (Systemd, OpenRC, etc.) //TODO
 //fn service_enable(snapshot: &str, profile: &str, tmp_prof: &str) -> std::io::Result<()> {
     //if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         //return Err(Error::new(ErrorKind::NotFound,
@@ -2151,87 +2151,6 @@ pub fn sync_time() -> Result<(), Error> {
     Ok(())
 }
 
-// Sync tree and all its snapshots //REVIEW
-pub fn tree_sync(treename: &str, force_offline: bool, live: bool) {
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
-        println!("Cannot sync as tree {} doesn't exist.", treename);
-    } else {
-        if !force_offline { // Syncing tree automatically updates it, unless 'force-sync' is used
-            //tree_update(treename);
-        }
-        // Import tree file
-        let tree = fstree().unwrap();
-
-        let mut order = recurse_tree(&tree, treename);
-        if order.len() > 2 {
-            order.remove(0); // TODO: Better way instead of these repetitive removes
-            order.remove(0);
-        }
-        loop {
-            if order.len() < 2 {
-                break;
-            }
-            let snap_from = &order[0];
-            let snap_to = &order[1];
-            println!("{}, {}", snap_from, snap_to);
-            order.remove(0);
-            order.remove(0);
-            let snap_from_order = &order[0];
-            let snap_to_order = &order[1];
-            if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snap_to_order)).try_exists().unwrap() {
-                println!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snap_to_order,snap_to_order);
-                println!("Tree sync canceled.");
-            } else {
-                prepare(snap_to_order).unwrap();
-                tree_sync_helper("chr", snap_from_order, snap_to_order).unwrap(); // Pre-sync
-                if live && snap_to_order == get_current_snapshot().as_str() { // Live sync
-                    tree_sync_helper("", snap_from_order, get_tmp().as_str()).unwrap(); // Post-sync
-                    }
-                post_transactions(snap_to_order).unwrap(); // Moved here from the line immediately after first sync_tree_helper
-            }
-            println!("Tree {} synced.", treename);
-            break;
-        }
-    }
-}
-
-// Sync tree helper function // REVIEW might need to put it in distro-specific ashpk.py
-fn tree_sync_helper(chr: &str, s_f: &str, s_t: &str) -> Result<(), Error>  {
-    Command::new("mkdir").arg("-p").arg("/.snapshots/tmp-db/local/").status().unwrap(); // REVIEW Still resembling Arch pacman folder structure!
-    Command::new("rm").arg("-rf").arg("/.snapshots/tmp-db/local/*").status().unwrap(); // REVIEW
-    let pkg_list_to = pkg_list(chr, s_t);
-    let pkg_list_from = pkg_list("", s_f);
-    // Get packages to be inherited
-    let mut pkg_list_new = Vec::new();
-    for j in pkg_list_from {
-        if !pkg_list_to.contains(&j) {
-            pkg_list_new.push(j);
-        }
-    }
-    let pkg_list_from = pkg_list_new;
-    Command::new("cp").arg("-r")
-                      .arg(format!("/.snapshots/rootfs/snapshot-{}{}/usr/share/ash/db/local/.", chr,s_t))
-                      .arg("/.snapshots/tmp-db/local/").status().unwrap(); // REVIEW
-    Command::new("cp").args(["-n", "-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-{}/.", s_f))
-                      .arg(format!("/.snapshots/rootfs/snapshot-{}{}/", chr,s_t))
-                      .status().unwrap();
-    Command::new("rm").arg("-rf")
-                      .arg(format!("/.snapshots/rootfs/snapshot-{}{}/usr/share/ash/db/local/*", chr,s_t))
-                      .status().unwrap(); // REVIEW
-    Command::new("cp").arg("-r")
-                      .arg("/.snapshots/tmp-db/local/.")
-                      .arg(format!("/.snapshots/rootfs/snapshot-{}{}/usr/share/ash/db/local/", chr,s_t))
-                      .status().unwrap(); // REVIEW
-    for entry in pkg_list_from {
-        Command::new("sh").arg("-c")
-                          .arg(format!("cp -r /.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local/{}-[0-9]*", s_f,entry))
-                          .arg(format!("/.snapshots/rootfs/snapshot-{}{}/usr/share/ash/db/local/'", chr,s_t)).status().unwrap();// REVIEW
-        }
-    Command::new("rm").arg("-rf").arg("/.snapshots/tmp-db/local/*").status().unwrap(); // REVIEW (originally inside the loop, but I took it out
-    Ok(())
-}
-
 // Clear all temporary snapshots
 pub fn temp_snapshots_clear() -> Result<(), Error> {
     // Collect snapshots numbers
@@ -2323,18 +2242,20 @@ pub fn tree_upgrade(treename: &str) -> Result<(), Error> {
     Ok(())
 }
 
-// Recursively run a command in tree //REVIEW
-pub fn tree_run(treename: &str, cmd: &str) {
+// Recursively run a command in tree
+pub fn tree_run(treename: &str, cmd: &str) -> Result<(), Error> {
     // Make sure treename exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
-        eprintln!("Cannot update as tree {} doesn't exist.", treename);
+                return Err(Error::new(ErrorKind::NotFound,
+                              format!("Cannot update as tree {} doesn't exist.", treename)));
+
     } else {
         // Run command
-        prepare(treename).unwrap();
+        prepare(treename)?;
         Command::new("sh").arg("-c")
                           .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", treename,cmd))
-                          .status().unwrap();
-        post_transactions(treename).unwrap();
+                          .status()?;
+        post_transactions(treename)?;
 
         // Import tree file
         let tree = fstree().unwrap();
@@ -2351,23 +2272,19 @@ pub fn tree_run(treename: &str, cmd: &str) {
             let arg = &order[0];
             let sarg = &order[1];
             println!("{}, {}", arg,sarg);
-            order.remove(0);
-            order.remove(0);
-            let snapshot = &order[1];
-            if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
-                eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot);
+            if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", sarg)).try_exists().unwrap() {
+                eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", sarg,sarg);
                 eprintln!("Tree command canceled.");
-                break;
             } else {
-                let sarg = &order[1];
-                prepare(sarg.as_str()).unwrap();
-                Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", sarg,cmd)).status().unwrap();
-                post_transactions(sarg.as_str()).unwrap();
-                println!("Tree {} updated.", treename);
-                break;
+                prepare(sarg.as_str())?;
+                Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", sarg,cmd)).status()?;
+                post_transactions(sarg.as_str())?;
             }
+            order.remove(0);
+            order.remove(0);
         }
     }
+    Ok(())
 }
 
 // Calls print function
@@ -2375,6 +2292,56 @@ pub fn tree_show() {
     // Import tree file
     let tree = fstree().unwrap();
     tree_print(&tree);
+}
+
+// Sync tree and all its snapshots
+pub fn tree_sync(treename: &str, force_offline: bool, live: bool) -> Result<(), Error> {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
+        return Err(Error::new(ErrorKind::NotFound,
+                              format!("Cannot sync as tree {} doesn't exist.", treename)));
+
+    } else {
+        // Syncing tree automatically updates it, unless 'force-sync' is used
+        if !force_offline {
+            tree_upgrade(treename)?;
+        }
+
+        // Import tree file
+        let tree = fstree().unwrap();
+
+        let mut order = recurse_tree(&tree, treename);
+        if order.len() > 2 {
+            order.remove(0);
+            order.remove(0);
+        }
+        loop {
+            if order.len() < 2 {
+                break;
+            }
+            let snap_from = &order[0];
+            let snap_to = &order[1];
+            println!("{}, {}", snap_from, snap_to);
+            if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snap_to)).try_exists().unwrap() {
+                eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snap_to,snap_to);
+                eprintln!("Tree sync canceled.");
+            } else {
+                prepare(snap_to)?;
+                // Pre-sync
+                tree_sync_helper(snap_from, snap_to, "chr")?;
+                // Live sync
+                if live && snap_to == get_current_snapshot().as_str() {
+                    // Post-sync
+                    tree_sync_helper(snap_from, get_tmp().as_str(), "")?;
+                }
+                // Moved here from the line immediately after first sync_tree_helper
+                post_transactions(snap_to).unwrap();
+            }
+            order.remove(0);
+            order.remove(0);
+            //println!("Tree {} synced.", treename);
+        }
+    }
+    Ok(())
 }
 
 // Uninstall package(s)

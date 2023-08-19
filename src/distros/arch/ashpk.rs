@@ -1,7 +1,7 @@
 use crate::{check_mutability, chr_delete, get_current_snapshot, immutability_disable, immutability_enable, prepare, post_transactions,
             remove_dir_content, snapshot_config_get, sync_time};
 
-use std::fs::read_dir;
+use std::fs::{DirBuilder, read_dir};
 use std::io::{Error, ErrorKind};
 use std::path::Path;
 use std::process::{Command, ExitStatus};
@@ -345,6 +345,44 @@ pub fn snapshot_diff(snapshot1: &str, snapshot2: &str) -> Result<(), Error> {
             }
         }
     }
+    Ok(())
+}
+
+// Sync tree helper function
+pub fn tree_sync_helper(s_f: &str, s_t: &str, chr: &str) -> Result<(), Error>  {
+    DirBuilder::new().recursive(true)
+                     .create("/.snapshots/tmp-db/local/")?;
+    //remove_dir_content("/.snapshots/tmp-db/")?;
+    let pkg_list_to = pkg_list(s_t, "chr");
+    let pkg_list_from = pkg_list(s_f, "");
+
+    // Get packages to be inherited
+    let mut pkg_list_new = Vec::new();
+    for j in pkg_list_from {
+        if !pkg_list_to.contains(&j) {
+            pkg_list_new.push(j);
+        }
+    }
+    let pkg_list_from = pkg_list_new;
+    Command::new("cp").arg("-r")
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}{}/usr/share/ash/db/local/.", chr,s_t))
+                      .arg("/.snapshots/tmp-db/local/").output()?;
+    Command::new("cp").args(["-n", "-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/.", s_f))
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}{}/", chr,s_t))
+                      .output()?;
+    remove_dir_content(format!("/.snapshots/rootfs/snapshot-{}{}/usr/share/ash/db/local", chr,s_t).as_str())?;
+    Command::new("cp").arg("-r")
+                      .arg("/.snapshots/tmp-db/local/.")
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}{}/usr/share/ash/db/local/", chr,s_t))
+                      .output()?;
+    for entry in pkg_list_from {
+        Command::new("cp").arg("-r")
+                          .arg(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/db/local/{}-[0-9]*", s_f,entry))
+                          .arg(format!("/.snapshots/rootfs/snapshot-{}{}/usr/share/ash/db/local/'", chr,s_t))
+                          .output()?;
+        }
+    remove_dir_content("/.snapshots/tmp-db/local")?;
     Ok(())
 }
 

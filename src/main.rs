@@ -321,7 +321,7 @@ fn main() {
                     },
                 }
             }
-            Some(("hide", _matches)) => {
+            Some(("hide", _matches)) => { //REVIEW
                 // Run switch_to_windows
                 switch_to_windows();
             }
@@ -510,15 +510,15 @@ fn main() {
                 // Print subvolumes in list
                 list_subvolumes();
             }
-            Some(("tree", _matches)) => {
-                // Print tree
-                tree_show();
-            }
             Some(("tmp", _matches)) => {
                 // Run temp_snapshots_clear
                 temp_snapshots_clear().unwrap();
             }
-            Some(("tremove", tremove_matches)) => {
+            Some(("tree", _matches)) => {
+                // Print tree
+                tree_show();
+            }
+            Some(("tremove", tremove_matches)) => { //REVIEW
                 // Get treename value
                 let treename = if tremove_matches.contains_id("SNAPSHOT") {
                     let snap = tremove_matches.get_one::<i32>("SNAPSHOT").unwrap();
@@ -563,7 +563,30 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
-            Some(("tupgrade", tupgrade_matches)) => {
+            Some(("trun", trun_matches)) => { //REVIEW
+                // Get snapshot value
+                let treename = if trun_matches.contains_id("SNAPSHOT") {
+                    let snap = trun_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let treename = get_current_snapshot();
+                    treename
+                };
+
+                // Get cmds value
+                let cmds: Vec<String> = trun_matches.get_many::<String>("COMMAND").unwrap().map(|s| format!("{}", s)).collect();
+
+                // Run tree_run
+                for cmd in cmds {
+                    let run = tree_run(&treename, &cmd);
+                    match run {
+                        Ok(_) => println!("Tree {} updated.", treename),
+                        Err(e) => eprintln!("{}", e),
+                    }
+                }
+            }
+            Some(("tupgrade", tupgrade_matches)) => { //REVIEW
                 // Get treename value
                 let treename = if tupgrade_matches.contains_id("SNAPSHOT") {
                     let snap = tupgrade_matches.get_one::<i32>("SNAPSHOT").unwrap();
@@ -582,7 +605,7 @@ fn main() {
                 }
             }
             Some(("uninstall", uninstall_matches)) => {
-                                // Get snapshot value
+                // Get snapshot value
                 let snapshot = if uninstall_matches.contains_id("SNAPSHOT") {
                     let snap = uninstall_matches.get_one::<i32>("SNAPSHOT").unwrap();
                     let snap_to_string = format!("{}", snap);
