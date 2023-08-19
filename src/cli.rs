@@ -217,7 +217,7 @@ pub fn cli() -> Command {
                          .required(true)
                          .help("target snapshot"),),)
         // Switch distros
-        .subcommand(Command::new("dist") //REVIEW
+        .subcommand(Command::new("dist")
                     .alias("distro")
                     .about("Switch to another distribution"))
         // Edit Ash configuration
@@ -479,12 +479,15 @@ pub fn cli() -> Command {
                          .required(false)
                          .help("command(s) to run"),),)
         // Tree-upgrade
-        .subcommand(Command::new("tupgrade")//REVIEW
+        .subcommand(Command::new("tupgrade")
                     .aliases(["tree-upgrade", "tup"])
                     .about("Update all packages in a snapshot recursively")
-                    .arg_required_else_help(true)
-                    .arg(Arg::new("snapshot")
+                    .arg(Arg::new("SNAPSHOT")
+                         .long("snapshot")
+                         .alias("snap")
+                         .short('s')
                          .value_parser(clap::value_parser!(i32))
+                         .required(false)
                          .help("snapshot number"),),)
         // Uninstall package(s) from a snapshot
         .subcommand(Command::new("uninstall")

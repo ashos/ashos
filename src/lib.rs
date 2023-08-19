@@ -126,7 +126,7 @@ pub fn ash_umounts(i: &str, chr: &str) -> nix::Result<()> {
 //pub fn ash_update(dbg) {}
 
 //Ash version
-pub fn ash_version() -> std::io::Result<String> {
+pub fn ash_version() -> Result<String, Error> {
     //let ash_bin_path = std::env::current_exe().unwrap(); //https://doc.rust-lang.org/std/env/fn.current_exe.html#security
     let ash_bin_path = if Path::new("/usr/sbin/ash").try_exists().unwrap() {
         Path::new("/usr/sbin/ash")
@@ -149,7 +149,7 @@ pub fn ash_version() -> std::io::Result<String> {
 }
 
 // Add node to branch
-pub fn branch_create(snapshot: &str, desc: &str) -> std::io::Result<i32> {
+pub fn branch_create(snapshot: &str, desc: &str) -> Result<i32, Error> {
     // Find the next available snapshot number
     let i = find_new();
 
@@ -203,7 +203,7 @@ pub fn check_mutability(snapshot: &str) -> bool {
 }
 
 // Check if last update was successful
-pub fn check_update() -> std::io::Result<()> {
+pub fn check_update() -> Result<(), Error> {
     // Open and read upstate file
     let upstate = File::open("/.snapshots/ash/upstate")?;
     let buf_read = BufReader::new(upstate);
@@ -225,7 +225,7 @@ pub fn check_update() -> std::io::Result<()> {
 }
 
 // Clean chroot mount directories for a snapshot
-pub fn chr_delete(snapshot: &str) -> std::io::Result<()> {
+pub fn chr_delete(snapshot: &str) -> Result<(), Error> {
     // Path to boot mount directory
     let boot_path = format!("/.snapshots/boot/boot-chr{}", snapshot);
     // Path to etc mount directory
@@ -243,7 +243,7 @@ pub fn chr_delete(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Run command in snapshot
-pub fn chroot(snapshot: &str, cmds: Vec<String>) -> std::io::Result<()> {
+pub fn chroot(snapshot: &str, cmds: Vec<String>) -> Result<(), Error> {
     // Make sure snapshot does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", snapshot)));
@@ -330,7 +330,7 @@ pub fn chroot_check() -> bool {
 }
 
 // Clone tree
-pub fn clone_as_tree(snapshot: &str, desc: &str) -> std::io::Result<i32> {
+pub fn clone_as_tree(snapshot: &str, desc: &str) -> Result<i32, Error> {
     // Find the next available snapshot number
     let i = find_new();
 
@@ -381,7 +381,7 @@ pub fn clone_as_tree(snapshot: &str, desc: &str) -> std::io::Result<i32> {
 }
 
 // Clone branch under same parent
-pub fn clone_branch(snapshot: &str) -> std::io::Result<i32> {
+pub fn clone_branch(snapshot: &str) -> Result<i32, Error> {
     // Find the next available snapshot number
     let i = find_new();
 
@@ -427,7 +427,7 @@ pub fn clone_branch(snapshot: &str) -> std::io::Result<i32> {
 }
 
 // Recursively clone an entire tree
-pub fn clone_recursive(snapshot: &str) -> std::io::Result<()> {
+pub fn clone_recursive(snapshot: &str) -> Result<(), Error> {
     // Make sure snapshot does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", snapshot)));
@@ -455,7 +455,7 @@ pub fn clone_recursive(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Clone under specified parent
-pub fn clone_under(snapshot: &str, branch: &str) -> std::io::Result<i32> {
+pub fn clone_under(snapshot: &str, branch: &str) -> Result<i32, Error> {
     // Find the next available snapshot number
     let i = find_new();
 
@@ -516,7 +516,7 @@ fn comment_after_hash(line: &mut String) -> &str {
 }
 
 // Delete tree or branch
-pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> std::io::Result<()> {
+pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(), Error> {
     // Get some values
     let current_snapshot = get_current_snapshot();
     let next_snapshot = get_next_snapshot(false);
@@ -591,7 +591,7 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> std::io:
 }
 
 // Delete deploys subvolumes //TODO //REVIEW
-pub fn delete_deploys() -> std::io::Result<()> {
+pub fn delete_deploys() -> Result<(), Error> {
     for snap in ["deploy", "deploy-aux"] {
         if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap)).try_exists().unwrap() {
             delete_subvolume(format!("/.snapshots/boot/boot-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
@@ -624,7 +624,7 @@ pub fn delete_old_grub_files(grub: &str) -> Result<(), Error> {
 }
 
 // Deploy snapshot
-pub fn deploy(snapshot: &str, secondary: bool) -> std::io::Result<()> {
+pub fn deploy(snapshot: &str, secondary: bool) -> Result<(), Error> {
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot deploy as snapshot {} doesn't exist.", snapshot)));
@@ -906,7 +906,7 @@ pub fn get_tmp() -> String {
 }
 
 // Make a snapshot vulnerable to be modified even further (snapshot should be deployed as mutable)
-pub fn hollow(snapshot: &str) -> std::io::Result<()> {
+pub fn hollow(snapshot: &str) -> Result<(), Error> {
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot make hollow as snapshot {} doesn't exist.", snapshot)));
@@ -945,7 +945,7 @@ pub fn hollow(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Make a node mutable
-pub fn immutability_disable(snapshot: &str) -> std::io::Result<()> {
+pub fn immutability_disable(snapshot: &str) -> Result<(), Error> {
     // If not base snapshot
     if snapshot != "0" {
         // Make sure snapshot exists
@@ -980,7 +980,7 @@ pub fn immutability_disable(snapshot: &str) -> std::io::Result<()> {
 }
 
 //Make a node immutable
-pub fn immutability_enable(snapshot: &str) -> std::io::Result<()> {
+pub fn immutability_enable(snapshot: &str) -> Result<(), Error> {
     // If not base snapshot
     if snapshot != "0" {
         // Make sure snapshot exists
@@ -1019,7 +1019,7 @@ pub fn immutability_enable(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Install packages
-pub fn install(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
+pub fn install(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound,
@@ -1051,7 +1051,7 @@ pub fn install(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> std::io::
 }
 
 // Install live
-pub fn install_live(pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
+pub fn install_live(pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     let snapshot = &get_current_snapshot();
     let tmp = get_tmp();
     ash_mounts(&tmp, "").unwrap();
@@ -1063,7 +1063,7 @@ pub fn install_live(pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> 
 
 // Install a profile from a text file
 fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool, /*section_only: Option<String>,*/
-                   user_profile: &str, noconfirm: bool) -> std::io::Result<bool> {
+                   user_profile: &str, noconfirm: bool) -> Result<bool, Error> {
     // Get some values
     let dist = detect::distro_id();
     let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist);
@@ -1136,7 +1136,7 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool, 
 }
 
 // Install profile in live snapshot
-fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile: &str, noconfirm: bool) -> std::io::Result<()> {
+fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile: &str, noconfirm: bool) -> Result<(), Error> {
     // Get some values
     let dist = detect::distro_id();
     let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist);
@@ -1205,7 +1205,7 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
 
 // Triage functions for argparse method
 pub fn install_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &str, force: bool,
-                      user_profile: &str, noconfirm: bool, secondary: bool) -> std::io::Result<()> {
+                      user_profile: &str, noconfirm: bool, secondary: bool) -> Result<(), Error> {
     let p = if user_profile.is_empty() {
         profile
     } else {
@@ -1327,7 +1327,7 @@ pub fn list_subvolumes() {
 }
 
 // Live unlocked shell
-pub fn live_unlock() -> std::io::Result<()> {
+pub fn live_unlock() -> Result<(), Error> {
     let tmp = get_tmp();
     ash_mounts(&tmp, "")?;
     Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp)).status().unwrap();
@@ -1341,7 +1341,7 @@ pub fn noninteractive_update(snapshot: &str) -> Result<(), Error> {
 }
 
 // Post transaction function, copy from chroot dirs back to read only snapshot dir
-pub fn post_transactions(snapshot: &str) -> std::io::Result<()> {
+pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
     // Some operations were moved below to fix hollow functionality
     let tmp = get_tmp();
     //File operations in snapshot-chr
@@ -1438,7 +1438,7 @@ pub fn post_transactions(snapshot: &str) -> std::io::Result<()> {
 }
 
 // TODO IMPORTANT REVIEW 2023 older to revert if hollow introduces issues
-pub fn posttrans(snapshot: &str) -> std::io::Result<()> {
+pub fn posttrans(snapshot: &str) -> Result<(), Error> {
     let etc = snapshot;
     let tmp = get_tmp();
     ash_umounts(snapshot, "chr")?;
@@ -1497,7 +1497,7 @@ pub fn posttrans(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Prepare snapshot to chroot directory to install or chroot into
-pub fn prepare(snapshot: &str) -> std::io::Result<()> {
+pub fn prepare(snapshot: &str) -> Result<(), Error> {
     chr_delete(snapshot)?;
     let snapshot_chr = format!("/.snapshots/rootfs/snapshot-chr{}", snapshot);
 
@@ -1589,7 +1589,7 @@ pub fn prepare(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Refresh snapshot
-pub fn refresh(snapshot: &str) -> std::io::Result<()> {
+pub fn refresh(snapshot: &str) -> Result<(), Error> {
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         eprintln!("Cannot refresh as snapshot {} doesn't exist.", snapshot);
@@ -1619,7 +1619,7 @@ pub fn refresh(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Remove directory contents
-pub fn remove_dir_content(dir_path: &str) -> std::io::Result<()> {
+pub fn remove_dir_content(dir_path: &str) -> Result<(), Error> {
     // Specify the path to the directory to remove contents from
     let path = PathBuf::from(dir_path);
 
@@ -1644,7 +1644,7 @@ pub fn remove_dir_content(dir_path: &str) -> std::io::Result<()> {
 }
 
 // Recursively remove package in tree
-pub fn remove_from_tree(treename: &str, pkgs: &Vec<String>, profiles: &Vec<String>, user_profiles: &Vec<String>) -> std::io::Result<()> {
+pub fn remove_from_tree(treename: &str, pkgs: &Vec<String>, profiles: &Vec<String>, user_profiles: &Vec<String>) -> Result<(), Error> {
     // Make sure treename exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
         eprintln!("Cannot remove as tree {} doesn't exist.", treename);
@@ -1668,10 +1668,9 @@ pub fn remove_from_tree(treename: &str, pkgs: &Vec<String>, profiles: &Vec<Strin
                     let arg = &order[0];
                     let sarg = &order[1];
                     println!("{}, {}", arg,sarg);
+                    uninstall(sarg, &vec![pkg.to_string()], true)?;
                     order.remove(0);
                     order.remove(0);
-                    let snapshot = &order[1];
-                    uninstall(snapshot, &vec![pkg.to_string()], true)?;
                 }
             }
         } else if !profiles.is_empty() {
@@ -1691,16 +1690,15 @@ pub fn remove_from_tree(treename: &str, pkgs: &Vec<String>, profiles: &Vec<Strin
                     let arg = &order[0];
                     let sarg = &order[1];
                     println!("{}, {}", arg,sarg);
-                    order.remove(0);
-                    order.remove(0);
-                    let snapshot = &order[1];
-                    if uninstall_profile(snapshot, &profile, &user_profile, true).is_ok() {
-                        post_transactions(snapshot)?;
+                    if uninstall_profile(sarg, &profile, &user_profile, true).is_ok() {
+                        post_transactions(sarg)?;
                     } else {
-                        chr_delete(snapshot)?;
+                        chr_delete(sarg)?;
                         return Err(Error::new(ErrorKind::Other,
                                               format!("Failed to remove and changes discarded.")));
                     }
+                    order.remove(0);
+                    order.remove(0);
                 }
             }
         } else if !user_profiles.is_empty() {
@@ -1720,16 +1718,15 @@ pub fn remove_from_tree(treename: &str, pkgs: &Vec<String>, profiles: &Vec<Strin
                     let arg = &order[0];
                     let sarg = &order[1];
                     println!("{}, {}", arg,sarg);
-                    order.remove(0);
-                    order.remove(0);
-                    let snapshot = &order[1];
-                    if uninstall_profile(snapshot, &profile, &user_profile, true).is_ok() {
-                        post_transactions(snapshot)?;
+                    if uninstall_profile(sarg, &profile, &user_profile, true).is_ok() {
+                        post_transactions(sarg)?;
                     } else {
-                        chr_delete(snapshot)?;
+                        chr_delete(sarg)?;
                         return Err(Error::new(ErrorKind::Other,
                                               format!("Failed to remove and changes discarded.")));
                     }
+                    order.remove(0);
+                    order.remove(0);
                 }
             }
         }
@@ -1738,7 +1735,7 @@ pub fn remove_from_tree(treename: &str, pkgs: &Vec<String>, profiles: &Vec<Strin
 }
 
 // Rollback last booted deployment
-pub fn rollback() -> std::io::Result<()> {
+pub fn rollback() -> Result<(), Error> {
     let tmp = get_tmp();
     let i = find_new();
     clone_as_tree(tmp.as_str(), "")?;
@@ -1747,39 +1744,53 @@ pub fn rollback() -> std::io::Result<()> {
     Ok(())
 }
 
-// Enable service(s) (Systemd, OpenRC, etc.) //REVIEW error handling
-fn service_enable(snapshot: &str, profile: &str, tmp_prof: &str) -> i32 {
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        eprintln!("Cannot enable services as snapshot {} doesn't exist.", snapshot);
-        return 1;
-    } else { // No need for other checks as this function is not exposed to user
-        loop {
-            let postinst: Vec<String> = String::from_utf8(Command::new("sh").arg("-c")
-                                             .arg(format!("cat {}/packages.txt | grep -E -w '^&' | sed 's|& ||'", tmp_prof))
-                                             .output().unwrap().stdout).unwrap().trim().split('\n')
-                                                                                       .map(|s| s.to_string()).collect(); //REVIEW
-            for cmd in postinst.into_iter().filter(|cmd| !cmd.is_empty()) {// remove '' from [''] if no postinstalls
-                Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", snapshot,cmd)).status().unwrap();
-            }
-            let services: Vec<String> = String::from_utf8(Command::new("sh").arg("-c")
-                                             .arg(format!("cat {}/packages.txt | grep -E -w '^%' | sed 's|% ||'", tmp_prof))
-                                             .output().unwrap().stdout).unwrap().trim().split('\n')
-                                                                                       .map(|s| s.to_string()).collect();//REVIEW
-            for cmd in services.into_iter().filter(|cmd| !cmd.is_empty()) { // remove '' from [''] if no services
-                let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}",snapshot,cmd)).status().unwrap();
-                if excode.success() {
-                    println!("Failed to enable service(s) from {}.", profile);
-                } else {
-                    println!("Installed service(s) from {}.", profile);
-                }
-            }
-            break 0;
-        }
-    }
-}
+// Enable service(s) (Systemd, OpenRC, etc.) //TODO //REVIEW
+//fn service_enable(snapshot: &str, profile: &str, tmp_prof: &str) -> std::io::Result<()> {
+    //if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+        //return Err(Error::new(ErrorKind::NotFound,
+                              //format!("Cannot enable services as snapshot {} doesn't exist.", snapshot)));
+
+    //} else {
+        //loop {
+            //let postinst: Vec<String> = String::from_utf8(Command::new("sh")
+                                                          //.arg("-c")
+                                                          //.arg(format!("cat {}/packages.txt | grep -E -w '^&' | sed 's|& ||'", tmp_prof))
+                                                          //.output()
+                                                          //.unwrap()
+                                                          //.stdout).unwrap()
+                                                                  //.trim()
+                                                                  //.split('\n')
+                                                                  //.map(|s| s.to_string()).collect();
+
+            //for cmd in postinst.into_iter().filter(|cmd| !cmd.is_empty()) {
+                //Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", snapshot,cmd)).status().unwrap();
+            //}
+
+            //let services: Vec<String> = String::from_utf8(Command::new("sh")
+                                                          //.arg("-c")
+                                                          //.arg(format!("cat {}/packages.txt | grep -E -w '^%' | sed 's|% ||'", tmp_prof))
+                                                          //.output()
+                                                          //.unwrap().stdout).unwrap()
+                                                                           //.trim()
+                                                                           //.split('\n')
+                                                                           //.map(|s| s.to_string()).collect();
+
+            //for cmd in services.into_iter().filter(|cmd| !cmd.is_empty()) {
+                //let excode = Command::new("chroot")
+                    //.arg(format!("/.snapshots/rootfs/snapshot-chr{} {}",snapshot,cmd))
+                    //.status().unwrap();
+                //if excode.success() {
+                    //println!("Failed to enable service(s) from {}.", profile);
+                //} else {
+                    //println!("Installed service(s) from {}.", profile);
+                //}
+            //}
+        //}
+    //}
+//}
 
 // Creates new tree from base file
-pub fn snapshot_base_new(desc: &str) -> std::io::Result<i32> {
+pub fn snapshot_base_new(desc: &str) -> Result<i32, Error> {
     // immutability toggle not used as base should always be immutable
     let i = find_new();
     create_snapshot("/.snapshots/boot/boot-0",
@@ -1807,7 +1818,7 @@ pub fn snapshot_base_new(desc: &str) -> std::io::Result<i32> {
 }
 
 // Edit per-snapshot configuration
-pub fn snapshot_config_edit(snapshot: &str, /*skip_prep: bool, skip_post: bool*/) -> std::io::Result<()> {
+pub fn snapshot_config_edit(snapshot: &str, /*skip_prep: bool, skip_post: bool*/) -> Result<(), Error> {
     // Make sure snapshot exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         eprintln!("Cannot chroot as snapshot {} doesn't exist.", snapshot);
@@ -1908,7 +1919,7 @@ pub fn snapshot_config_get(snapshot: &str) -> HashMap<String, String> {
 
 // Remove temporary chroot for specified snapshot only
 // This unlocks the snapshot for use by other functions
-pub fn snapshot_unlock(snapshot: &str) -> std::io::Result<()> {
+pub fn snapshot_unlock(snapshot: &str) -> Result<(), Error> {
     let print_path = format!("/.snapshots/rootfs/snapshot-chr{}", snapshot);
     let path = Path::new(&print_path);
     if path.try_exists().unwrap() {
@@ -1925,58 +1936,58 @@ pub fn snapshot_unlock(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Switch between distros //REVIEW
-fn switch_distro() -> std::io::Result<()> {
-    let map_output = Command::new("sh")
-        .arg("-c")
-        .arg(r#"cat /boot/efi/EFI/map.txt | awk 'BEGIN { FS = "'"'" === "'"'" } ; { print $1 }'"#)
-        .output().unwrap();
-    let map_tmp = String::from_utf8(map_output.stdout).unwrap().trim().to_owned();
+//fn switch_distro() -> std::io::Result<()> {
+    //let map_output = Command::new("sh")
+        //.arg("-c")
+        //.arg(r#"cat /boot/efi/EFI/map.txt | awk 'BEGIN { FS = "'"'" === "'"'" } ; { print $1 }'"#)
+        //.output().unwrap();
+    //let map_tmp = String::from_utf8(map_output.stdout).unwrap().trim().to_owned();
 
-    loop {
-        println!("Type the name of a distro to switch to: (type 'list' to list them, 'q' to quit)");
-        let mut next_distro = String::new();
-        stdin().lock().read_line(&mut next_distro).unwrap();
-        let next_distro = next_distro.trim();
+    //loop {
+        //println!("Type the name of a distro to switch to: (type 'list' to list them, 'q' to quit)");
+        //let mut next_distro = String::new();
+        //stdin().lock().read_line(&mut next_distro).unwrap();
+        //let next_distro = next_distro.trim();
 
-        if next_distro == "q" {
-            break;
-        } else if next_distro == "list" {
-            println!("{}", map_tmp);
-        } else if map_tmp.contains(next_distro) {
-            let file = std::fs::File::open("/boot/efi/EFI/map.txt").unwrap();
-            let mut input_file = csv::ReaderBuilder::new()
-                .delimiter(b',')
-                .quote(b'\0')
-                .from_reader(file);
-            for row in input_file.records() {
-                let record = row.unwrap();
-                if record.get(0) == Some(&next_distro.to_owned()) {
-                    let boot_order_output = Command::new("sh")
-                        .arg("-c")
-                        .arg(r#"efibootmgr | grep BootOrder | awk '{print $2}'"#)
-                        .output().unwrap();
-                    let boot_order = String::from_utf8(boot_order_output.stdout).unwrap().trim().to_owned();
-                    let temp = boot_order.replace(&format!("{},", record[1].to_string().as_str()), "");
-                    let new_boot_order = format!("{},{}", record[1].to_string().as_str(), temp);
-                    Command::new("sh")
-                        .arg("-c")
-                        .arg(&format!("efibootmgr --bootorder {}", new_boot_order))
-                        .output().unwrap();
-                    println!("Done! Please reboot whenever you would like switch to {}", next_distro);
-                    break;
-                }
-            }
-            break;
-        } else {
-            println!("Invalid distro!");
-            continue;
-        }
-    }
-    Ok(())
-}
+        //if next_distro == "q" {
+            //break;
+        //} else if next_distro == "list" {
+            //println!("{}", map_tmp);
+        //} else if map_tmp.contains(next_distro) {
+            //let file = std::fs::File::open("/boot/efi/EFI/map.txt").unwrap();
+            //let mut input_file = csv::ReaderBuilder::new()
+                //.delimiter(b',')
+                //.quote(b'\0')
+                //.from_reader(file);
+            //for row in input_file.records() {
+                //let record = row.unwrap();
+                //if record.get(0) == Some(&next_distro.to_owned()) {
+                    //let boot_order_output = Command::new("sh")
+                        //.arg("-c")
+                        //.arg(r#"efibootmgr | grep BootOrder | awk '{print $2}'"#)
+                        //.output().unwrap();
+                    //let boot_order = String::from_utf8(boot_order_output.stdout).unwrap().trim().to_owned();
+                    //let temp = boot_order.replace(&format!("{},", record[1].to_string().as_str()), "");
+                    //let new_boot_order = format!("{},{}", record[1].to_string().as_str(), temp);
+                    //Command::new("sh")
+                        //.arg("-c")
+                        //.arg(&format!("efibootmgr --bootorder {}", new_boot_order))
+                        //.output().unwrap();
+                    //println!("Done! Please reboot whenever you would like switch to {}", next_distro);
+                    //break;
+                //}
+            //}
+            //break;
+        //} else {
+            //println!("Invalid distro!");
+            //continue;
+        //}
+    //}
+    //Ok(())
+//}
 
 // Switch between /tmp deployments
-pub fn switch_tmp(secondary: bool) -> std::io::Result<()> {
+pub fn switch_tmp(secondary: bool) -> Result<(), Error> {
     let distro_suffix = get_distro_suffix(&detect::distro_id().as_str());
     let grub = get_grub().unwrap();
     let part = get_part();
@@ -2102,7 +2113,7 @@ pub fn switch_to_windows() -> std::process::ExitStatus {
 }
 
 // Sync time
-pub fn sync_time() -> std::io::Result<()> {
+pub fn sync_time() -> Result<(), Error> {
     // curl --tlsv1.3 --proto =https -I https://google.com
     let mut easy = Easy::new();
     easy.url("https://google.com")?;
@@ -2185,7 +2196,7 @@ pub fn tree_sync(treename: &str, force_offline: bool, live: bool) {
 }
 
 // Sync tree helper function // REVIEW might need to put it in distro-specific ashpk.py
-fn tree_sync_helper(chr: &str, s_f: &str, s_t: &str) -> std::io::Result<()>  {
+fn tree_sync_helper(chr: &str, s_f: &str, s_t: &str) -> Result<(), Error>  {
     Command::new("mkdir").arg("-p").arg("/.snapshots/tmp-db/local/").status().unwrap(); // REVIEW Still resembling Arch pacman folder structure!
     Command::new("rm").arg("-rf").arg("/.snapshots/tmp-db/local/*").status().unwrap(); // REVIEW
     let pkg_list_to = pkg_list(chr, s_t);
@@ -2222,7 +2233,7 @@ fn tree_sync_helper(chr: &str, s_f: &str, s_t: &str) -> std::io::Result<()>  {
 }
 
 // Clear all temporary snapshots
-pub fn temp_snapshots_clear() -> std::io::Result<()> {
+pub fn temp_snapshots_clear() -> Result<(), Error> {
     // Collect snapshots numbers
     let boots = read_dir("/.snapshots/boot")
         .unwrap().map(|entry| entry.unwrap().path()).collect::<Vec<_>>();
@@ -2266,7 +2277,7 @@ pub fn temp_snapshots_clear() -> std::io::Result<()> {
 }
 
 // Clean tmp dirs
-pub fn tmp_delete(secondary: bool) -> std::io::Result<()> {
+pub fn tmp_delete(secondary: bool) -> Result<(), Error> {
     // Get tmp
     let tmp = get_tmp();
     let tmp = get_aux_tmp(tmp, secondary);
@@ -2278,13 +2289,16 @@ pub fn tmp_delete(secondary: bool) -> std::io::Result<()> {
     Ok(())
 }
 
-// Recursively run an update in tree //REVIEW
-//fn tree_run
-/*pub fn update_tree(treename: &str) {
+// Recursively run an update in tree
+pub fn tree_upgrade(treename: &str) -> Result<(), Error> {
+    // Make sure treename exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
-        eprintln!("Cannot update as tree {} doesn't exist.", treename);
+        return Err(Error::new(ErrorKind::NotFound,
+                              format!("Cannot update as tree {} doesn't exist.", treename)));
     } else {
-        upgrade(treename).unwrap();
+        // Run update
+        auto_upgrade(treename)?;
+
         // Import tree file
         let tree = fstree().unwrap();
 
@@ -2300,25 +2314,28 @@ pub fn tmp_delete(secondary: bool) -> std::io::Result<()> {
                 let arg = &order[0];
                 let sarg = &order[1];
                 println!("{}, {}", arg, sarg);
+                auto_upgrade(&sarg).unwrap();
                 order.remove(0);
                 order.remove(0);
-                let snapshot = &order[1];
-                auto_upgrade(snapshot).unwrap();
             }
         }
-        println!("Tree {} updated.", treename)
     }
-}*/
-// Recursively run an update in tree //REVIEW
+    Ok(())
+}
+
 // Recursively run a command in tree //REVIEW
 pub fn tree_run(treename: &str, cmd: &str) {
     // Make sure treename exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
         eprintln!("Cannot update as tree {} doesn't exist.", treename);
     } else {
+        // Run command
         prepare(treename).unwrap();
-        Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", treename,cmd)).status().unwrap();
+        Command::new("sh").arg("-c")
+                          .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", treename,cmd))
+                          .status().unwrap();
         post_transactions(treename).unwrap();
+
         // Import tree file
         let tree = fstree().unwrap();
 
@@ -2361,7 +2378,7 @@ pub fn tree_show() {
 }
 
 // Uninstall package(s)
-pub fn uninstall(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
+pub fn uninstall(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound,
@@ -2395,7 +2412,7 @@ pub fn uninstall(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> std::io
 }
 
 // Uninstall live
-pub fn uninstall_live(pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
+pub fn uninstall_live(pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     let tmp = get_tmp();
     ash_mounts(&tmp, "").unwrap();
     uninstall_package_helper_live(&tmp, &pkgs, noconfirm)?;
@@ -2404,7 +2421,7 @@ pub fn uninstall_live(pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()
 }
 
 // Uninstall a profile from a text file
-fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfirm: bool) -> std::io::Result<()> {
+fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfirm: bool) -> Result<(), Error> {
     // Get some values
     let dist = detect::distro_id();
     let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist);
@@ -2463,7 +2480,7 @@ fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfir
 }
 
 // Uninstall profile in live snapshot
-fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noconfirm: bool) -> std::io::Result<()> {
+fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noconfirm: bool) -> Result<(), Error> {
     // Get some values
     let dist = detect::distro_id();
     let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist);
@@ -2510,7 +2527,7 @@ fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noco
 
 // Triage functions for argparse method
 pub fn uninstall_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &str,
-                        user_profile: &str, noconfirm: bool) -> std::io::Result<()> {
+                        user_profile: &str, noconfirm: bool) -> Result<(), Error> {
     let p = if user_profile.is_empty() {
         profile
     } else {
@@ -2580,7 +2597,7 @@ pub fn uninstall_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: 
 }
 
 // Update boot
-pub fn update_boot(snapshot: &str, secondary: bool) -> std::io::Result<()> {
+pub fn update_boot(snapshot: &str, secondary: bool) -> Result<(), Error> {
     // Path to grub directory
     let grub = get_grub().unwrap();
 
@@ -2634,7 +2651,7 @@ pub fn update_boot(snapshot: &str, secondary: bool) -> std::io::Result<()> {
 }
 
 // Saves changes made to /etc to snapshot
-pub fn update_etc() -> std::io::Result<()> {
+pub fn update_etc() -> Result<(), Error> {
     let snapshot = get_current_snapshot();
     let tmp = get_tmp();
 
@@ -2656,7 +2673,7 @@ pub fn update_etc() -> std::io::Result<()> {
 }
 
 // Upgrade snapshot
-pub fn upgrade(snapshot:  &str, baseup: bool) -> std::io::Result<()> {
+pub fn upgrade(snapshot:  &str, baseup: bool) -> Result<(), Error> {
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound,
@@ -2718,7 +2735,7 @@ pub fn which_snapshot_has(pkgs: Vec<String>) {
 }
 
 // Write new description (default) or append to an existing one (i.e. toggle immutability)
-pub fn write_desc(snapshot: &str, desc: &str, overwrite: bool) -> std::io::Result<()> {
+pub fn write_desc(snapshot: &str, desc: &str, overwrite: bool) -> Result<(), Error> {
     let mut descfile = if overwrite {
         OpenOptions::new().truncate(true)
                           .create(true)

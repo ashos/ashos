@@ -223,7 +223,7 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
-            Some(("deploy", deploy_matches)) => {
+            Some(("deploy", deploy_matches)) => { //REVIEW
                 // Get snapshot value
                 let snapshot = if deploy_matches.contains_id("SNAPSHOT") {
                     let snap = deploy_matches.get_one::<i32>("SNAPSHOT").unwrap();
@@ -273,7 +273,8 @@ fn main() {
                 // Run diff
                 diff(&snapshot1, &snapshot2);
             }
-            Some(("dist", _matches)) => {
+            Some(("dist", _matches)) => { //REVIEW
+                eprintln!("TODO");
             }
             Some(("edit", edit_matches)) => {
                 // Get snapshot value
@@ -557,6 +558,24 @@ fn main() {
 
                 // Run remove_from_tree
                 let run = remove_from_tree(&treename, &pkgs, &profiles, &user_profiles);
+                match run {
+                    Ok(_) => println!("Tree {} updated.", treename),
+                    Err(e) => eprintln!("{}", e),
+                }
+            }
+            Some(("tupgrade", tupgrade_matches)) => {
+                // Get treename value
+                let treename = if tupgrade_matches.contains_id("SNAPSHOT") {
+                    let snap = tupgrade_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Run tree_upgrade
+                let run = tree_upgrade(&treename);
                 match run {
                     Ok(_) => println!("Tree {} updated.", treename),
                     Err(e) => eprintln!("{}", e),

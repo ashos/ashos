@@ -22,7 +22,7 @@ pub fn aur_check(snapshot: &str) -> bool {
 }
 
 // Noninteractive update
-pub fn auto_upgrade(snapshot: &str) -> std::io::Result<()> {
+pub fn auto_upgrade(snapshot: &str) -> Result<(), Error> {
     // Required in virtualbox, otherwise error in package db update
     sync_time()?;
     prepare(snapshot)?;
@@ -48,7 +48,7 @@ pub fn auto_upgrade(snapshot: &str) -> std::io::Result<()> {
     } else {
         // Use paru if aur is enabled
         let args = format!("paru -Syyu --noconfirm");
-        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr1"))
+        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                                            .args(["su", "aur", "-c", &args])
                                            .status().unwrap();
         if excode.success() {
@@ -65,7 +65,7 @@ pub fn auto_upgrade(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Copy cache of downloaded packages to shared
-pub fn cache_copy(snapshot: &str) -> std::io::Result<()> {
+pub fn cache_copy(snapshot: &str) -> Result<(), Error> {
     Command::new("cp").args(["-n", "-r", "--reflink=auto"])
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg", snapshot))
                       .arg("/var/cache/pacman/")
@@ -74,7 +74,7 @@ pub fn cache_copy(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Fix signature invalid error
-pub fn fix_package_db(snapshot: &str) -> std::io::Result<()> {
+pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
     // Make sure snapshot does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound,
@@ -143,7 +143,7 @@ pub fn fix_package_db(snapshot: &str) -> std::io::Result<()> {
 }
 
 // Delete init system files (Systemd, OpenRC, etc.)
-pub fn init_system_clean(snapshot: &str, from: &str) -> std::io::Result<()> {
+pub fn init_system_clean(snapshot: &str, from: &str) -> Result<(), Error> {
     if from == "prepare" {
         remove_dir_content(&format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/", snapshot))?;
     } else if from == "deploy" {
@@ -154,7 +154,7 @@ pub fn init_system_clean(snapshot: &str, from: &str) -> std::io::Result<()> {
 }
 
 // Copy init system files (Systemd, OpenRC, etc.) to shared
-pub fn init_system_copy(snapshot: &str, from: &str) -> std::io::Result<()> {
+pub fn init_system_copy(snapshot: &str, from: &str) -> Result<(), Error> {
     if from == "post_transactions" {
         remove_dir_content("/var/lib/systemd/").unwrap();
         Command::new("cp").args(["-r", "--reflink=auto",])
@@ -166,7 +166,7 @@ pub fn init_system_copy(snapshot: &str, from: &str) -> std::io::Result<()> {
 }
 
 // Install atomic-operation
-pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
+pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     prepare(snapshot)?;
     for pkg in pkgs {
         // This extra pacman check is to avoid unwantedly triggering AUR if package is official
@@ -206,7 +206,7 @@ pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool
 }
 
 // Install atomic-operation in live snapshot
-pub fn install_package_helper_live(snapshot: &str, tmp: &str, pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
+pub fn install_package_helper_live(snapshot: &str, tmp: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     for pkg in pkgs {
         // This extra pacman check is to avoid unwantedly triggering AUR if package is official
         let excode = Command::new("pacman").arg("-Si")
@@ -306,7 +306,7 @@ pub fn refresh_helper(snapshot: &str) -> ExitStatus {
 }
 
 // Show diff of packages between 2 snapshots
-pub fn snapshot_diff(snapshot1: &str, snapshot2: &str) -> std::io::Result<()> {
+pub fn snapshot_diff(snapshot1: &str, snapshot2: &str) -> Result<(), Error> {
     // Make sure snapshot one does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot1)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound,
@@ -349,7 +349,7 @@ pub fn snapshot_diff(snapshot1: &str, snapshot2: &str) -> std::io::Result<()> {
 }
 
 // Uninstall package(s) atomic-operation
-pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
+pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     for pkg in pkgs {
         // Check if package installed
         if !is_package_installed(snapshot, &pkg) {
@@ -377,7 +377,7 @@ pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: b
 }
 
 // Uninstall package(s) atomic-operation live snapshot
-pub fn uninstall_package_helper_live(tmp: &str, pkgs: &Vec<String>, noconfirm: bool) -> std::io::Result<()> {
+pub fn uninstall_package_helper_live(tmp: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     for pkg in pkgs {
         // Check if package installed
         if !is_package_live_installed(&pkg) {
