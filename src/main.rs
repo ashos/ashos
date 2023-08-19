@@ -274,7 +274,8 @@ fn main() {
                 diff(&snapshot1, &snapshot2);
             }
             Some(("dist", _matches)) => { //REVIEW
-                eprintln!("TODO");
+                // Run switch_distro
+                switch_distro().unwrap();
             }
             Some(("edit", edit_matches)) => {
                 // Get snapshot value
@@ -510,6 +511,28 @@ fn main() {
                 // Print subvolumes in list
                 list_subvolumes();
             }
+            Some(("sync", sync_matches)) => { //REVIEW
+                // Get treename value
+                let treename = if sync_matches.contains_id("TREENAME") {
+                    let snap = sync_matches.get_one::<i32>("TREENAME").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Optional values
+                let live = sync_matches.get_flag("live");
+                let force_offline = sync_matches.get_flag("force");
+
+                // Run tree_sync
+                let run = tree_sync(&treename, force_offline, live);
+                match run {
+                    Ok(_) => println!("Tree {} synced.", treename),
+                    Err(e) => eprintln!("{}", e),
+                }
+            }
             Some(("tmp", _matches)) => {
                 // Run temp_snapshots_clear
                 temp_snapshots_clear().unwrap();
@@ -520,8 +543,8 @@ fn main() {
             }
             Some(("tremove", tremove_matches)) => { //REVIEW
                 // Get treename value
-                let treename = if tremove_matches.contains_id("SNAPSHOT") {
-                    let snap = tremove_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                let treename = if tremove_matches.contains_id("TREENAME") {
+                    let snap = tremove_matches.get_one::<i32>("TREENAME").unwrap();
                     let snap_to_string = format!("{}", snap);
                     snap_to_string
                 } else {
@@ -565,8 +588,8 @@ fn main() {
             }
             Some(("trun", trun_matches)) => { //REVIEW
                 // Get snapshot value
-                let treename = if trun_matches.contains_id("SNAPSHOT") {
-                    let snap = trun_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                let treename = if trun_matches.contains_id("TREENAME") {
+                    let snap = trun_matches.get_one::<i32>("TREENAME").unwrap();
                     let snap_to_string = format!("{}", snap);
                     snap_to_string
                 } else {
@@ -588,8 +611,8 @@ fn main() {
             }
             Some(("tupgrade", tupgrade_matches)) => { //REVIEW
                 // Get treename value
-                let treename = if tupgrade_matches.contains_id("SNAPSHOT") {
-                    let snap = tupgrade_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                let treename = if tupgrade_matches.contains_id("TREENAME") {
+                    let snap = tupgrade_matches.get_one::<i32>("TREENAME").unwrap();
                     let snap_to_string = format!("{}", snap);
                     snap_to_string
                 } else {

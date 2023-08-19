@@ -1935,56 +1935,94 @@ pub fn snapshot_unlock(snapshot: &str) -> Result<(), Error> {
     Ok(())
 }
 
-// Switch between distros //REVIEW
-//fn switch_distro() -> std::io::Result<()> {
-    //let map_output = Command::new("sh")
-        //.arg("-c")
-        //.arg(r#"cat /boot/efi/EFI/map.txt | awk 'BEGIN { FS = "'"'" === "'"'" } ; { print $1 }'"#)
-        //.output().unwrap();
-    //let map_tmp = String::from_utf8(map_output.stdout).unwrap().trim().to_owned();
+// Switch between distros
+pub fn switch_distro() -> Result<(), Error>{
+    loop {
+        let map_tmp_output = Command::new("cat")
+            .arg("/boot/efi/EFI/map.txt")
+            .arg("|")
+            .arg("awk 'BEGIN { FS = \"'==='\" } ; { print $1 }'")
+            .output();
 
-    //loop {
-        //println!("Type the name of a distro to switch to: (type 'list' to list them, 'q' to quit)");
-        //let mut next_distro = String::new();
-        //stdin().lock().read_line(&mut next_distro).unwrap();
-        //let next_distro = next_distro.trim();
+        let map_tmp = match map_tmp_output {
+            Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_string(),
+            Err(error) => {
+                println!("Failed to read map.txt: {}", error);
+                continue;
+            }
+        };
 
-        //if next_distro == "q" {
-            //break;
-        //} else if next_distro == "list" {
-            //println!("{}", map_tmp);
-        //} else if map_tmp.contains(next_distro) {
-            //let file = std::fs::File::open("/boot/efi/EFI/map.txt").unwrap();
-            //let mut input_file = csv::ReaderBuilder::new()
-                //.delimiter(b',')
-                //.quote(b'\0')
-                //.from_reader(file);
-            //for row in input_file.records() {
-                //let record = row.unwrap();
-                //if record.get(0) == Some(&next_distro.to_owned()) {
-                    //let boot_order_output = Command::new("sh")
-                        //.arg("-c")
-                        //.arg(r#"efibootmgr | grep BootOrder | awk '{print $2}'"#)
-                        //.output().unwrap();
-                    //let boot_order = String::from_utf8(boot_order_output.stdout).unwrap().trim().to_owned();
-                    //let temp = boot_order.replace(&format!("{},", record[1].to_string().as_str()), "");
-                    //let new_boot_order = format!("{},{}", record[1].to_string().as_str(), temp);
-                    //Command::new("sh")
-                        //.arg("-c")
-                        //.arg(&format!("efibootmgr --bootorder {}", new_boot_order))
-                        //.output().unwrap();
-                    //println!("Done! Please reboot whenever you would like switch to {}", next_distro);
-                    //break;
-                //}
-            //}
-            //break;
-        //} else {
-            //println!("Invalid distro!");
-            //continue;
-        //}
-    //}
-    //Ok(())
-//}
+        println!("Type the name of a distribution to switch to: (type 'list' to list them, 'q' to quit)");
+        let mut next_distro = String::new();
+        stdin().read_line(&mut next_distro)?;
+
+        next_distro = next_distro.trim().to_string();
+
+        if next_distro == "q" {
+            break;
+        } else if next_distro == "list" {
+            println!("{}", map_tmp);
+        } else if map_tmp.contains(&next_distro) {
+            if let Ok(file) = std::fs::File::open("/boot/efi/EFI/map.txt") {
+                let mut reader = csv::ReaderBuilder::new()
+                    .delimiter(b',')
+                    .quoting(false)
+                    .from_reader(file);
+
+                let mut found = false;
+
+                for row in reader.records() {
+                    let record = row.unwrap();
+                    let distro = record.get(0).unwrap();
+
+                    if distro == next_distro {
+                        let boot_order_output = Command::new("efibootmgr")
+                            .arg("|")
+                            .arg("grep BootOrder")
+                            .arg("|")
+                            .arg("awk '{print $2}'")
+                            .output();
+
+                        let boot_order = match boot_order_output {
+                            Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                            Err(error) => {
+                                eprintln!("Failed to get boot order: {}", error);
+                                continue;
+                            }
+                        };
+
+                        let temp = boot_order.replace(&format!("{},", record.get(1).unwrap()), "");
+                        let new_boot_order = format!("{},{}", record.get(1).unwrap(), temp);
+
+                        let efibootmgr_output = Command::new("efibootmgr")
+                            .arg("--bootorder")
+                            .arg(&new_boot_order)
+                            .output();
+
+                        if let Err(error) = efibootmgr_output {
+                            eprintln!("Failed to switch distros: {}", error);
+                        } else {
+                            println!("Done! Please reboot whenever you would like to switch to {}", next_distro);
+                        }
+
+                        found = true;
+                        break;
+                    }
+                }
+
+                if found {
+                    break;
+                }
+            } else {
+                eprintln!("Failed to open map.txt");
+                continue;
+            }
+        } else {
+            eprintln!("Invalid distribution!");
+        }
+    }
+    Ok(())
+}
 
 // Switch between /tmp deployments
 pub fn switch_tmp(secondary: bool) -> Result<(), Error> {
@@ -2338,7 +2376,6 @@ pub fn tree_sync(treename: &str, force_offline: bool, live: bool) -> Result<(), 
             }
             order.remove(0);
             order.remove(0);
-            //println!("Tree {} synced.", treename);
         }
     }
     Ok(())
