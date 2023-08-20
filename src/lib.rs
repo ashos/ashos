@@ -122,9 +122,6 @@ pub fn ash_umounts(i: &str, chr: &str) -> nix::Result<()> {
     Ok(())
 }
 
-// Update ash itself //TODO //REVIEW
-//pub fn ash_update(dbg) {}
-
 //Ash version
 pub fn ash_version() -> Result<String, Error> {
     //let ash_bin_path = std::env::current_exe().unwrap(); //https://doc.rust-lang.org/std/env/fn.current_exe.html#security
