@@ -6,17 +6,6 @@ pub fn cli() -> Command {
                 .about("Any Snapshot Hierarchical OS")
                 .subcommand_required(true)
                 .arg_required_else_help(true)
-        // Ash update
-        .subcommand(Command::new("ash-update") //REVIEW
-                    .alias("upme")
-                    .about("Update ash itself")
-                    .arg(Arg::new("debug")
-                         .long("debug")
-                         .aliases(["dbg", "test"])
-                         .short('d')
-                         .action(ArgAction::SetTrue)
-                         .required(false)
-                         .help("enable live install for snapshot"),),)
         // Auto upgrade
         .subcommand(Command::new("auto-upgrade")
                     .aliases(["au", "autoup"])

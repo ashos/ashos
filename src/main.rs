@@ -7,18 +7,20 @@ use nix::unistd::Uid;
 // Directexplicitories
 // All snapshots share one /var
 // Global boot is always at @boot
+// *-chr                             : temporary directories used to chroot into snapshot or copy snapshots around
 // *-deploy and *-deploy-aux         : temporary directories used to boot deployed snapshot
 // *-deploy[-aux]-secondary          : temporary directories used to boot secondary deployed snapshot
-// *-chr                             : temporary directories used to chroot into snapshot or copy snapshots around
-// /.snapshots/ash/ash               : symlinked to /usr/sbin/ash
-// /.snapshots/etc/etc-*             : individual /etc for each snapshot
-// /.snapshots/boot/boot-*           : individual /boot for each snapshot
-// /.snapshots/rootfs/snapshot-*     : snapshots
+// /.snapshots/ash/part              : root partition uuid
 // /.snapshots/ash/snapshots/*-desc  : descriptions
+// /.snapshots/boot/boot-*           : individual /boot for each snapshot
+// /.snapshots/etc/etc-*             : individual /etc for each snapshot
+// /.snapshots/rootfs/snapshot-*     : snapshots
+// /.snapshots/tmp                   : temporary directory
+// /usr/sbin/ash                     : ash binary file location
 // /usr/share/ash                    : files that store current snapshot info
 // /usr/share/ash/db                 : package database
 // /use/share/ash/profiles           : default desktop environments profiles path
-// /var/lib/ash(/fstree)             : ash files, stores fstree, symlink to /.snapshots/ash
+// /var/lib/ash(/fstree)             : ash files, stores fstree, symlink to /.snapshots/ash/fstree
 
 fn main() {
     if !Uid::effective().is_root() {

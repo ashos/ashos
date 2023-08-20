@@ -247,6 +247,7 @@ pub fn install_package_helper_live(snapshot: &str, tmp: &str, pkgs: &Vec<String>
 
 // Check if package installed
 fn is_package_installed(snapshot: &str, pkg: &str) -> bool {
+    // REVIEW use pacman -Q
     let package_db_path = format!("/.snapshots/rootfs/snapshot-chr{}/usr/share/ash/db/local", snapshot);
 
     if let Ok(entries) = read_dir(package_db_path) {
