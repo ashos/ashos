@@ -21,6 +21,7 @@ arch = []
 clap = "4.1.8"
 configparser = "3.0.2"
 cpython = "0.7"
+csv = "1.2.2"
 curl = "0.4.44"
 libbtrfsutil = "0.5.2"
 mktemp = "0.5.0"
