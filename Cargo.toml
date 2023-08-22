@@ -16,8 +16,10 @@ path = "src/lib.rs"
 [features]
 default = ["arch"]
 arch = []
+debian = []
 
 [dependencies]
+cfg-if = "1.0.0"
 clap = "4.1.8"
 configparser = "3.0.2"
 cpython = "0.7"

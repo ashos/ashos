@@ -295,6 +295,12 @@ pub fn pkg_list(snapshot: &str, chr: &str) -> Vec<String> {
     stdout.split('\n').map(|s| s.to_string()).collect()
 }
 
+// Get package version
+pub fn pkg_version(pkg: &str) -> Result<ExitStatus, Error> {
+    let excode = Command::new("pacman").arg("-Q").arg(pkg).status();
+    excode
+}
+
 // Refresh snapshot atomic-operation
 pub fn refresh_helper(snapshot: &str) -> ExitStatus {
     let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
@@ -372,7 +378,7 @@ pub fn tree_sync_helper(s_f: &str, s_t: &str, chr: &str) -> Result<(), Error>  {
                       .arg(format!("/.snapshots/rootfs/snapshot-{}/.", s_f))
                       .arg(format!("/.snapshots/rootfs/snapshot-{}{}/", chr,s_t))
                       .output()?;
-    remove_dir_content(format!("/.snapshots/rootfs/snapshot-{}{}/usr/share/ash/db/local", chr,s_t).as_str())?;
+    remove_dir_content(&format!("/.snapshots/rootfs/snapshot-{}{}/usr/share/ash/db/local", chr,s_t))?;
     Command::new("cp").arg("-r")
                       .arg("/.snapshots/tmp-db/local/.")
                       .arg(format!("/.snapshots/rootfs/snapshot-{}{}/usr/share/ash/db/local/", chr,s_t))
