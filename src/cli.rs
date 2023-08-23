@@ -392,7 +392,7 @@ pub fn cli() -> Command {
         .subcommand(Command::new("sub")
                     .aliases(["subs", "subvol", "subvols", "subvolumes"])
                     .about("List subvolumes of active snapshot (currently booted)"))
-        // Tree-Sync
+        // Tree sync
         .subcommand(Command::new("sync")
                     .aliases(["tree-sync", "tsync"])
                     .about("Sync packages and configuration changes recursively (requires an internet connection)")
@@ -423,7 +423,7 @@ pub fn cli() -> Command {
         .subcommand(Command::new("tree")
                     .alias("t")
                     .about("Show ash tree"))
-        // Tree-remove
+        // Tree remove
         .subcommand(Command::new("tremove")
                     .alias("tree-rmpkg")
                     .about("Uninstall package(s) or profile(s) from a tree recursively")
@@ -459,7 +459,7 @@ pub fn cli() -> Command {
                          .value_parser(clap::value_parser!(String))
                          .required_unless_present_any(["PACKAGE", "PROFILE"])
                          .help("profile(s) to be uninstalled"),),)
-        // Tree-run
+        // Tree run
         .subcommand(Command::new("trun")
                     .alias("tree-run")
                     .about("Execute command(s) inside another snapshot and all snapshots below it")
@@ -477,7 +477,7 @@ pub fn cli() -> Command {
                          .num_args(1..)
                          .required(true)
                          .help("command(s) to run"),),)
-        // Tree-upgrade
+        // Tree upgrade
         .subcommand(Command::new("tupgrade")
                     .aliases(["tree-upgrade", "tup"])
                     .about("Update all packages in a snapshot recursively")
@@ -561,10 +561,6 @@ pub fn cli() -> Command {
         .subcommand(Command::new("version")
                     .alias("v")
                     .about("Print ash version"))
-        // Which deployment is active
-        .subcommand(Command::new("whichtmp")
-                    .aliases(["which", "whichdep"])
-                    .about("Show which deployment snapshot is in use"))
         // Which snapshot(s) contain a package
         .subcommand(Command::new("whichsnap")
                     .alias("ws")
@@ -577,6 +573,10 @@ pub fn cli() -> Command {
                          .num_args(1..)
                          .value_parser(clap::value_parser!(String))
                          .required(true)
-                         .help("a package"),),);
+                         .help("a package"),),)
+        // Which deployment is active
+        .subcommand(Command::new("whichtmp")
+                    .aliases(["which", "whichdep"])
+                    .about("Show which deployment snapshot is in use"));
         return matches;
 }

@@ -1,7 +1,7 @@
-use crate::{check_mutability, chr_delete, get_current_snapshot, immutability_disable, immutability_enable, prepare, post_transactions,
-            remove_dir_content, snapshot_config_get, sync_time};
+use crate::{check_mutability, chr_delete, get_current_snapshot, immutability_disable, immutability_enable, post_transactions,
+            prepare, remove_dir_content, snapshot_config_get, sync_time};
 
-use std::fs::{DirBuilder, read_dir};
+use std::fs::DirBuilder;
 use std::io::{Error, ErrorKind};
 use std::path::Path;
 use std::process::{Command, ExitStatus};
@@ -145,10 +145,14 @@ pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
 // Delete init system files (Systemd, OpenRC, etc.)
 pub fn init_system_clean(snapshot: &str, from: &str) -> Result<(), Error> {
     if from == "prepare" {
-        remove_dir_content(&format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/", snapshot))?;
+        if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/", snapshot)).try_exists().unwrap() {
+            remove_dir_content(&format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/", snapshot))?;
+        } //TODO add OpenRC in else
     } else if from == "deploy" {
-        remove_dir_content("/var/lib/systemd/")?;
-        remove_dir_content(&format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", snapshot))?;
+        if Path::new("/var/lib/systemd/").try_exists().unwrap() {
+            remove_dir_content("/var/lib/systemd/")?;
+            remove_dir_content(&format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", snapshot))?;
+        } //TODO add OpenRC in else
     }
     Ok(())
 }
@@ -156,11 +160,13 @@ pub fn init_system_clean(snapshot: &str, from: &str) -> Result<(), Error> {
 // Copy init system files (Systemd, OpenRC, etc.) to shared
 pub fn init_system_copy(snapshot: &str, from: &str) -> Result<(), Error> {
     if from == "post_transactions" {
-        remove_dir_content("/var/lib/systemd/").unwrap();
-        Command::new("cp").args(["-r", "--reflink=auto",])
-                          .arg(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", snapshot))
-                          .arg("/var/lib/systemd/")
-                          .output().unwrap();
+        if Path::new("/var/lib/systemd/").try_exists().unwrap() {
+            remove_dir_content("/var/lib/systemd/").unwrap();
+            Command::new("cp").args(["-r", "--reflink=auto",])
+                              .arg(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", snapshot))
+                              .arg("/var/lib/systemd/")
+                              .output().unwrap();
+        } // TODO add OpenRC in else
     }
     Ok(())
 }
@@ -197,7 +203,7 @@ pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool
         }
 
         // Check if succeeded
-        if !is_package_installed(snapshot, &pkg) {
+        if !is_package_installed(pkg) {
             return Err(Error::new(ErrorKind::NotFound,
                                   format!("Failed to install {}", pkg)));
         }
@@ -237,7 +243,7 @@ pub fn install_package_helper_live(snapshot: &str, tmp: &str, pkgs: &Vec<String>
         }
 
         // Check if succeeded
-        if !is_package_live_installed(&pkg) {
+        if !is_package_installed(pkg) {
             return Err(Error::new(ErrorKind::NotFound,
                                   format!("Failed to install {}", pkg)));
         }
@@ -246,44 +252,13 @@ pub fn install_package_helper_live(snapshot: &str, tmp: &str, pkgs: &Vec<String>
 }
 
 // Check if package installed
-fn is_package_installed(snapshot: &str, pkg: &str) -> bool {
-    // REVIEW use pacman -Q
-    let package_db_path = format!("/.snapshots/rootfs/snapshot-chr{}/usr/share/ash/db/local", snapshot);
-
-    if let Ok(entries) = read_dir(package_db_path) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let file_name = entry.file_name();
-                if let Some(file_name_str) = file_name.to_str() {
-                    if file_name_str.starts_with(pkg) {
-                        return true;
-                    }
-                }
-            }
-        }
+fn is_package_installed(pkg: &str) -> bool {
+    let is_installed = Command::new("pacman").arg("-Q").arg(pkg).output();
+    if is_installed.unwrap().status.success() {
+        return true;
+    } else {
+        return false;
     }
-
-    false
-}
-
-// Check if package installed
-fn is_package_live_installed(pkg: &str) -> bool {
-    let package_db_path = format!("/usr/share/ash/db/local");
-
-    if let Ok(entries) = read_dir(package_db_path) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let file_name = entry.file_name();
-                if let Some(file_name_str) = file_name.to_str() {
-                    if file_name_str.starts_with(pkg) {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-
-    false
 }
 
 // Get list of packages installed in a snapshot
@@ -295,8 +270,8 @@ pub fn pkg_list(snapshot: &str, chr: &str) -> Vec<String> {
     stdout.split('\n').map(|s| s.to_string()).collect()
 }
 
-// Get package version
-pub fn pkg_version(pkg: &str) -> Result<ExitStatus, Error> {
+// Pacman query
+pub fn pkg_query(pkg: &str) -> Result<ExitStatus, Error> {
     let excode = Command::new("pacman").arg("-Q").arg(pkg).status();
     excode
 }
@@ -309,7 +284,7 @@ pub fn refresh_helper(snapshot: &str) -> ExitStatus {
     Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                           .args(["pacman", "-S", "--noconfirm", "archlinux-keyring"])
                           .status().unwrap();
-    return excode;
+    excode
 }
 
 // Show diff of packages between 2 snapshots
@@ -397,7 +372,7 @@ pub fn tree_sync_helper(s_f: &str, s_t: &str, chr: &str) -> Result<(), Error>  {
 pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     for pkg in pkgs {
         // Check if package installed
-        if !is_package_installed(snapshot, &pkg) {
+        if !is_package_installed(pkg) {
             return Err(Error::new(ErrorKind::NotFound,
                                   format!("Package {} is not installed", pkg)));
         } else {
@@ -412,7 +387,7 @@ pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: b
                                   .arg(format!("{}", pkg)).status()?;
 
             // Check if package uninstalled successfully
-            if is_package_installed(snapshot, &pkg) {
+            if is_package_installed(pkg) {
                 return Err(Error::new(ErrorKind::AlreadyExists,
                                       format!("Failed to uninstall {}", pkg)));
             }
@@ -425,7 +400,7 @@ pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: b
 pub fn uninstall_package_helper_live(tmp: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     for pkg in pkgs {
         // Check if package installed
-        if !is_package_live_installed(&pkg) {
+        if !is_package_installed(pkg) {
             return Err(Error::new(ErrorKind::NotFound,
                                   format!("Package {} is not installed", pkg)));
         } else {
@@ -440,7 +415,7 @@ pub fn uninstall_package_helper_live(tmp: &str, pkgs: &Vec<String>, noconfirm: b
                                   .arg(format!("{}", pkg)).status()?;
 
             // Check if package uninstalled successfully
-            if is_package_live_installed(&pkg) {
+            if is_package_installed(pkg) {
                 return Err(Error::new(ErrorKind::AlreadyExists,
                                       format!("Failed to uninstall {}", pkg)));
             }

@@ -32,6 +32,7 @@ fn main() {
         let matches = cli().get_matches();
         // Call relevant functions
         match matches.subcommand() {
+            // Auto upgrade
             Some(("auto-upgrade", auto_upgrade_matches)) => {
                 // Get snapshot value
                 let snapshot = if auto_upgrade_matches.contains_id("SNAPSHOT") {
@@ -43,9 +44,10 @@ fn main() {
                     snap
                 };
 
-                // Run auto_upgrade
+                // Run noninteractive_update
                 noninteractive_update(&snapshot).unwrap();
             }
+            // Base update
             Some(("base-update", _matches)) => {
                 // Run upgrade(0)
                 let run = upgrade("0", true);
@@ -54,6 +56,7 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Boot update command
             Some(("boot", boot_matches)) => {
                 // Get snapshot value
                 let snapshot = if boot_matches.contains_id("SNAPSHOT") {
@@ -72,6 +75,7 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Branch
             Some(("branch", branch_matches)) => {
                 // Get snapshot value
                 let snapshot = if branch_matches.contains_id("SNAPSHOT") {
@@ -99,6 +103,7 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Check update
             Some(("check", _matches)) => {
                 // Run check_update
                 check_update().unwrap();
@@ -146,14 +151,14 @@ fn main() {
                     desc
                 };
 
-                // Run clone
+                // Run clone_as_tree
                 let run = clone_as_tree(&snapshot, &desc);
                 match run {
                     Ok(snapshot_num) => println!("Tree {} cloned from {}.", snapshot_num,snapshot),
                     Err(e) => eprintln!("{}", e),
                 }
             }
-            // Clone branch
+            // Clone a branch
             Some(("clone-branch", clone_branch_matches)) => {
                 // Get snapshot value
                 let snapshot = if clone_branch_matches.contains_id("SNAPSHOT") {
@@ -172,7 +177,7 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
-            // Clone tree
+            // Clone recursively
             Some(("clone-tree", clone_tree_matches)) => {
                 // Get snapshot value
                 let snapshot = if clone_tree_matches.contains_id("SNAPSHOT") {
@@ -191,6 +196,7 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Clone under a branch
             Some(("clone-under", clone_under_matches)) => {
                 // Get snapshot value
                 let snap = clone_under_matches.get_one::<i32>("SNAPSHOT").unwrap();
@@ -207,9 +213,12 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Current snapshot
             Some(("current", _matches)) => {
+                // Run get_current_snapshot
                 println!("{}", get_current_snapshot());
             }
+            // Delete
             Some(("del", del_matches)) => {
                 // Get snapshot value
                 let snapshots: Vec<_> = del_matches.get_many::<i32>("SNAPSHOT").unwrap().map(|s| format!("{}", s)).collect();
@@ -225,6 +234,7 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Deploy
             Some(("deploy", deploy_matches)) => { //REVIEW
                 // Get snapshot value
                 let snapshot = if deploy_matches.contains_id("SNAPSHOT") {
@@ -246,6 +256,7 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Description
             Some(("desc", desc_matches)) => {
                 // Get snapshot value
                 let snapshot = if desc_matches.contains_id("SNAPSHOT") {
@@ -263,6 +274,7 @@ fn main() {
                 // Run write_desc
                 write_desc(&snapshot, &desc, true).unwrap();
             }
+            // Diff two snapshots
             Some(("diff", diff_matches)) => {
                 // Get snapshot one value
                 let snap1 = diff_matches.get_one::<i32>("SNAPSHOT-1").unwrap();
@@ -275,10 +287,12 @@ fn main() {
                 // Run diff
                 diff(&snapshot1, &snapshot2);
             }
+            // Switch distros
             Some(("dist", _matches)) => { //REVIEW
                 // Run switch_distro
                 switch_distro().unwrap();
             }
+            // Edit Ash configuration
             Some(("edit", edit_matches)) => {
                 // Get snapshot value
                 let snapshot = if edit_matches.contains_id("SNAPSHOT") {
@@ -293,10 +307,12 @@ fn main() {
                 // Run snapshot_config_edit
                 snapshot_config_edit(&snapshot).unwrap();
             }
+            // etc update
             Some(("etc-update", _matches)) => {
                 // Run etc-update
                 update_etc().unwrap();
             }
+            // Fix db commands
             Some(("fixdb", fixdb_matches)) => {
                 // Get snapshot value
                 let snapshot = if fixdb_matches.contains_id("SNAPSHOT") {
@@ -324,10 +340,12 @@ fn main() {
                     },
                 }
             }
+            // Switch to Windows (semi plausible deniability)
             Some(("hide", _matches)) => { //REVIEW
                 // Run switch_to_windows
                 switch_to_windows();
             }
+            // Hollow a node
             Some(("hollow", hollow_matches)) => {
                 // Get snapshot value
                 let snapshot = if hollow_matches.contains_id("SNAPSHOT") {
@@ -346,6 +364,7 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Immutability disable
             Some(("immdis", immdis_matches)) => {
                 // Get snapshot value
                 let snapshot = if immdis_matches.contains_id("SNAPSHOT") {
@@ -364,6 +383,7 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Immutability enable
             Some(("immen", immen_matches)) => {
                 // Get snapshot value
                 let snapshot = if immen_matches.contains_id("SNAPSHOT") {
@@ -382,6 +402,7 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Install command
             Some(("install", install_matches)) => {
                 // Get snapshot value
                 let snapshot = if install_matches.contains_id("SNAPSHOT") {
@@ -411,7 +432,7 @@ fn main() {
                     profile
                 };
 
-                // Get user-profile value
+                // Get user_profile value
                 let user_profile = if install_matches.contains_id("USER_PROFILE") {
                     let user_profile = install_matches.get_many::<String>("USER_PROFILE").unwrap().map(|s| format!("{}", s)).collect();
                     user_profile
@@ -429,6 +450,7 @@ fn main() {
                 // Run install_triage
                 install_triage(&snapshot, live, pkgs, &profile, force, &user_profile, noconfirm, secondary).unwrap();
             }
+            // Package list
             Some(("list", list_matches)) => {
                 // Get snapshot value
                 let snapshot = if list_matches.contains_id("SNAPSHOT") {
@@ -449,10 +471,12 @@ fn main() {
                     println!("{}", pkg);
                 }
             }
+            // Live chroot
             Some(("live-chroot", _matches)) => {
                 // Run live_unlock
                 live_unlock().unwrap();
             }
+            // New
             Some(("new", new_matches)) => {
                 // Get desc value
                 let desc = if new_matches.contains_id("DESCRIPTION") {
@@ -470,6 +494,7 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Refresh
             Some(("refresh", refresh_matches)) => {
                 // Get snapshot value
                 let snapshot = if refresh_matches.contains_id("SNAPSHOT") {
@@ -484,10 +509,12 @@ fn main() {
                 // Run refresh
                 refresh(&snapshot).unwrap();
             }
+            // Rollback
             Some(("rollback", _matches)) => {
                 // Run rollback
                 rollback().unwrap();
             }
+            // Chroot run
             Some(("run", run_matches)) => {
                 // Get snapshot value
                 let snapshot = if run_matches.contains_id("SNAPSHOT") {
@@ -509,10 +536,12 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Subvolumes list
             Some(("sub", _matches)) => {
-                // Print subvolumes in list
+                // Run list_subvolumes
                 list_subvolumes();
             }
+            // Tree sync
             Some(("sync", sync_matches)) => { //REVIEW
                 // Get treename value
                 let treename = if sync_matches.contains_id("TREENAME") {
@@ -535,14 +564,17 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // tmp (clear tmp)
             Some(("tmp", _matches)) => {
                 // Run temp_snapshots_clear
                 temp_snapshots_clear().unwrap();
             }
+            // Tree
             Some(("tree", _matches)) => {
-                // Print tree
+                //Run tree_show
                 tree_show();
             }
+            // Tree remove
             Some(("tremove", tremove_matches)) => { //REVIEW
                 // Get treename value
                 let treename = if tremove_matches.contains_id("TREENAME") {
@@ -572,7 +604,7 @@ fn main() {
                     profiles
                 };
 
-                // Get user-profiles value
+                // Get user_profiles value
                 let user_profiles = if tremove_matches.contains_id("USER_PROFILE") {
                     let user_profiles: Vec<String> = tremove_matches.get_many::<String>("USER_PROFILE").unwrap().map(|s| format!("{}", s)).collect();
                     user_profiles
@@ -588,6 +620,7 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Tree run
             Some(("trun", trun_matches)) => { //REVIEW
                 // Get snapshot value
                 let treename = if trun_matches.contains_id("TREENAME") {
@@ -611,6 +644,7 @@ fn main() {
                     }
                 }
             }
+            // Tree upgrade
             Some(("tupgrade", tupgrade_matches)) => { //REVIEW
                 // Get treename value
                 let treename = if tupgrade_matches.contains_id("TREENAME") {
@@ -629,6 +663,7 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Uninstall package(s) from a snapshot
             Some(("uninstall", uninstall_matches)) => {
                 // Get snapshot value
                 let snapshot = if uninstall_matches.contains_id("SNAPSHOT") {
@@ -658,7 +693,7 @@ fn main() {
                     profile
                 };
 
-                // Get user-profile value
+                // Get user_profile value
                 let user_profile = if uninstall_matches.contains_id("USER_PROFILE") {
                     let user_profile = uninstall_matches.get_many::<String>("USER_PROFILE").unwrap().map(|s| format!("{}", s)).collect();
                     user_profile
@@ -674,6 +709,7 @@ fn main() {
                 // Run uninstall_triage
                 uninstall_triage(&snapshot, live, pkgs, &profile, &user_profile, noconfirm).unwrap();
             }
+            // Unlock a snapshot
             Some(("unlock", unlock_matches)) => {
                 // Get snapshot value
                 let snapshot = if unlock_matches.contains_id("SNAPSHOT") {
@@ -688,6 +724,7 @@ fn main() {
                 // Run snapshot_unlock
                 snapshot_unlock(&snapshot).unwrap();
             }
+            // Upgrade a snapshot
             Some(("upgrade", upgrade_matches)) => {
                 // Get snapshot value
                 let snapshot = if upgrade_matches.contains_id("SNAPSHOT") {
@@ -706,14 +743,12 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Ash version
             Some(("version", _matches)) => {
-                // Print version
+                // Run ash_version
                 ash_version().unwrap();
             }
-            Some(("whichtmp", _matches)) => {
-                // Print tmp
-                println!("{}", get_tmp());
-            }
+            // Which snapshot(s) contain a package
             Some(("whichsnap", whichsnap_matches)) => {
                 // Get pkgs value
                 let pkgs: Vec<String> = whichsnap_matches.get_many::<String>("PACKAGE").unwrap().map(|s| format!("{}", s)).collect();
@@ -721,7 +756,12 @@ fn main() {
                 // Run which_snapshot_has
                 which_snapshot_has(pkgs);
             }
-            _=> unreachable!(), // If all subcommands called, anything else is unreachable
+            // Which deployment is active
+            Some(("whichtmp", _matches)) => {
+                // Run get_tmp
+                println!("{}", get_tmp());
+            }
+           _=> unreachable!(), // If all subcommands called, anything else is unreachable
         }
     }
 }

@@ -37,7 +37,7 @@ pub fn distro_id() -> String {
             }
         }
     }
-    return distro_id;
+    distro_id
 }
 
 pub fn distro_name() -> String {
@@ -63,5 +63,5 @@ pub fn distro_name() -> String {
             }
         }
     }
-    return distro_name;
+    distro_name
 }

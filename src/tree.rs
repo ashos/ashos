@@ -1,5 +1,6 @@
-use cpython::{NoArgs, ObjectProtocol, PyDict, PyErr, PyObject, Python};
 use crate::get_current_snapshot;
+
+use cpython::{NoArgs, ObjectProtocol, PyDict, PyErr, PyObject, Python};
 use std::fs::{File, OpenOptions, read_to_string};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -143,7 +144,7 @@ pub fn recurse_tree(tree: &PyObject, cid: &str) -> Vec<String> {
             order.push(child);
         }
     }
-    return order;
+    order
 }
 
 // Remove node from tree

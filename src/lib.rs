@@ -5,7 +5,7 @@ mod tree;
 use crate::detect_distro as detect;
 
 use configparser::ini::Ini;
-use curl::easy::{Easy, List, SslVersion, HttpVersion};
+use curl::easy::{Easy, HttpVersion, List, SslVersion};
 use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, create_subvolume, CreateSubvolumeFlags, delete_subvolume, DeleteSubvolumeFlags};
 use mktemp::Temp;
 use nix::mount::{mount, MntFlags, MsFlags, umount2};
@@ -127,7 +127,7 @@ pub fn ash_umounts(i: &str, chr: &str) -> nix::Result<()> {
 //Ash version
 pub fn ash_version() -> Result<String, Error> {
     let pkg = "ash";
-    let version = pkg_version(pkg)?.to_string();
+    let version = pkg_query(pkg)?.to_string();
     Ok(version)
 }
 
@@ -504,6 +504,25 @@ fn comment_after_hash(line: &mut String) -> &str {
     }
 }
 
+// Delete deploys subvolumes //TODO
+pub fn delete_deploys() -> Result<(), Error> {
+    for snap in ["deploy", "deploy-aux"] {
+        if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap)).try_exists().unwrap() {
+            delete_subvolume(format!("/.snapshots/boot/boot-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(format!("/.snapshots/etc/etc-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+        }
+
+        // Make sure temporary chroot directories are deleted as well
+        if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snap)).try_exists().unwrap() {
+            delete_subvolume(format!("/.snapshots/boot/boot-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(format!("/.snapshots/etc/etc-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(format!("/.snapshots/rootfs/snapshot-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+        }
+    }
+    Ok(())
+}
+
 // Delete tree or branch
 pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(), Error> {
     // Get some values
@@ -574,25 +593,6 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
             // Remove node from tree or root
             remove_node(&tree, snapshot).unwrap();
             write_tree(&tree)?;
-        }
-    }
-    Ok(())
-}
-
-// Delete deploys subvolumes //TODO
-pub fn delete_deploys() -> Result<(), Error> {
-    for snap in ["deploy", "deploy-aux"] {
-        if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap)).try_exists().unwrap() {
-            delete_subvolume(format!("/.snapshots/boot/boot-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(format!("/.snapshots/etc/etc-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
-        }
-
-        // Make sure temporary chroot directories are deleted as well
-        if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snap)).try_exists().unwrap() {
-            delete_subvolume(format!("/.snapshots/boot/boot-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(format!("/.snapshots/etc/etc-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(format!("/.snapshots/rootfs/snapshot-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
         }
     }
     Ok(())
@@ -804,7 +804,7 @@ pub fn get_aux_tmp(tmp: String, secondary: bool) -> String {
             tmp.replace("deploy", "deploy-aux")
         }
     };
-    return tmp;
+    tmp
 }
 
 // Get current snapshot
@@ -854,9 +854,9 @@ pub fn get_next_snapshot(secondary: bool) -> String {
         let csnapshot = file.read_to_string(&mut contents).unwrap();
         return csnapshot.to_string().trim().to_string();
     } else {
-        // Return empty string in case no snapshot is deployed
+        // Return empty string in case no snapshot is deploye
         return "".to_string()
-        }
+    }
 }
 
 // Get drive partition
@@ -890,7 +890,7 @@ pub fn get_tmp() -> String {
         return r;
     } else {
         let r = String::from("deploy");
-            return r;
+        return r;
     }
 }
 
@@ -913,8 +913,8 @@ pub fn hollow(snapshot: &str) -> Result<(), Error> {
         return Err(Error::new(ErrorKind::Unsupported, format!("Changing base snapshot is not allowed.")));
 
     } else {
-        // AUR step might be needed and if so make a distro_specific function with steps similar to install_package().
-        // Call it hollow_helper and change this accordingly().
+        // AUR step might be needed and if so make a distro_specific function with steps similar to install_package
+        // Call it hollow_helper and change this accordingly
         prepare(snapshot)?;
         // Mount root
         mount(Some("/"), format!("/.snapshots/rootfs/snapshot-chr{}", snapshot).as_str(),
@@ -1193,12 +1193,15 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
 // Triage functions for argparse method
 pub fn install_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &str, force: bool,
                       user_profile: &str, noconfirm: bool, secondary: bool) -> Result<(), Error> {
+    // Switch between profile and user_profile
     let p = if user_profile.is_empty() {
         profile
     } else {
         user_profile
     };
+
     if !live {
+        // Install profile
         if !profile.is_empty() {
             let excode = install_profile(snapshot, profile, force, secondary, user_profile, true);
             match excode {
@@ -1219,13 +1222,17 @@ pub fn install_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &s
                     eprintln!("Install failed and changes discarded!");
                 },
             }
+
         } else if !pkgs.is_empty() {
+            // Install package
             let excode = install(snapshot, &pkgs, noconfirm);
             match excode {
                 Ok(_) => println!("Package(s) {pkgs:?} installed in snapshot {} successfully.", snapshot),
                 Err(e) => eprintln!("{}", e),
             }
+
         } else if !user_profile.is_empty() {
+            // Install user_profile
             let excode = install_profile(snapshot, profile, force, secondary, user_profile, true);
             match excode {
                 Ok(secondary) => {
@@ -1246,23 +1253,30 @@ pub fn install_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &s
                 },
             }
         }
+
     } else if live && snapshot != get_current_snapshot() {
+        // Prevent live option if snapshot is not current snapshot
         eprintln!("Can't use the live option with any other snapshot than the current one.");
     } else if live && snapshot == get_current_snapshot() {
         // Do live install only if: live flag is used OR target snapshot is current
         if !profile.is_empty() {
+            // Live profile installation
             let excode = install_profile_live(snapshot, profile, force, user_profile, true);
             match excode {
                 Ok(_) => println!("Profile {} installed in current/live snapshot.", p),
                 Err(e) => eprintln!("{}", e),
             }
+
         } else if !pkgs.is_empty() {
+            // Live package installation
             let excode = install_live(&pkgs, noconfirm);
             match excode {
                 Ok(_) => println!("Package(s) {pkgs:?} installed in snapshot {} successfully.", snapshot),
                 Err(e) => eprintln!("{}", e),
             }
+
         } else if !user_profile.is_empty() {
+            // Live user_profile installation
             let excode = install_profile_live(snapshot, profile, force, user_profile, true);
             match excode {
                 Ok(_) => println!("Profile {} installed in current/live snapshot.", p),
@@ -1343,7 +1357,8 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
                       .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
                       .output()?;
 
-    // Keep package manager's cache after installing packages. This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
+    // Keep package manager's cache after installing packages
+    // This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
     cache_copy(snapshot)?;
 
     // Delete old snapshot
@@ -1383,7 +1398,7 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
                         CreateSnapshotFlags::READ_ONLY, None).unwrap();
     }
 
-    // fix for hollow functionality
+    // Fix for hollow functionality
     ash_umounts(snapshot, "chr")?;
 
     // Special mutable directories
@@ -1419,12 +1434,12 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
         }
     }
 
-    // fix for hollow functionality
+    // Fix for hollow functionality
     chr_delete(snapshot)?;
     Ok(())
 }
 
-// TODO IMPORTANT review 2023 older to revert if hollow introduces issues
+// TODO IMPORTANT review 2023 older to revert if hollow introduces issues //NOTE systemd dependent!
 pub fn posttrans(snapshot: &str) -> Result<(), Error> {
     let etc = snapshot;
     let tmp = get_tmp();
@@ -1488,7 +1503,7 @@ pub fn prepare(snapshot: &str) -> Result<(), Error> {
     chr_delete(snapshot)?;
     let snapshot_chr = format!("/.snapshots/rootfs/snapshot-chr{}", snapshot);
 
-    // create chroot directory
+    // Create chroot directory
     create_snapshot(format!("/.snapshots/rootfs/snapshot-{}", snapshot),
                     &snapshot_chr,
                     CreateSnapshotFlags::empty(), None).unwrap();
@@ -1610,20 +1625,20 @@ pub fn remove_dir_content(dir_path: &str) -> Result<(), Error> {
     // Specify the path to the directory to remove contents from
     let path = PathBuf::from(dir_path);
 
-    // Iterate over the directory entries using the `read_dir` function
+    // Iterate over the directory entries using the read_dir function
     for entry in std::fs::read_dir(path)? {
         let entry = entry?;
         let path = entry.path();
 
         // Check if the entry is a file or a directory
         if path.is_file() {
-            // If it's a file, remove it using the `remove_file` function
+            // If it's a file, remove it using the remove_file function
             std::fs::remove_file(path)?;
         } else if path.is_symlink() {
-            // If it's a symlink, remove it using the `remove_file` function
+            // If it's a symlink, remove it using the remove_file function
             std::fs::remove_file(path)?;
         } else if path.is_dir() {
-            // If it's a directory, recursively remove its contents using the `remove_dir_all` function
+            // If it's a directory, recursively remove its contents using the remove_dir_all function
             std::fs::remove_dir_all(path)?;
         }
     }
@@ -1778,7 +1793,7 @@ pub fn rollback() -> Result<(), Error> {
 
 // Creates new tree from base file
 pub fn snapshot_base_new(desc: &str) -> Result<i32, Error> {
-    // immutability toggle not used as base should always be immutable
+    // Immutability toggle not used as base should always be immutable
     let i = find_new();
     create_snapshot("/.snapshots/boot/boot-0",
                     format!("/.snapshots/boot/boot-{}", i),
@@ -1881,7 +1896,7 @@ pub fn snapshot_config_get(snapshot: &str) -> HashMap<String, String> {
     let mut options = HashMap::new();
 
     if !Path::new(&format!("/.snapshots/etc/etc-{}/ash.conf", snapshot)).try_exists().unwrap() {
-        // defaults here
+        // Defaults here
         options.insert(String::from("aur"), String::from("False"));
         options.insert(String::from("mutable_dirs"), String::new());
         options.insert(String::from("mutable_dirs_shared"), String::new());
@@ -2233,40 +2248,6 @@ pub fn tmp_delete(secondary: bool) -> Result<(), Error> {
     Ok(())
 }
 
-// Recursively run an update in tree
-pub fn tree_upgrade(treename: &str) -> Result<(), Error> {
-    // Make sure treename exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
-        return Err(Error::new(ErrorKind::NotFound,
-                              format!("Cannot update as tree {} doesn't exist.", treename)));
-    } else {
-        // Run update
-        auto_upgrade(treename)?;
-
-        // Import tree file
-        let tree = fstree().unwrap();
-
-        let mut order = recurse_tree(&tree, treename);
-        if order.len() > 2 {
-            order.remove(0);
-            order.remove(0);
-        }
-        loop {
-            if order.len() < 2 {
-                break;
-            } else {
-                let arg = &order[0];
-                let sarg = &order[1];
-                println!("{}, {}", arg, sarg);
-                auto_upgrade(&sarg).unwrap();
-                order.remove(0);
-                order.remove(0);
-            }
-        }
-    }
-    Ok(())
-}
-
 // Recursively run a command in tree
 pub fn tree_run(treename: &str, cmd: &str) -> Result<(), Error> {
     // Make sure treename exist
@@ -2361,6 +2342,40 @@ pub fn tree_sync(treename: &str, force_offline: bool, live: bool) -> Result<(), 
             }
             order.remove(0);
             order.remove(0);
+        }
+    }
+    Ok(())
+}
+
+// Recursively run an update in tree
+pub fn tree_upgrade(treename: &str) -> Result<(), Error> {
+    // Make sure treename exist
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
+        return Err(Error::new(ErrorKind::NotFound,
+                              format!("Cannot update as tree {} doesn't exist.", treename)));
+    } else {
+        // Run update
+        auto_upgrade(treename)?;
+
+        // Import tree file
+        let tree = fstree().unwrap();
+
+        let mut order = recurse_tree(&tree, treename);
+        if order.len() > 2 {
+            order.remove(0);
+            order.remove(0);
+        }
+        loop {
+            if order.len() < 2 {
+                break;
+            } else {
+                let arg = &order[0];
+                let sarg = &order[1];
+                println!("{}, {}", arg, sarg);
+                auto_upgrade(&sarg).unwrap();
+                order.remove(0);
+                order.remove(0);
+            }
         }
     }
     Ok(())
@@ -2515,12 +2530,15 @@ fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noco
 // Triage functions for argparse method
 pub fn uninstall_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &str,
                         user_profile: &str, noconfirm: bool) -> Result<(), Error> {
+    // Switch between profile and user_profile
     let p = if user_profile.is_empty() {
         profile
     } else {
         user_profile
     };
+
     if !live {
+        // Uninstall profile
         if !profile.is_empty() {
             let excode = uninstall_profile(snapshot, profile, user_profile, true);
             match excode {
@@ -2537,9 +2555,13 @@ pub fn uninstall_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: 
                     eprintln!("Uninstall failed and changes discarded!");
                 },
             }
+
         } else if !pkgs.is_empty() {
+            // Uninstall package
             uninstall(snapshot, &pkgs, noconfirm)?;
+
         } else if !user_profile.is_empty() {
+            // Uninstall user_profile
             let excode = uninstall_profile(snapshot, profile, user_profile, true);
             match excode {
                 Ok(_) => {
@@ -2556,23 +2578,31 @@ pub fn uninstall_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: 
                 },
             }
         }
+
     } else if live && snapshot != get_current_snapshot() {
+        // Prevent live Uninstall except for current snapshot
         eprintln!("Can't use the live option with any other snapshot than the current one.");
+
     } else if live && snapshot == get_current_snapshot() {
-        // Do live install only if: live flag is used OR target snapshot is current
+        // Do live uninstall only if: live flag is used OR target snapshot is current
         if !profile.is_empty() {
+            // Live profile uninstall
             let excode = uninstall_profile_live(snapshot, profile, user_profile, true);
             match excode {
                 Ok(_) => println!("Profile {} removed from current/live snapshot.", p),
                 Err(e) => eprintln!("{}", e),
             }
+
         } else if !pkgs.is_empty() {
+            // Live package uninstall
             let excode = uninstall_live(&pkgs, noconfirm);
             match excode {
                 Ok(_) => println!("Package(s) {pkgs:?} removed from snapshot {} successfully.", snapshot),
                 Err(e) => eprintln!("{}", e),
             }
+
         } else if !user_profile.is_empty() {
+            // Live user_profile uninstall
             let excode = uninstall_profile_live(snapshot, profile, user_profile, true);
             match excode {
                 Ok(_) => println!("Profile {} removed from current/live snapshot.", p),
