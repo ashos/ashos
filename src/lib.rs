@@ -6,8 +6,8 @@ use crate::detect_distro as detect;
 
 use configparser::ini::Ini;
 use curl::easy::{Easy, HttpVersion, List, SslVersion};
-use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, create_subvolume, CreateSubvolumeFlags, delete_subvolume, DeleteSubvolumeFlags};
-use mktemp::Temp;
+use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, create_subvolume, CreateSubvolumeFlags,
+                   delete_subvolume, DeleteSubvolumeFlags, set_subvolume_read_only};
 use nix::mount::{mount, MntFlags, MsFlags, umount2};
 use partition_identity::{PartitionID, PartitionSource};
 use proc_mounts::MountIter;
@@ -16,6 +16,7 @@ use std::fs::{copy, DirBuilder, File, OpenOptions, read_dir, read_to_string};
 use std::io::{BufRead, BufReader, Error, ErrorKind, Read, stdin, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
+use tempfile::TempDir;
 use tree::*;
 use walkdir::{DirEntry, WalkDir};
 
@@ -949,13 +950,7 @@ pub fn immutability_disable(snapshot: &str) -> Result<(), Error> {
 
             } else {
                 // Disable immutability
-                Command::new("btrfs").arg("property")
-                                     .arg("set")
-                                     .arg("-ts")
-                                     .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                                     .arg("ro")
-                                     .arg("false")
-                                     .output()?;
+                set_subvolume_read_only(format!("/.snapshots/rootfs/snapshot-{}", snapshot), false).unwrap();
                 File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snapshot))?;
                 write_desc(snapshot, " MUTABLE ", false)?;
             }
@@ -984,13 +979,7 @@ pub fn immutability_enable(snapshot: &str) -> Result<(), Error> {
             } else {
                 // Enable immutability
                 std::fs::remove_file(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snapshot))?;
-                Command::new("btrfs").arg("property")
-                                     .arg("set")
-                                     .arg("-ts")
-                                     .arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
-                                     .arg("ro")
-                                     .arg("true")
-                                     .output()?;
+                set_subvolume_read_only(format!("/.snapshots/rootfs/snapshot-{}", snapshot), true).unwrap();
                 // Read the desc file into a string
                 let mut contents = std::fs::read_to_string(format!("/.snapshots/ash/snapshots/{}-desc", snapshot))?;
                 // Replace MUTABLE word with an empty string
@@ -1736,6 +1725,36 @@ pub fn remove_from_tree(treename: &str, pkgs: &Vec<String>, profiles: &Vec<Strin
     Ok(())
 }
 
+// System reset
+// System reset
+pub fn reset() -> Result<(), Error> {
+    let msg = "All snapshots will be permanently deleted and cannot be retrieved, are you absolutely certain you want to continue?";
+    if yes_no(msg) {
+        // Collect snapshots
+        let mut snapshots = read_dir("/.snapshots/rootfs")
+            .unwrap().map(|entry| entry.unwrap().path()).collect::<Vec<_>>();
+
+        // Ignore deploy and deploy-aux
+        snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/snapshot-deploy").to_path_buf());
+        snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/snapshot-deploy-aux").to_path_buf());
+
+        // Ignore base snapshot
+        snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/snapshot-0").to_path_buf());
+
+        // Deploy the base snapshot and remove all the other snapshots
+        if deploy("0", false).is_ok() {
+            let mut snapshot = snapshots.len();
+            while snapshot > 0 {
+                if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+                    delete_node(&vec![snapshot.to_string()], true, true)?;
+                }
+                snapshot -= 1;
+            }
+        }
+    }
+    Ok(())
+}
+
 // Rollback last booted deployment
 pub fn rollback() -> Result<(), Error> {
     let tmp = get_tmp();
@@ -2031,22 +2050,22 @@ pub fn switch_tmp(secondary: bool) -> Result<(), Error> {
     let distro_suffix = &get_distro_suffix(&detect::distro_id());
     let grub = get_grub().unwrap();
     let part = get_part();
-    let tmp_boot = Temp::new_dir_in("/.snapshots/tmp")?;
+    let tmp_boot = TempDir::new_in("/.snapshots/tmp")?;
 
     // Mount boot partition for writing
-    mount(Some(part.as_str()), tmp_boot.as_os_str(),
+    mount(Some(part.as_str()), tmp_boot.path().as_os_str(),
           Some("btrfs"), MsFlags::empty(), Some(format!("subvol=@boot{}", distro_suffix).as_bytes()))?;
 
     // Swap deployment subvolumes: deploy <-> deploy-aux
     let source_dep = get_tmp();
     let target_dep = get_aux_tmp(source_dep.to_string(), secondary);
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-{}/boot/.", target_dep))
-                      .arg(format!("{}", tmp_boot.to_str().unwrap()))
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/boot", target_dep))
+                      .arg(format!("{}", tmp_boot.path().to_str().unwrap()))
                       .output().unwrap();
 
     // Overwrite grub config boot subvolume
-    let tmp_grub_cfg = format!("{}/{}/grub.cfg", tmp_boot.to_str().unwrap(),grub);
+    let tmp_grub_cfg = format!("{}{}/grub.cfg", tmp_boot.path().to_str().unwrap(),grub);
     // Read the contents of the file into a string
     let mut contents = String::new();
     let mut file = File::open(&tmp_grub_cfg)?;
@@ -2093,7 +2112,7 @@ pub fn switch_tmp(secondary: bool) -> Result<(), Error> {
     let snap = sfile.replace(" ", "").replace('\n', "");
 
     // Update GRUB configurations
-    for boot_location in ["/.snapshots/rootfs/snapshot-deploy-aux/", &tmp_boot.to_str().unwrap()] {
+    for boot_location in ["/.snapshots/rootfs/snapshot-deploy-aux/", &tmp_boot.path().to_str().unwrap()] {
         let file_path = format!("{}/{}/grub.cfg", boot_location, grub);
         let file = File::open(&file_path)?;
         let reader = BufReader::new(file);
@@ -2140,7 +2159,7 @@ pub fn switch_tmp(secondary: bool) -> Result<(), Error> {
     }
 
     // Umount boot partition
-    umount2(Path::new(&format!("{}", tmp_boot.as_os_str().to_str().unwrap())),
+    umount2(Path::new(&format!("{}", tmp_boot.path().as_os_str().to_str().unwrap())),
             MntFlags::MNT_DETACH)?;
 
     Ok(())

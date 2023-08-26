@@ -26,9 +26,10 @@ cpython = "0.7"
 csv = "1.2.2"
 curl = "0.4.44"
 libbtrfsutil = "0.5.2"
-mktemp = "0.5.0"
 nix = "0.26.2"
 partition-identity = "0.3.0"
 proc-mounts = "0.3.0"
-time = {version = "0.3.22", features = ["formatting", "local-offset", "macros"]}
+rustix = "0.38.8"
+tempfile = "3.8.0"
+time = {version = "0.3.22", features = ["formatting"]}
 walkdir = "2.3.3"

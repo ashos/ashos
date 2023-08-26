@@ -366,6 +366,9 @@ pub fn cli() -> Command {
                          .value_parser(clap::value_parser!(i32))
                          .required(false)
                          .help("snapshot number"),),)
+        // Reset
+        .subcommand(Command::new("reset")
+                    .about("Deploy the base snapshot and remove all the other snapshots"))
         // Rollback
         .subcommand(Command::new("rollback")
                     .about("Revert the deployment to the last booted snapshot"))

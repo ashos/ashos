@@ -341,7 +341,7 @@ fn main() {
                 }
             }
             // Switch to Windows (semi plausible deniability)
-            Some(("hide", _matches)) => { //REVIEW
+            Some(("hide", _matches)) => {
                 // Run switch_to_windows
                 switch_to_windows();
             }
@@ -508,6 +508,11 @@ fn main() {
 
                 // Run refresh
                 refresh(&snapshot).unwrap();
+            }
+            // Reset
+            Some(("reset", _matches)) => {
+                // Run reset
+                reset().unwrap();
             }
             // Rollback
             Some(("rollback", _matches)) => {
