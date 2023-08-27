@@ -510,9 +510,13 @@ fn main() {
                 refresh(&snapshot).unwrap();
             }
             // Reset
-            Some(("reset", _matches)) => {
+            Some(("reset", _matches)) => { //REVIEW
                 // Run reset
-                reset().unwrap();
+                let run = reset();
+                match run {
+                    Ok(_) => println!("A system restart is required."),
+                    Err(e) => println!("{}", e),
+                }
             }
             // Rollback
             Some(("rollback", _matches)) => {
