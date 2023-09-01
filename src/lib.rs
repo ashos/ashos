@@ -620,7 +620,7 @@ pub fn deploy(snapshot: &str, secondary: bool) -> Result<(), Error> {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot deploy as snapshot {} doesn't exist.", snapshot)));
 
     } else {
-        println!("The snapshot {} is being deployed, it may take some time, please be patient.", snapshot);
+        //println!("The snapshot {} is being deployed, it may take some time, please be patient.", snapshot);
         update_boot(snapshot, secondary)?;
         let tmp = get_tmp();
         // Set default volume
@@ -711,7 +711,7 @@ pub fn deploy(snapshot: &str, secondary: bool) -> Result<(), Error> {
         }
 
         // Same thing but for shared directories
-        if mutable_dirs_shared.is_empty() {
+        if !mutable_dirs_shared.is_empty() {
             for mount_path in mutable_dirs_shared {
                 let source_path = format!("/.snapshots/mutable_dirs/{}", mount_path);
                 DirBuilder::new().recursive(true)
@@ -1726,7 +1726,6 @@ pub fn remove_from_tree(treename: &str, pkgs: &Vec<String>, profiles: &Vec<Strin
 }
 
 // System reset
-// System reset
 pub fn reset() -> Result<(), Error> {
     let msg = "All snapshots will be permanently deleted and cannot be retrieved, are you absolutely certain you want to continue?";
     if yes_no(msg) {
@@ -1745,6 +1744,7 @@ pub fn reset() -> Result<(), Error> {
         if deploy("0", false).is_ok() {
             let mut snapshot = snapshots.len();
             while snapshot > 0 {
+                // Delete snapshot if exist
                 if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
                     delete_node(&vec![snapshot.to_string()], true, true)?;
                 }
@@ -2062,7 +2062,7 @@ pub fn switch_tmp(secondary: bool) -> Result<(), Error> {
     Command::new("cp").args(["-r", "--reflink=auto"])
                       .arg(format!("/.snapshots/rootfs/snapshot-{}/boot", target_dep))
                       .arg(format!("{}", tmp_boot.path().to_str().unwrap()))
-                      .output().unwrap();
+                      .output()?;
 
     // Overwrite grub config boot subvolume
     let tmp_grub_cfg = format!("{}{}/grub.cfg", tmp_boot.path().to_str().unwrap(),grub);
@@ -2076,7 +2076,7 @@ pub fn switch_tmp(secondary: bool) -> Result<(), Error> {
     let mut file = File::create(tmp_grub_cfg)?;
     file.write_all(modified_tmp_contents.as_bytes())?;
 
-    let grub_cfg = format!("/.snapshots/rootfs/snapshot-{}/{}/grub.cfg", target_dep,grub);
+    let grub_cfg = format!("/.snapshots/rootfs/snapshot-{}{}/grub.cfg", target_dep,grub);
     // Read the contents of the file into a string
     let mut contents = String::new();
     let mut file = File::open(&grub_cfg)?;
@@ -2095,14 +2095,12 @@ pub fn switch_tmp(secondary: bool) -> Result<(), Error> {
     file.read_to_string(&mut contents)?;
     let modified_boot_contents = contents.replace(&format!("@.snapshots{}/boot/boot-{}", distro_suffix,source_dep),
                                                   &format!("@.snapshots{}/boot/boot-{}", distro_suffix,target_dep));
-    let modified_etc_contents = contents.replace(&format!("@.snapshots{}/etc/etc-{}", distro_suffix,source_dep),
-                                                 &format!("@.snapshots{}/etc/etc-{}", distro_suffix,target_dep));
-    let modified_rootfs_contents = contents.replace(&format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,source_dep),
-                                                    &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep));
+    let modified_etc_contents = modified_boot_contents.replace(&format!("@.snapshots{}/etc/etc-{}", distro_suffix,source_dep),
+                                                               &format!("@.snapshots{}/etc/etc-{}", distro_suffix,target_dep));
+    let modified_rootfs_contents = modified_etc_contents.replace(&format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,source_dep),
+                                                                 &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep));
     // Write the modified contents back to the file
     let mut file = File::create(fstab_file)?;
-    file.write_all(modified_boot_contents.as_bytes())?;
-    file.write_all(modified_etc_contents.as_bytes())?;
     file.write_all(modified_rootfs_contents.as_bytes())?;
 
     let file = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", source_dep)).unwrap();
@@ -2112,8 +2110,8 @@ pub fn switch_tmp(secondary: bool) -> Result<(), Error> {
     let snap = sfile.replace(" ", "").replace('\n', "");
 
     // Update GRUB configurations
-    for boot_location in ["/.snapshots/rootfs/snapshot-deploy-aux/", &tmp_boot.path().to_str().unwrap()] {
-        let file_path = format!("{}/{}/grub.cfg", boot_location, grub);
+    for boot_location in ["/.snapshots/rootfs/snapshot-deploy-aux", &tmp_boot.path().to_str().unwrap()] {
+        let file_path = format!("{}{}/grub.cfg", boot_location, grub);
         let file = File::open(&file_path)?;
         let reader = BufReader::new(file);
         let mut gconf = String::new();
@@ -2651,7 +2649,7 @@ pub fn update_boot(snapshot: &str, secondary: bool) -> Result<(), Error> {
                 format!("{}-secondary", tmp)
             }
         } else {
-                tmp
+            tmp
         };
 
         // Partition path
