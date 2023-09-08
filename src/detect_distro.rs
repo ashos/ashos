@@ -69,11 +69,7 @@ pub fn distro_name() -> String {
     if let Ok(file) = read_to_string("/etc/lsb-release") {
         for line in file.lines() {
             if line.starts_with("DISTRIB_DESCRIPTION=") {
-                let distro_name_from_path = line.split('=').nth(1).unwrap()
-                                                                  .to_lowercase().split(' ').nth(0).unwrap()
-                                                                                                   .trim_matches('"')
-                                                                                                   .to_string();
-                distro_name = capitalize(&distro_name_from_path);
+                distro_name = line.split('=').nth(1).unwrap().trim_matches('"').to_string();
                 break;
             }
         }
@@ -84,11 +80,7 @@ pub fn distro_name() -> String {
         if let Ok(file) = read_to_string("/etc/os-release") {
             for line in file.lines() {
                 if line.starts_with("NAME=") {
-                    let distro_name_from_path = line.split('=').nth(1).unwrap()
-                                                                      .to_lowercase().split(' ').nth(0).unwrap()
-                                                                                                       .trim_matches('"')
-                                                                                                       .to_string();
-                    distro_name = capitalize(&distro_name_from_path);
+                    distro_name = line.split('=').nth(1).unwrap().trim_matches('"').to_string();
                     break;
                 }
             }
