@@ -833,7 +833,7 @@ fn get_grub() -> Option<String> {
             if entry.file_type().is_dir() {
                 if let Some(dir_path) = entry.path().file_name() {
                     if dir_path == "grub" {
-                        return Some(entry.path().to_string_lossy().into_owned());
+                        return Some(entry.path().strip_prefix("/boot/").unwrap().to_string_lossy().into_owned());
                     }
                 }
             }
@@ -1311,8 +1311,9 @@ pub fn list(snapshot: &str, chr: &str) -> Vec<String> {
 
 // List sub-volumes for the booted distro only
 pub fn list_subvolumes() {
+    let distro_id = detect::distro_id();
     let args = format!("btrfs sub list / | grep -i {} | sort -f -k 9",
-                       &get_distro_suffix(&detect::distro_id()));
+                       &get_distro_suffix(&distro_id));
     Command::new("sh").arg("-c").arg(args).status().unwrap();
 }
 
@@ -2047,7 +2048,9 @@ pub fn switch_distro() -> Result<(), Error>{
 
 // Switch between /tmp deployments
 pub fn switch_tmp(secondary: bool) -> Result<(), Error> {
-    let distro_suffix = &get_distro_suffix(&detect::distro_id());
+    let distro_name = detect::distro_name();
+    let distro_id = detect::distro_id();
+    let distro_suffix = &get_distro_suffix(&distro_id);
     let grub = get_grub().unwrap();
     let part = get_part();
     let tmp_boot = TempDir::new_in("/.snapshots/tmp")?;
@@ -2060,12 +2063,12 @@ pub fn switch_tmp(secondary: bool) -> Result<(), Error> {
     let source_dep = get_tmp();
     let target_dep = get_aux_tmp(source_dep.to_string(), secondary);
     Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-{}/boot", target_dep))
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/boot/grub", target_dep))
                       .arg(format!("{}", tmp_boot.path().to_str().unwrap()))
                       .output()?;
 
     // Overwrite grub config boot subvolume
-    let tmp_grub_cfg = format!("{}{}/grub.cfg", tmp_boot.path().to_str().unwrap(),grub);
+    let tmp_grub_cfg = format!("{}/{}/grub.cfg", tmp_boot.path().to_str().unwrap(),grub);
     // Read the contents of the file into a string
     let mut contents = String::new();
     let mut file = File::open(&tmp_grub_cfg)?;
@@ -2076,7 +2079,7 @@ pub fn switch_tmp(secondary: bool) -> Result<(), Error> {
     let mut file = File::create(tmp_grub_cfg)?;
     file.write_all(modified_tmp_contents.as_bytes())?;
 
-    let grub_cfg = format!("/.snapshots/rootfs/snapshot-{}{}/grub.cfg", target_dep,grub);
+    let grub_cfg = format!("/.snapshots/rootfs/snapshot-{}/boot/{}/grub.cfg", target_dep,grub);
     // Read the contents of the file into a string
     let mut contents = String::new();
     let mut file = File::open(&grub_cfg)?;
@@ -2110,50 +2113,59 @@ pub fn switch_tmp(secondary: bool) -> Result<(), Error> {
     let snap = sfile.replace(" ", "").replace('\n', "");
 
     // Update GRUB configurations
-    for boot_location in ["/.snapshots/rootfs/snapshot-deploy-aux", &tmp_boot.path().to_str().unwrap()] {
-        let file_path = format!("{}{}/grub.cfg", boot_location, grub);
+    for boot_location in ["/.snapshots/rootfs/snapshot-deploy-aux/boot", &tmp_boot.path().to_str().unwrap()] {
+        // Get grub configurations
+        let file_path = format!("{}/{}/grub.cfg", boot_location, grub);
         let file = File::open(&file_path)?;
         let reader = BufReader::new(file);
         let mut gconf = String::new();
         let mut in_10_linux = false;
-        let begin_str = "BEGIN /etc/grub.d/10_linux";
-        let end_str = "}";
-        let snapshot_str = "snapshot-";
         for line in reader.lines() {
             let line = line?;
-            if line.contains(begin_str) {
+            if line.contains("BEGIN /etc/grub.d/10_linux") {
                 in_10_linux = true;
             } else if in_10_linux {
-                if line.contains(end_str) {
+                if line.contains("}") {
                     gconf.push_str(&line);
+                    gconf.push_str("\n### END /etc/grub.d/41_custom ###");
                     break;
                 } else {
                     gconf.push_str(&line);
                 }
             }
         }
-        if gconf.contains(snapshot_str) {
-            if gconf.contains("snapshot-deploy-aux") {
-                gconf = gconf.replace("snapshot-deploy-aux", "snapshot-deploy");
-            } else if gconf.contains("snapshot-deploy") {
-                gconf = gconf.replace("snapshot-deploy", "snapshot-deploy-aux");
-            }
-            gconf = gconf.replace(&detect_distro::distro_name(), &format!("{} last booted deployment (snapshot {})",
-                                                                          &detect_distro::distro_name(), snap));
-            while gconf.contains("snapshot ") {
-                let prefix = gconf.split("snapshot ").next().unwrap();
-                let suffix = gconf.split("snapshot ").skip(1).next().unwrap();
-                let snapshot_num = suffix.split(' ').next().unwrap();
-                let suffix = suffix.replacen(snapshot_num, "", 1);
-                gconf = format!("{}{}", prefix, suffix);
-            }
+
+        // Switch tmp
+        if gconf.contains("snapshot-deploy-aux") {
+            gconf = gconf.replace("snapshot-deploy-aux", "snapshot-deploy");
+        } else if gconf.contains("snapshot-deploy") {
+            gconf = gconf.replace("snapshot-deploy", "snapshot-deploy-aux");
         }
-        let mut file = File::create(&file_path)?;
-        for line in BufReader::new(gconf.as_bytes()).lines() {
-            writeln!(file, "{}", line?)?;
+
+        if gconf.contains(&distro_name) {
+            // Remove snapshot number
+            let prefix = gconf.split("snapshot ").next().unwrap();
+            let suffix = gconf.split("snapshot ").skip(1).next().unwrap();
+            let snapshot_num = suffix.split(' ').next().unwrap();
+            let suffix = suffix.replacen(snapshot_num, "", 1);
+            gconf = format!("{}{}", prefix, suffix);
+
+            // Replace with last booted deployment entry
+            gconf = gconf.replace(&distro_name, &format!("{} last booted deployment (snapshot {})",
+                                                         &distro_name, snap));
         }
-        writeln!(file, "}}")?;
-        writeln!(file, "### END /etc/grub.d/41_custom ###")?;
+
+        // Remove last line
+        let contents = read_to_string(&file_path)?;
+        let lines: Vec<&str> = contents.lines().collect();
+        let new_contents = lines[..lines.len() - 1].join("\n");
+        std::fs::write(&file_path, new_contents)?;
+
+        // Open the file in read and write mode
+        let mut file = OpenOptions::new().read(true).write(true).append(true).open(&file_path)?;
+
+        // Write the modified content back to the file
+        file.write_all(format!("\n\n{}", gconf).as_bytes())?;
     }
 
     // Umount boot partition
@@ -2658,20 +2670,21 @@ pub fn update_boot(snapshot: &str, secondary: bool) -> Result<(), Error> {
         // Prepare for update
         prepare(snapshot)?;
         // Remove grub configurations older than 30 days
-        if Path::new(&format!("{}/BAK/", grub)).try_exists().unwrap() {
-            delete_old_grub_files(&format!("{}", grub).as_str())?;
+        if Path::new(&format!("/boot/{}/BAK/", grub)).try_exists().unwrap() {
+            delete_old_grub_files(&format!("/boot/{}", grub).as_str())?;
         }
         // Get current time
         let time = time::OffsetDateTime::now_utc();
         let formatted = time.format(&time::format_description::parse("[year][month][day]-[hour][minute][second]").unwrap()).unwrap();
         // Copy backup
-        copy(format!("{}/grub.cfg", grub), format!("{}/BAK/grub.cfg.{}", grub,formatted))?;
+        copy(format!("/boot/{}/grub.cfg", grub), format!("/boot/{}/BAK/grub.cfg.{}", grub,formatted))?;
 
         // Run update commands in chroot
-        let mkconfig = format!("grub-mkconfig {} -o {}/grub.cfg", part,grub);
-        let sed_snap = format!("sed -i 's|snapshot-chr{}|snapshot-{}|g' {}/grub.cfg", snapshot,tmp,grub);
-        let sed_distro = format!("sed -i '0,\\|{}| s||{} snapshot {}|' {}/grub.cfg",
-                                 detect::distro_name(),detect::distro_name(),snapshot,grub);
+        let distro_name = detect::distro_name();
+        let mkconfig = format!("grub-mkconfig {} -o /boot/{}/grub.cfg", part,grub);
+        let sed_snap = format!("sed -i 's|snapshot-chr{}|snapshot-{}|g' /boot/{}/grub.cfg", snapshot,tmp,grub);
+        let sed_distro = format!("sed -i '0,\\|{}| s||{} snapshot {}|' /boot/{}/grub.cfg",
+                                 distro_name,distro_name,snapshot,grub);
         let cmds = [mkconfig, sed_snap, sed_distro];
         for cmd in cmds {
             chroot_exec(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), &cmd)?;
