@@ -614,7 +614,7 @@ pub fn delete_old_grub_files(grub: &str) -> Result<(), Error> {
 }
 
 // Deploy snapshot
-pub fn deploy(snapshot: &str, secondary: bool) -> Result<(), Error> {
+pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<(), Error> {
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot deploy as snapshot {} doesn't exist.", snapshot)));
@@ -736,7 +736,7 @@ pub fn deploy(snapshot: &str, secondary: bool) -> Result<(), Error> {
                                               .write(true)
                                               .open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", tmp))?;
         snap_file.write_all(snap_num.as_bytes())?;
-        switch_tmp(secondary)?;
+        switch_tmp(secondary, reset)?;
         init_system_clean(&tmp, "deploy")?;
 
         // Set default volume
@@ -924,7 +924,7 @@ pub fn hollow(snapshot: &str) -> Result<(), Error> {
         if yes_no(&format!("Snapshot {} is now hollow! Whenever done, type yes to deploy and no to discard", snapshot)) {
             post_transactions(snapshot)?;
             immutability_enable(snapshot)?;
-            deploy(snapshot, false)?;
+            deploy(snapshot, false, false)?;
         } else {
             chr_delete(snapshot)?;
             return Err(Error::new(ErrorKind::Interrupted,
@@ -1198,7 +1198,7 @@ pub fn install_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &s
                     if post_transactions(snapshot).is_ok() {
                         println!("Profile {} installed in snapshot {} successfully.", p,snapshot);
                         println!("Deploying snapshot {}.", snapshot);
-                        if deploy(snapshot, secondary).is_ok() {
+                        if deploy(snapshot, secondary, false).is_ok() {
                             println!("Snapshot {} deployed to '/'.", snapshot);
                         }
                     } else {
@@ -1228,7 +1228,7 @@ pub fn install_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &s
                     if post_transactions(snapshot).is_ok() {
                         println!("Profile {} installed in snapshot {} successfully.", p,snapshot);
                         println!("Deploying snapshot {}.", snapshot);
-                        if deploy(snapshot, secondary).is_ok() {
+                        if deploy(snapshot, secondary, false).is_ok() {
                             println!("Snapshot {} deployed to '/'.", snapshot);
                         }
                     } else {
@@ -1728,6 +1728,7 @@ pub fn remove_from_tree(treename: &str, pkgs: &Vec<String>, profiles: &Vec<Strin
 
 // System reset
 pub fn reset() -> Result<(), Error> {
+    let current_snapshot = get_current_snapshot();
     let msg = "All snapshots will be permanently deleted and cannot be retrieved, are you absolutely certain you want to continue?";
     if yes_no(msg) {
         // Collect snapshots
@@ -1742,11 +1743,12 @@ pub fn reset() -> Result<(), Error> {
         snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/snapshot-0").to_path_buf());
 
         // Deploy the base snapshot and remove all the other snapshots
-        if deploy("0", false).is_ok() {
+        if deploy("0", false, true).is_ok() {
             let mut snapshot = snapshots.len();
             while snapshot > 0 {
                 // Delete snapshot if exist
-                if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+                if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap()
+                && snapshot.to_string() != current_snapshot {
                     delete_node(&vec![snapshot.to_string()], true, true)?;
                 }
                 snapshot -= 1;
@@ -1762,7 +1764,7 @@ pub fn rollback() -> Result<(), Error> {
     let i = find_new();
     clone_as_tree(&tmp, "")?;
     write_desc(&i.to_string(), " rollback ", false)?;
-    deploy(&i.to_string(), false)?;
+    deploy(&i.to_string(), false, false)?;
     Ok(())
 }
 
@@ -2047,7 +2049,7 @@ pub fn switch_distro() -> Result<(), Error>{
 }
 
 // Switch between /tmp deployments
-pub fn switch_tmp(secondary: bool) -> Result<(), Error> {
+pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
     let distro_name = detect::distro_name();
     let distro_id = detect::distro_id();
     let distro_suffix = &get_distro_suffix(&distro_id);
@@ -2112,60 +2114,62 @@ pub fn switch_tmp(secondary: bool) -> Result<(), Error> {
     reader.read_line(&mut sfile).unwrap();
     let snap = sfile.replace(" ", "").replace('\n', "");
 
-    // Update GRUB configurations
-    for boot_location in ["/.snapshots/rootfs/snapshot-deploy-aux/boot", &tmp_boot.path().to_str().unwrap()] {
-        // Get grub configurations
-        let file_path = format!("{}/{}/grub.cfg", boot_location, grub);
-        let file = File::open(&file_path)?;
-        let reader = BufReader::new(file);
-        let mut gconf = String::new();
-        let mut in_10_linux = false;
-        for line in reader.lines() {
-            let line = line?;
-            if line.contains("BEGIN /etc/grub.d/10_linux") {
-                in_10_linux = true;
-            } else if in_10_linux {
-                if line.contains("}") {
-                    gconf.push_str(&line);
-                    gconf.push_str("\n### END /etc/grub.d/41_custom ###");
-                    break;
-                } else {
-                    gconf.push_str(&line);
+    // Recovery GRUB configurations
+    if !reset {
+        for boot_location in ["/.snapshots/rootfs/snapshot-deploy-aux/boot", &tmp_boot.path().to_str().unwrap()] {
+            // Get grub configurations
+            let file_path = format!("{}/{}/grub.cfg", boot_location, grub);
+            let file = File::open(&file_path)?;
+            let reader = BufReader::new(file);
+            let mut gconf = String::new();
+            let mut in_10_linux = false;
+            for line in reader.lines() {
+                let line = line?;
+                if line.contains("BEGIN /etc/grub.d/10_linux") {
+                    in_10_linux = true;
+                } else if in_10_linux {
+                    if line.contains("}") {
+                        gconf.push_str(&line);
+                        gconf.push_str("\n### END /etc/grub.d/41_custom ###");
+                        break;
+                    } else {
+                        gconf.push_str(&line);
+                    }
                 }
             }
+
+            // Switch tmp
+            if gconf.contains("snapshot-deploy-aux") {
+                gconf = gconf.replace("snapshot-deploy-aux", "snapshot-deploy");
+            } else if gconf.contains("snapshot-deploy") {
+                gconf = gconf.replace("snapshot-deploy", "snapshot-deploy-aux");
+            }
+
+            if gconf.contains(&distro_name) {
+                // Remove snapshot number
+                let prefix = gconf.split("snapshot ").next().unwrap();
+                let suffix = gconf.split("snapshot ").skip(1).next().unwrap();
+                let snapshot_num = suffix.split(' ').next().unwrap();
+                let suffix = suffix.replacen(snapshot_num, "", 1);
+                gconf = format!("{}{}", prefix, suffix);
+
+                // Replace with last booted deployment entry
+                gconf = gconf.replace(&distro_name, &format!("{} last booted deployment (snapshot {})",
+                                                             &distro_name, snap));
+            }
+
+            // Remove last line
+            let contents = read_to_string(&file_path)?;
+            let lines: Vec<&str> = contents.lines().collect();
+            let new_contents = lines[..lines.len() - 1].join("\n");
+            std::fs::write(&file_path, new_contents)?;
+
+            // Open the file in read and write mode
+            let mut file = OpenOptions::new().read(true).write(true).append(true).open(&file_path)?;
+
+            // Write the modified content back to the file
+            file.write_all(format!("\n\n{}", gconf).as_bytes())?;
         }
-
-        // Switch tmp
-        if gconf.contains("snapshot-deploy-aux") {
-            gconf = gconf.replace("snapshot-deploy-aux", "snapshot-deploy");
-        } else if gconf.contains("snapshot-deploy") {
-            gconf = gconf.replace("snapshot-deploy", "snapshot-deploy-aux");
-        }
-
-        if gconf.contains(&distro_name) {
-            // Remove snapshot number
-            let prefix = gconf.split("snapshot ").next().unwrap();
-            let suffix = gconf.split("snapshot ").skip(1).next().unwrap();
-            let snapshot_num = suffix.split(' ').next().unwrap();
-            let suffix = suffix.replacen(snapshot_num, "", 1);
-            gconf = format!("{}{}", prefix, suffix);
-
-            // Replace with last booted deployment entry
-            gconf = gconf.replace(&distro_name, &format!("{} last booted deployment (snapshot {})",
-                                                         &distro_name, snap));
-        }
-
-        // Remove last line
-        let contents = read_to_string(&file_path)?;
-        let lines: Vec<&str> = contents.lines().collect();
-        let new_contents = lines[..lines.len() - 1].join("\n");
-        std::fs::write(&file_path, new_contents)?;
-
-        // Open the file in read and write mode
-        let mut file = OpenOptions::new().read(true).write(true).append(true).open(&file_path)?;
-
-        // Write the modified content back to the file
-        file.write_all(format!("\n\n{}", gconf).as_bytes())?;
     }
 
     // Umount boot partition

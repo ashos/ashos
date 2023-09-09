@@ -250,7 +250,7 @@ fn main() {
                 let secondary = deploy_matches.get_flag("secondary");
 
                 // Run deploy
-                let run = deploy(&snapshot, secondary);
+                let run = deploy(&snapshot, secondary, false);
                 match run {
                     Ok(_) => println!("Snapshot {} deployed to '/'.", snapshot),
                     Err(e) => eprintln!("{}", e),
