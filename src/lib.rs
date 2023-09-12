@@ -886,7 +886,7 @@ pub fn get_tmp() -> String {
         }
     })
     .collect();
-    if mount.contains(&"deploy-aux".to_string()) {
+    if mount.iter().any(|element| element.contains("deploy-aux")) {
         let r = String::from("deploy-aux");
         return r;
     } else {
