@@ -1730,7 +1730,8 @@ pub fn remove_from_tree(treename: &str, pkgs: &Vec<String>, profiles: &Vec<Strin
 pub fn reset() -> Result<(), Error> {
     let current_snapshot = get_current_snapshot();
     let msg = "All snapshots will be permanently deleted and cannot be retrieved, are you absolutely certain you want to continue?";
-    if yes_no(msg) {
+    let reset_msg = "The system will restart automatically to complete the reset. Do you want to continue?";
+    if yes_no(msg) && yes_no(reset_msg) {
         // Collect snapshots
         let mut snapshots = read_dir("/.snapshots/rootfs")
             .unwrap().map(|entry| entry.unwrap().path()).collect::<Vec<_>>();
@@ -1741,6 +1742,21 @@ pub fn reset() -> Result<(), Error> {
 
         // Ignore base snapshot
         snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/snapshot-0").to_path_buf());
+
+        // Prepare base snapshot
+        prepare("0")?;
+        copy("/.snapshots/rootfs/snapshot-chr0/etc/rc.local", "/.snapshots/rootfs/snapshot-chr0/etc/rc.local.bak")?;
+        let start = "#!/bin/sh";
+        let del_snap = format!("/usr/sbin/ash del -q -n -s {}", current_snapshot);
+        let cp_rc = "cp /etc/rc.local.bak /etc/rc.local";
+        let end = "exit 0";
+        let mut file = OpenOptions::new().truncate(true)
+                                         .read(true)
+                                         .write(true)
+                                         .open("/.snapshots/rootfs/snapshot-chr0/etc/rc.local")?;
+        let new_content = format!("{}\n{}\n{}\n{}\nexit 0", start,del_snap,cp_rc,end);
+        file.write_all(new_content.as_bytes())?;
+        post_transactions("0")?;
 
         // Deploy the base snapshot and remove all the other snapshots
         if deploy("0", false, true).is_ok() {
@@ -1753,6 +1769,8 @@ pub fn reset() -> Result<(), Error> {
                 }
                 snapshot -= 1;
             }
+        } else {
+            eprintln!("Failed to deploy base snapshot");
         }
     }
     Ok(())

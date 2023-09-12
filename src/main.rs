@@ -3,6 +3,7 @@ mod cli;
 
 use cli::*;
 use lib::*;
+use nix::sys::reboot;
 use nix::unistd::Uid;
 // Directexplicitories
 // All snapshots share one /var
@@ -510,11 +511,11 @@ fn main() {
                 refresh(&snapshot).unwrap();
             }
             // Reset
-            Some(("reset", _matches)) => { //REVIEW
+            Some(("reset", _matches)) => {
                 // Run reset
                 let run = reset();
                 match run {
-                    Ok(_) => println!("A system restart is required."),
+                    Ok(_) => {/*reboot::reboot(reboot::RebootMode::RB_AUTOBOOT).unwrap();*/},
                     Err(e) => println!("{}", e),
                 }
             }
