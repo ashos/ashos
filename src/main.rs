@@ -3,8 +3,8 @@ mod cli;
 
 use cli::*;
 use lib::*;
-use nix::sys::reboot;
 use nix::unistd::Uid;
+use std::process::Command;
 // Directexplicitories
 // All snapshots share one /var
 // Global boot is always at @boot
@@ -515,7 +515,10 @@ fn main() {
                 // Run reset
                 let run = reset();
                 match run {
-                    Ok(_) => {/*reboot::reboot(reboot::RebootMode::RB_AUTOBOOT).unwrap();*/},
+                    Ok(_) => {
+                        // Reboot system
+                        Command::new("reboot").status().unwrap();
+                    },
                     Err(e) => println!("{}", e),
                 }
             }
