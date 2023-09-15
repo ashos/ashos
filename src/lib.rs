@@ -2126,10 +2126,10 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
     let mut file = File::create(fstab_file)?;
     file.write_all(modified_rootfs_contents.as_bytes())?;
 
-    let file = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", source_dep)).unwrap();
+    let file = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", source_dep))?;
     let mut reader = BufReader::new(file);
     let mut sfile = String::new();
-    reader.read_line(&mut sfile).unwrap();
+    reader.read_line(&mut sfile)?;
     let snap = sfile.replace(" ", "").replace('\n', "");
 
     // Recovery GRUB configurations
@@ -2747,18 +2747,17 @@ pub fn upgrade(snapshot:  &str, baseup: bool) -> Result<(), Error> {
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Cannot upgrade as snapshot {} doesn't exist.", snapshot)));
 
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
         // Make sure snapshot is not in use by another ash process
-        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
         return Err(
             Error::new(ErrorKind::Unsupported,
                        format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.",
                                snapshot,snapshot)));
 
+    } else if snapshot == "0" && !baseup {
         // Make sure snapshot is not base snapshot
-        } else if snapshot == "0" && !baseup {
         return Err(Error::new(ErrorKind::Unsupported,
                               format!("Changing base snapshot is not allowed.")));
-
 
     } else {
         // Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded

@@ -1,8 +1,8 @@
 use crate::{check_mutability, chr_delete, get_current_snapshot, immutability_disable, immutability_enable, post_transactions,
             prepare, remove_dir_content, snapshot_config_get, sync_time};
 
-use std::fs::DirBuilder;
-use std::io::{Error, ErrorKind};
+use std::fs::{DirBuilder, OpenOptions};
+use std::io::{Error, ErrorKind, Write};
 use std::path::Path;
 use std::process::{Command, ExitStatus};
 use walkdir::WalkDir;
@@ -23,42 +23,76 @@ pub fn aur_check(snapshot: &str) -> bool {
 
 // Noninteractive update
 pub fn auto_upgrade(snapshot: &str) -> Result<(), Error> {
-    // Required in virtualbox, otherwise error in package db update
-    sync_time()?;
-    prepare(snapshot)?;
+    // Make sure snapshot exists
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+        eprintln!("Cannot upgrade as snapshot {} doesn't exist.", snapshot);
 
-    // Avoid invalid or corrupted package (PGP signature) error
-    Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                          .args(["pacman", "-Sy", "--noconfirm", "archlinux-keyring"])
-                          .status().unwrap();
-
-    if !aur_check(snapshot) {
-        // Use pacman
-        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                           .args(["pacman", "--noconfirm", "-Syyu"]).status()?;
-        if excode.success() {
-            post_transactions(snapshot)?;
-            Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").output()?;
-            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").output()?;
-        } else {
-            chr_delete(snapshot)?;
-            Command::new("echo").args(["1", ">"]).arg("/.snapshots/ash/upstate").output()?;
-            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").output()?;
-        }
     } else {
-        // Use paru if aur is enabled
-        let args = format!("paru -Syyu --noconfirm");
-        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                           .args(["su", "aur", "-c", &args])
-                                           .status().unwrap();
-        if excode.success() {
-            post_transactions(snapshot)?;
-            Command::new("echo").args(["0", ">"]).arg("/.snapshots/ash/upstate").output()?;
-            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").output()?;
+        // Required in virtualbox, otherwise error in package db update
+        sync_time()?;
+        prepare(snapshot)?;
+
+        // Avoid invalid or corrupted package (PGP signature) error
+        Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                              .args(["pacman", "-Sy", "--noconfirm", "archlinux-keyring"])
+                              .status().unwrap();
+
+        if !aur_check(snapshot) {
+            // Use pacman
+            let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                               .args(["pacman", "--noconfirm", "-Syyu"]).status()?;
+            if excode.success() {
+                post_transactions(snapshot)?;
+                let mut file = OpenOptions::new().write(true)
+                                                 .create(true)
+                                                 .truncate(true)
+                                                 .open("/.snapshots/ash/upstate")?;
+                file.write_all("0 ".as_bytes())?;
+                let mut file = OpenOptions::new().append(true)
+                                                 .open("/.snapshots/ash/upstate")?;
+                let date = Command::new("date").output()?;
+                file.write_all(&date.stdout)?;
+            } else {
+                chr_delete(snapshot)?;
+                let mut file = OpenOptions::new().write(true)
+                                                 .create(true)
+                                                 .truncate(true)
+                                                 .open("/.snapshots/ash/upstate")?;
+                file.write_all("1 ".as_bytes())?;
+                let mut file = OpenOptions::new().append(true)
+                                                 .open("/.snapshots/ash/upstate")?;
+                let date = Command::new("date").output()?;
+                file.write_all(&date.stdout)?;
+            }
         } else {
-            chr_delete(snapshot)?;
-            Command::new("echo").args(["1", ">"]).arg("/.snapshots/ash/upstate").output()?;
-            Command::new("echo").args(["$(date)", ">>"]).arg("/.snapshots/ash/upstate").output()?;
+            // Use paru if aur is enabled
+            let args = format!("paru -Syyu --noconfirm");
+            let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                               .args(["su", "aur", "-c", &args])
+                                               .status().unwrap();
+            if excode.success() {
+                post_transactions(snapshot)?;
+                let mut file = OpenOptions::new().write(true)
+                                                 .create(true)
+                                                 .truncate(true)
+                                                 .open("/.snapshots/ash/upstate")?;
+                file.write_all("0 ".as_bytes())?;
+                let mut file = OpenOptions::new().append(true)
+                                                 .open("/.snapshots/ash/upstate")?;
+                let date = Command::new("date").output()?;
+                file.write_all(&date.stdout)?;
+            } else {
+                chr_delete(snapshot)?;
+                let mut file = OpenOptions::new().write(true)
+                                                 .create(true)
+                                                 .truncate(true)
+                                                 .open("/.snapshots/ash/upstate")?;
+                file.write_all("1 ".as_bytes())?;
+                let mut file = OpenOptions::new().append(true)
+                                                 .open("/.snapshots/ash/upstate")?;
+                let date = Command::new("date").output()?;
+                file.write_all(&date.stdout)?;
+            }
         }
     }
     Ok(())

@@ -231,7 +231,7 @@ fn main() {
                 // Run delelte_node
                 let run = delete_node(&snapshots, quiet, nuke);
                 match run {
-                    Ok(_) => println!("Snapshot {:?} removed.", snapshots),
+                    Ok(_) => println!("Snapshot(s) {:?} removed.", snapshots),
                     Err(e) => eprintln!("{}", e),
                 }
             }
