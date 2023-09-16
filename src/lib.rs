@@ -173,8 +173,7 @@ pub fn branch_create(snapshot: &str, desc: &str) -> Result<i32, Error> {
         write_tree(&tree)?;
         // Write description for snapshot
         if !desc.is_empty() {
-            let description = desc.split("").collect::<Vec<&str>>().join(" ");
-            write_desc(&i.to_string(), &description, true)?;
+            write_desc(&i.to_string(), &desc, true)?;
         }
     }
     Ok(i)
@@ -363,8 +362,7 @@ pub fn clone_as_tree(snapshot: &str, desc: &str) -> Result<i32, Error> {
             let description = format!("clone of {}.", snapshot);
             write_desc(&i.to_string(), &description, true)?;
         } else {
-            let description = desc.split("").collect::<Vec<&str>>().join(" ");
-            write_desc(&i.to_string(), &description, true)?;
+            write_desc(&i.to_string(), &desc, true)?;
         }
     }
     Ok(i)
@@ -567,7 +565,8 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
             // Delete snapshot
             let tree = fstree().unwrap();
             let children = return_children(&tree, &snapshot);
-            write_desc(snapshot, "", true)?;
+            let desc_path = format!("/.snapshots/ash/snapshots/{}-desc", snapshot);
+            std::fs::remove_file(desc_path)?;
             delete_subvolume(format!("/.snapshots/boot/boot-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
             delete_subvolume(format!("/.snapshots/etc/etc-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
             delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
@@ -581,7 +580,8 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
 
             for child in children {
                 // This deletes the node itself along with its children
-                write_desc(snapshot, "", true)?;
+                let desc_path = format!("/.snapshots/ash/snapshots/{}-desc", child);
+                std::fs::remove_file(desc_path)?;
                 delete_subvolume(&format!("/.snapshots/boot/boot-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                 delete_subvolume(format!("/.snapshots/etc/etc-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                 delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
