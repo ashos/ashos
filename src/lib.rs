@@ -455,7 +455,7 @@ pub fn clone_under(snapshot: &str, branch: &str) -> Result<i32, Error> {
 
         // Make sure branch does exist
         } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", branch)).try_exists().unwrap() {
-        return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", snapshot)));
+        return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", branch)));
 
     } else {
 
@@ -582,7 +582,7 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
             for child in children {
                 // This deletes the node itself along with its children
                 write_desc(snapshot, "", true)?;
-                delete_subvolume(format!("/.snapshots/boot/boot{}", child), DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(&format!("/.snapshots/boot/boot-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                 delete_subvolume(format!("/.snapshots/etc/etc-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                 delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                 if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", child)).try_exists().unwrap() {
@@ -590,9 +590,6 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
                     delete_subvolume(format!("/.snapshots/etc/etc-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                     delete_subvolume(format!("/.snapshots/rootfs/snapshot-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                 }
-                // Remove node from tree or root
-                //remove_node(&tree, &child).unwrap();
-                //write_tree(&tree)?;
             }
 
             // Remove node from tree or root
