@@ -236,7 +236,7 @@ fn main() {
                 }
             }
             // Deploy
-            Some(("deploy", deploy_matches)) => { //REVIEW
+            Some(("deploy", deploy_matches)) => {
                 // Get snapshot value
                 let snapshot = if deploy_matches.contains_id("SNAPSHOT") {
                     let snap = deploy_matches.get_one::<i32>("SNAPSHOT").unwrap();

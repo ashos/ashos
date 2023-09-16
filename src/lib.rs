@@ -590,7 +590,11 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
                     delete_subvolume(format!("/.snapshots/etc/etc-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                     delete_subvolume(format!("/.snapshots/rootfs/snapshot-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                 }
+                // Remove node from tree or root
+                //remove_node(&tree, &child).unwrap();
+                //write_tree(&tree)?;
             }
+
             // Remove node from tree or root
             remove_node(&tree, snapshot).unwrap();
             write_tree(&tree)?;
