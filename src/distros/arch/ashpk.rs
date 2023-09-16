@@ -5,6 +5,7 @@ use std::fs::{DirBuilder, OpenOptions};
 use std::io::{Error, ErrorKind, Write};
 use std::path::Path;
 use std::process::{Command, ExitStatus};
+use rustix::path::Arg;
 use walkdir::WalkDir;
 
 // Check if AUR is setup right
@@ -51,7 +52,7 @@ pub fn auto_upgrade(snapshot: &str) -> Result<(), Error> {
                 let mut file = OpenOptions::new().append(true)
                                                  .open("/.snapshots/ash/upstate")?;
                 let date = Command::new("date").output()?;
-                file.write_all(&date.stdout)?;
+                file.write_all(format!("\n{}", &date.stdout.to_string_lossy().as_str()?).as_bytes())?;
             } else {
                 chr_delete(snapshot)?;
                 let mut file = OpenOptions::new().write(true)
@@ -62,7 +63,7 @@ pub fn auto_upgrade(snapshot: &str) -> Result<(), Error> {
                 let mut file = OpenOptions::new().append(true)
                                                  .open("/.snapshots/ash/upstate")?;
                 let date = Command::new("date").output()?;
-                file.write_all(&date.stdout)?;
+                file.write_all(format!("\n{}", &date.stdout.to_string_lossy().as_str()?).as_bytes())?;
             }
         } else {
             // Use paru if aur is enabled
@@ -80,7 +81,7 @@ pub fn auto_upgrade(snapshot: &str) -> Result<(), Error> {
                 let mut file = OpenOptions::new().append(true)
                                                  .open("/.snapshots/ash/upstate")?;
                 let date = Command::new("date").output()?;
-                file.write_all(&date.stdout)?;
+                file.write_all(format!("\n{}", &date.stdout.to_string_lossy().as_str()?).as_bytes())?;
             } else {
                 chr_delete(snapshot)?;
                 let mut file = OpenOptions::new().write(true)
@@ -91,7 +92,7 @@ pub fn auto_upgrade(snapshot: &str) -> Result<(), Error> {
                 let mut file = OpenOptions::new().append(true)
                                                  .open("/.snapshots/ash/upstate")?;
                 let date = Command::new("date").output()?;
-                file.write_all(&date.stdout)?;
+                file.write_all(format!("\n{}", &date.stdout.to_string_lossy().as_str()?).as_bytes())?;
             }
         }
     }
