@@ -621,10 +621,10 @@ pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<(), Error>
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot deploy as snapshot {} doesn't exist.", snapshot)));
 
     } else {
-        //println!("The snapshot {} is being deployed, it may take some time, please be patient.", snapshot);
         update_boot(snapshot, secondary)?;
-        let tmp = get_tmp();
+
         // Set default volume
+        let tmp = get_tmp();
         Command::new("btrfs").args(["sub", "set-default"])
                              .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
                              .output()?;
@@ -1336,6 +1336,7 @@ pub fn noninteractive_update(snapshot: &str) -> Result<(), Error> {
 pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
     // Some operations were moved below to fix hollow functionality
     let tmp = get_tmp();
+
     //File operations in snapshot-chr
     remove_dir_content(&format!("/.snapshots/boot/boot-chr{}", snapshot))?;
     Command::new("cp").args(["-r", "--reflink=auto"])
@@ -1389,9 +1390,6 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
                         CreateSnapshotFlags::READ_ONLY, None).unwrap();
     }
 
-    // Fix for hollow functionality
-    ash_umounts(snapshot, "chr")?;
-
     // Special mutable directories
     let options = snapshot_config_get(snapshot);
     let mutable_dirs: Vec<&str> = options.get("mutable_dirs")
@@ -1412,21 +1410,28 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
                                                     }
                                                 }).filter(|dir| !dir.trim().is_empty()).collect()})
                                                 .unwrap_or_else(|| Vec::new());
+
     if !mutable_dirs.is_empty() {
         for mount_path in mutable_dirs {
-            umount2(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path)),
-                    MntFlags::MNT_DETACH).unwrap();
+            if is_mounted(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))) {
+                umount2(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path)),
+                        MntFlags::MNT_DETACH).unwrap();
+            }
         }
     }
     if !mutable_dirs_shared.is_empty() {
         for mount_path in mutable_dirs_shared {
-            umount2(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path)),
-                    MntFlags::MNT_DETACH).unwrap();
+            if is_mounted(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))) {
+                umount2(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path)),
+                        MntFlags::MNT_DETACH).unwrap();
+            }
         }
     }
 
     // Fix for hollow functionality
+    ash_umounts(snapshot, "chr")?;
     chr_delete(snapshot)?;
+
     Ok(())
 }
 
@@ -1502,34 +1507,6 @@ pub fn prepare(snapshot: &str) -> Result<(), Error> {
     // Pacman gets weird when chroot directory is not a mountpoint, so the following mount is necessary
     ash_mounts(snapshot, "chr")?;
 
-    // File operations for snapshot-chr
-    create_snapshot(format!("/.snapshots/boot/boot-{}", snapshot),
-                    format!("/.snapshots/boot/boot-chr{}", snapshot),
-                    CreateSnapshotFlags::empty(), None).unwrap();
-    create_snapshot(format!("/.snapshots/etc/etc-{}", snapshot),
-                    format!("/.snapshots/etc/etc-chr{}", snapshot),
-                    CreateSnapshotFlags::empty(), None).unwrap();
-    Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/boot/boot-chr{}/.", snapshot))
-                      .arg(format!("{}/boot", snapshot_chr))
-                      .output()?;
-    Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/etc/etc-chr{}/.", snapshot))
-                      .arg(format!("{}/etc", snapshot_chr))
-                      .output()?;
-
-    // Clean init system
-    init_system_clean(snapshot, "prepare")?;
-
-    // Copy ash related configurations
-    if Path::new("/etc/systemd").try_exists().unwrap() {
-        // Machine-id is a Systemd thing
-        copy("/etc/machine-id", format!("{}/etc/machine-id", snapshot_chr))?;
-    }
-    DirBuilder::new().recursive(true)
-                     .create(format!("{}/.snapshots/ash", snapshot_chr))?;
-    copy("/.snapshots/ash/fstree", format!("{}/.snapshots/ash/fstree", snapshot_chr))?;
-
     // Special mutable directories
     let options = snapshot_config_get(snapshot);
     let mutable_dirs: Vec<&str> = options.get("mutable_dirs")
@@ -1550,6 +1527,7 @@ pub fn prepare(snapshot: &str) -> Result<(), Error> {
                                                     }
                                                 }).filter(|dir| !dir.trim().is_empty()).collect()})
                                                 .unwrap_or_else(|| Vec::new());
+
     if !mutable_dirs.is_empty() {
         for mount_path in mutable_dirs {
             // Create mouth_path directory in snapshot
@@ -1578,7 +1556,36 @@ pub fn prepare(snapshot: &str) -> Result<(), Error> {
                   Some("btrfs"), MsFlags::MS_BIND , None::<&str>)?;
         }
     }
-    Ok(())
+
+    // File operations for snapshot-chr
+    create_snapshot(format!("/.snapshots/boot/boot-{}", snapshot),
+                    format!("/.snapshots/boot/boot-chr{}", snapshot),
+                    CreateSnapshotFlags::empty(), None).unwrap();
+    create_snapshot(format!("/.snapshots/etc/etc-{}", snapshot),
+                    format!("/.snapshots/etc/etc-chr{}", snapshot),
+                    CreateSnapshotFlags::empty(), None).unwrap();
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/boot/boot-chr{}/.", snapshot))
+                      .arg(format!("{}/boot", snapshot_chr))
+                      .output()?;
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/etc/etc-chr{}/.", snapshot))
+                      .arg(format!("{}/etc", snapshot_chr))
+                      .output()?;
+
+    // Clean init system
+    init_system_clean(snapshot, "prepare")?;
+
+    // Copy ash related configurations
+    if Path::new("/etc/systemd").try_exists().unwrap() {
+        // Machine-id is a Systemd thing
+        copy("/etc/machine-id", format!("{}/etc/machine-id", snapshot_chr))?;
+    }
+    DirBuilder::new().recursive(true)
+                     .create(format!("{}/.snapshots/ash", snapshot_chr))?;
+    copy("/.snapshots/ash/fstree", format!("{}/.snapshots/ash/fstree", snapshot_chr))?;
+
+   Ok(())
 }
 
 // Refresh snapshot
@@ -1865,6 +1872,9 @@ pub fn snapshot_config_edit(snapshot: &str, /*skip_prep: bool, skip_post: bool*/
     // Make sure snapshot exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         eprintln!("Cannot chroot as snapshot {} doesn't exist.", snapshot);
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        // Make sure snapshot is not in use by another ash process
+        eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.", snapshot,snapshot)
 
     } else if snapshot == "0" {
         // Make sure is not base snapshot
@@ -2127,8 +2137,8 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
     let mut file = File::create(fstab_file)?;
     file.write_all(modified_rootfs_contents.as_bytes())?;
 
-    let file = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", source_dep))?;
-    let mut reader = BufReader::new(file);
+    let src_file = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", source_dep))?;
+    let mut reader = BufReader::new(src_file);
     let mut sfile = String::new();
     reader.read_line(&mut sfile)?;
     let snap = sfile.replace(" ", "").replace('\n', "");
@@ -2673,6 +2683,14 @@ pub fn update_boot(snapshot: &str, secondary: bool) -> Result<(), Error> {
     // Make sure snapshot does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot update boot as snapshot {} doesn't exist.", snapshot)));
+
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        // Make sure snapshot is not in use by another ash process
+        return Err(
+            Error::new(
+                ErrorKind::Unsupported,
+                format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.",
+                        snapshot,snapshot)));
 
     } else {
         // Get tmp
