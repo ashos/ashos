@@ -256,7 +256,7 @@ fn main() {
                     Ok(_) => println!("Snapshot {} deployed to '/'.", snapshot),
                     Err(e) => eprintln!("{}", e),
                 }
-            }
+           }
             // Description
             Some(("desc", desc_matches)) => {
                 // Get snapshot value

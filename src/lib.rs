@@ -887,7 +887,13 @@ pub fn get_tmp() -> String {
         }
     })
     .collect();
-    if mount.iter().any(|element| element.contains("deploy-aux")) {
+    if mount.iter().any(|element| element.contains("deploy-aux-secondary")) {
+        let r = String::from("deploy-aux-secondary");
+        return r;
+    } else if mount.iter().any(|element| element.contains("deploy-secondary")) {
+        let r = String::from("deploy-secondary");
+        return r;
+    } else if mount.iter().any(|element| element.contains("deploy-aux")) {
         let r = String::from("deploy-aux");
         return r;
     } else {
@@ -2105,7 +2111,7 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
     let mut file = File::open(&tmp_grub_cfg)?;
     file.read_to_string(&mut contents)?;
     let modified_tmp_contents = contents.replace(&format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,source_dep),
-                                             &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep));
+                                                 &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep));
     // Write the modified contents back to the file
     let mut file = File::create(tmp_grub_cfg)?;
     file.write_all(modified_tmp_contents.as_bytes())?;
@@ -2116,7 +2122,7 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
     let mut file = File::open(&grub_cfg)?;
     file.read_to_string(&mut contents)?;
     let modified_cfg_contents = contents.replace(&format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,source_dep),
-                                             &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep));
+                                                 &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep));
     // Write the modified contents back to the file
     let mut file = File::create(grub_cfg)?;
     file.write_all(modified_cfg_contents.as_bytes())?;
@@ -2162,7 +2168,7 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
                         gconf.push_str("\n### END /etc/grub.d/41_custom ###");
                         break;
                     } else {
-                        gconf.push_str(&line);
+                        gconf.push_str(&format!("\n{}",&line));
                     }
                 }
             }
@@ -2172,6 +2178,10 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
                 gconf = gconf.replace("snapshot-deploy-aux", "snapshot-deploy");
             } else if gconf.contains("snapshot-deploy") {
                 gconf = gconf.replace("snapshot-deploy", "snapshot-deploy-aux");
+            } else if gconf.contains("snapshot-deploy-aux-secondary") {
+                gconf = gconf.replace("snapshot-deploy-aux-secondary", "snapshot-deploy-secondary");
+            } else if gconf.contains("snapshot-deploy-secondary") {
+                gconf = gconf.replace("snapshot-deploy-secondary", "snapshot-deploy-aux-secondary");
             }
 
             if gconf.contains(&distro_name) {
