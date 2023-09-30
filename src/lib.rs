@@ -794,14 +794,22 @@ pub fn fixdb(snapshot: &str) -> Result<(), Error> {
 // Get aux tmp
 pub fn get_aux_tmp(tmp: String, secondary: bool) -> String {
     let tmp = if secondary {
-        if tmp.contains("secondary") {
-            tmp.replace("-secondary", "")
+        if tmp == "deploy-aux-secondary" {
+            tmp.replace("deploy-aux-secondary", "deploy-secondary")
+        } else if tmp == "deploy-aux" {
+            tmp.replace("deploy-aux", "deploy-aux-secondary")
+        } else if tmp == "deploy" {
+            tmp.replace("deploy", "deploy-secondary")
         } else {
-            format!("{}-secondary", tmp)
+            tmp.replace("deploy-secondary", "deploy-aux-secondary")
         }
     } else {
-        if tmp.contains("deploy-aux") {
+        if tmp == "deploy-aux" {
             tmp.replace("deploy-aux", "deploy")
+        } else if tmp == "deploy-aux-secondary" {
+            tmp.replace("deploy-aux-secondary", "deploy-aux")
+        } else if tmp == "deploy-secondary" {
+            tmp.replace("deploy-secondary", "deploy")
         } else {
             tmp.replace("deploy", "deploy-aux")
         }
@@ -2314,9 +2322,11 @@ pub fn tmp_delete(secondary: bool) -> Result<(), Error> {
     let tmp = get_aux_tmp(tmp, secondary);
 
     // Clean tmp
-    delete_subvolume(&format!("/.snapshots/boot/boot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
-    delete_subvolume(&format!("/.snapshots/etc/etc-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
-    delete_subvolume(&format!("/.snapshots/rootfs/snapshot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
+    if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", tmp)).try_exists().unwrap() {
+        delete_subvolume(&format!("/.snapshots/boot/boot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
+        delete_subvolume(&format!("/.snapshots/etc/etc-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
+        delete_subvolume(&format!("/.snapshots/rootfs/snapshot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
+    }
     Ok(())
 }
 
