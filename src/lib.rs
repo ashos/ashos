@@ -2093,7 +2093,6 @@ pub fn switch_distro() -> Result<(), Error>{
 
 // Switch between /tmp deployments
 pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
-    let distro_name = detect::distro_name();
     let distro_id = detect::distro_id();
     let distro_suffix = &get_distro_suffix(&distro_id);
     let grub = get_grub().unwrap();
@@ -2112,29 +2111,6 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
                       .arg(format!("{}", tmp_boot.path().to_str().unwrap()))
                       .output()?;
 
-    // Overwrite grub config boot subvolume
-    let tmp_grub_cfg = format!("{}/{}/grub.cfg", tmp_boot.path().to_str().unwrap(),grub);
-    // Read the contents of the file into a string
-    let mut contents = String::new();
-    let mut file = File::open(&tmp_grub_cfg)?;
-    file.read_to_string(&mut contents)?;
-    let modified_tmp_contents = contents.replace(&format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,source_dep),
-                                                 &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep));
-    // Write the modified contents back to the file
-    let mut file = File::create(tmp_grub_cfg)?;
-    file.write_all(modified_tmp_contents.as_bytes())?;
-
-    let grub_cfg = format!("/.snapshots/rootfs/snapshot-{}/boot/{}/grub.cfg", target_dep,grub);
-    // Read the contents of the file into a string
-    let mut contents = String::new();
-    let mut file = File::open(&grub_cfg)?;
-    file.read_to_string(&mut contents)?;
-    let modified_cfg_contents = contents.replace(&format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,source_dep),
-                                                 &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep));
-    // Write the modified contents back to the file
-    let mut file = File::create(grub_cfg)?;
-    file.write_all(modified_cfg_contents.as_bytes())?;
-
     // Update fstab for new deployment
     let fstab_file = format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", target_dep);
     // Read the contents of the file into a string
@@ -2151,19 +2127,14 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
     let mut file = File::create(fstab_file)?;
     file.write_all(modified_rootfs_contents.as_bytes())?;
 
-    let src_file = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", source_dep))?;
-    let mut reader = BufReader::new(src_file);
-    let mut sfile = String::new();
-    reader.read_line(&mut sfile)?;
-    let snap = sfile.replace(" ", "").replace('\n', "");
-
     // Recovery GRUB configurations
     if !reset {
-        for boot_location in ["/.snapshots/rootfs/snapshot-deploy-aux/boot", &tmp_boot.path().to_str().unwrap()] {
+        for boot_location in [&tmp_boot.path().to_str().unwrap()] {
             // Get grub configurations
-            let file_path = format!("{}/{}/grub.cfg", boot_location, grub);
-            let file = File::open(&file_path)?;
-            let reader = BufReader::new(file);
+            let grub_path = format!("{}/{}/grub.cfg", boot_location, grub);
+            let src_file_path = format!("/.snapshots/rootfs/snapshot-{}/boot/{}/grub.cfg", source_dep,grub);
+            let sfile = File::open(&src_file_path)?;
+            let reader = BufReader::new(sfile);
             let mut gconf = String::new();
             let mut in_10_linux = false;
             for line in reader.lines() {
@@ -2181,38 +2152,14 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
                 }
             }
 
-            // Switch tmp
-            if gconf.contains("snapshot-deploy-aux") {
-                gconf = gconf.replace("snapshot-deploy-aux", "snapshot-deploy");
-            } else if gconf.contains("snapshot-deploy") {
-                gconf = gconf.replace("snapshot-deploy", "snapshot-deploy-aux");
-            } else if gconf.contains("snapshot-deploy-aux-secondary") {
-                gconf = gconf.replace("snapshot-deploy-aux-secondary", "snapshot-deploy-secondary");
-            } else if gconf.contains("snapshot-deploy-secondary") {
-                gconf = gconf.replace("snapshot-deploy-secondary", "snapshot-deploy-aux-secondary");
-            }
-
-            if gconf.contains(&distro_name) {
-                // Remove snapshot number
-                let prefix = gconf.split("snapshot ").next().unwrap();
-                let suffix = gconf.split("snapshot ").skip(1).next().unwrap();
-                let snapshot_num = suffix.split(' ').next().unwrap();
-                let suffix = suffix.replacen(snapshot_num, "", 1);
-                gconf = format!("{}{}", prefix, suffix);
-
-                // Replace with last booted deployment entry
-                gconf = gconf.replace(&distro_name, &format!("{} last booted deployment (snapshot {})",
-                                                             &distro_name, snap));
-            }
-
             // Remove last line
-            let contents = read_to_string(&file_path)?;
+            let contents = read_to_string(&grub_path)?;
             let lines: Vec<&str> = contents.lines().collect();
             let new_contents = lines[..lines.len() - 1].join("\n");
-            std::fs::write(&file_path, new_contents)?;
+            std::fs::write(&grub_path, new_contents)?;
 
             // Open the file in read and write mode
-            let mut file = OpenOptions::new().read(true).write(true).append(true).open(&file_path)?;
+            let mut file = OpenOptions::new().read(true).write(true).append(true).open(&grub_path)?;
 
             // Write the modified content back to the file
             file.write_all(format!("\n\n{}", gconf).as_bytes())?;
@@ -2715,28 +2662,23 @@ pub fn update_boot(snapshot: &str, secondary: bool) -> Result<(), Error> {
     } else {
         // Get tmp
         let tmp = get_tmp();
-        let tmp = if secondary {
-            if tmp.contains("secondary") {
-                tmp.replace("-secondary", "")
-            } else {
-                format!("{}-secondary", tmp)
-            }
-        } else {
-            tmp
-        };
+        let tmp = get_aux_tmp(tmp, secondary);
 
         // Partition path
         let part = get_part();
 
         // Prepare for update
         prepare(snapshot)?;
+
         // Remove grub configurations older than 30 days
         if Path::new(&format!("/boot/{}/BAK/", grub)).try_exists().unwrap() {
             delete_old_grub_files(&format!("/boot/{}", grub).as_str())?;
         }
+
         // Get current time
         let time = time::OffsetDateTime::now_utc();
         let formatted = time.format(&time::format_description::parse("[year][month][day]-[hour][minute][second]").unwrap()).unwrap();
+
         // Copy backup
         copy(format!("/boot/{}/grub.cfg", grub), format!("/boot/{}/BAK/grub.cfg.{}", grub,formatted))?;
 
