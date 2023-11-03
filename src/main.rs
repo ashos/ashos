@@ -49,9 +49,12 @@ fn main() {
                 noninteractive_update(&snapshot).unwrap();
             }
             // Base update
-            Some(("base-update", _matches)) => {
+            Some(("base-update", base_update_matches)) => {
+                // Optional values
+                let noconfirm = base_update_matches.get_flag("noconfirm");
+
                 // Run upgrade(0)
-                let run = upgrade("0", true);
+                let run = upgrade("0", true, noconfirm);
                 match run {
                     Ok(_) => {},
                     Err(e) => eprintln!("{}", e),
@@ -256,7 +259,7 @@ fn main() {
                     Ok(_) => println!("Snapshot {} deployed to '/'.", snapshot),
                     Err(e) => eprintln!("{}", e),
                 }
-           }
+            }
             // Description
             Some(("desc", desc_matches)) => {
                 // Get snapshot value
@@ -749,8 +752,11 @@ fn main() {
                     snap
                 };
 
+                // Optional values
+                let noconfirm = upgrade_matches.get_flag("noconfirm");
+
                 // Run upgrade
-                let run = upgrade(&snapshot, false);
+                let run = upgrade(&snapshot, false, noconfirm);
                 match run {
                     Ok(_) => {},
                     Err(e) => eprintln!("{}", e),

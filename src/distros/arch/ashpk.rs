@@ -460,20 +460,38 @@ pub fn uninstall_package_helper_live(tmp: &str, pkgs: &Vec<String>, noconfirm: b
 }
 
 // Upgrade snapshot atomic-operation
-pub fn upgrade_helper(snapshot: &str) -> ExitStatus {
+pub fn upgrade_helper(snapshot: &str, noconfirm: bool) -> ExitStatus {
     prepare(snapshot).unwrap();
     // Avoid invalid or corrupted package (PGP signature) error
+    let pacman_args = if noconfirm {
+        ["pacman", "--noconfirm", "-Syy", "archlinux-keyring"]
+    } else {
+        ["pacman", "--confirm", "-Syy", "archlinux-keyring"]
+    };
+
     Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                          .args(["pacman", "-Syy", "archlinux-keyring"])
+                          .args(pacman_args)
                           .status().unwrap();
     if !aur_check(snapshot) {
+        let pacman_args = if noconfirm {
+            ["pacman", "--noconfirm", "-Syyu"]
+        } else {
+            ["pacman", "--confirm", "-Syyu"]
+        };
+
         let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                           .args(["pacman", "-Syyu"])
+                                           .args(pacman_args)
                                            .status().unwrap();
         excode
     } else {
+        let paru_args = if noconfirm {
+            "paru --noconfirm -Syyu"
+        } else {
+            "paru -Syyu"
+        };
+
         let excode = Command::new("sh").arg("-c")
-                                       .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} su aur -c 'paru -Syyu'", snapshot))
+                                       .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} su aur -c '{}'", snapshot,paru_args))
                                        .status().unwrap();
         excode
     }

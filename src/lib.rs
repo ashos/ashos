@@ -761,6 +761,180 @@ pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<(), Error>
     Ok(())
 }
 
+// Deploy recovery snapshot
+fn deploy_recovery() -> Result<(), Error> {
+    let distro_id = detect::distro_id();
+    let distro_suffix = &get_distro_suffix(&distro_id);
+    let tmp = get_recovery_tmp();
+
+    // Update boot
+    update_boot("0", false)?;
+
+    // Special mutable directories
+    let options = snapshot_config_get("0");
+    let mutable_dirs: Vec<&str> = options.get("mutable_dirs")
+                                         .map(|dirs| {dirs.split(',').flat_map(|dir| {
+                                             if let Some(index) = dir.find("::") {
+                                                 vec![&dir[..index], &dir[index + 2..]]
+                                             } else {
+                                                 vec![dir]
+                                             }
+                                         }).filter(|dir| !dir.trim().is_empty()).collect()})
+                                         .unwrap_or_else(|| Vec::new());
+    let mutable_dirs_shared: Vec<&str> = options.get("mutable_dirs_shared")
+                                                .map(|dirs| {dirs.split(',').flat_map(|dir| {
+                                                    if let Some(index) = dir.find("::") {
+                                                        vec![&dir[..index], &dir[index + 2..]]
+                                                    } else {
+                                                        vec![dir]
+                                                    }
+                                                }).filter(|dir| !dir.trim().is_empty()).collect()})
+                                                .unwrap_or_else(|| Vec::new());
+
+    // Change recovery tmp
+    let tmp = get_recovery_aux_tmp(&tmp);
+
+    // Clean tmp
+    if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", tmp)).try_exists().unwrap() {
+        delete_subvolume(format!("/.snapshots/boot/boot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
+        delete_subvolume(format!("/.snapshots/etc/etc-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
+        delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
+    }
+
+    // btrfs snapshot operations
+    create_snapshot("/.snapshots/boot/boot-0",
+                    format!("/.snapshots/boot/boot-{}", tmp),
+                    CreateSnapshotFlags::empty(), None).unwrap();
+    create_snapshot("/.snapshots/etc/etc-0",
+                    format!("/.snapshots/etc/etc-{}", tmp),
+                    CreateSnapshotFlags::empty(), None).unwrap();
+    create_snapshot("/.snapshots/rootfs/snapshot-0",
+                    format!("/.snapshots/rootfs/snapshot-{}", tmp),
+                    CreateSnapshotFlags::empty(), None).unwrap();
+    DirBuilder::new().recursive(true)
+                     .create(format!("/.snapshots/rootfs/snapshot-{}/boot", tmp))?;
+    DirBuilder::new().recursive(true)
+                     .create(format!("/.snapshots/rootfs/snapshot-{}/etc", tmp))?;
+    std::fs::remove_dir_all(format!("/.snapshots/rootfs/snapshot-{}/var", tmp))?;
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg("/.snapshots/boot/boot-0/.")
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/boot", tmp))
+                      .output()?;
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg("/.snapshots/etc/etc-0/.")
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/etc", tmp))
+                      .output()?;
+
+    // Update fstab for new deployment
+    let fstab_file = format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", tmp);
+    // Read the contents of the file into a string
+    let mut contents = String::new();
+    let mut file = File::open(&fstab_file)?;
+    file.read_to_string(&mut contents)?;
+
+    let src_tmp = if contents.contains("deploy-aux") && !contents.contains("secondary") {
+        "deploy-aux"
+    } else if contents.contains("secondary") && !contents.contains("aux") {
+        "deploy-secondary"
+    } else if contents.contains("aux-secondary") {
+        "deploy-aux-secondary"
+    } else {
+        "deploy"
+    };
+
+    let modified_boot_contents = contents.replace(&format!("@.snapshots{}/boot/boot-{}", distro_suffix,src_tmp),
+                                                  &format!("@.snapshots{}/boot/boot-{}", distro_suffix,tmp));
+    let modified_etc_contents = modified_boot_contents.replace(&format!("@.snapshots{}/etc/etc-{}", distro_suffix,src_tmp),
+                                                               &format!("@.snapshots{}/etc/etc-{}", distro_suffix,tmp));
+    let modified_rootfs_contents = modified_etc_contents.replace(&format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,src_tmp),
+                                                                 &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,tmp));
+
+    // Write the modified contents back to the file
+    let mut file = File::create(fstab_file)?;
+    file.write_all(modified_rootfs_contents.as_bytes())?;
+
+    // If snapshot is mutable, modify '/' entry in fstab to read-write
+    if check_mutability("0") {
+        let mut fstab_file = File::open(format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", tmp))?;
+        let mut contents = String::new();
+        fstab_file.read_to_string(&mut contents)?;
+
+        let pattern = format!("snapshot-{}", tmp);
+        if let Some(index) = contents.find(&pattern) {
+            if let Some(end) = contents[index..].find(",ro") {
+                let replace_index = index + end;
+                let mut new_contents = String::with_capacity(contents.len());
+                new_contents.push_str(&contents[..replace_index]);
+                new_contents.push_str(&contents[replace_index + 3..]);
+                std::fs::write(format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", tmp), new_contents)?;
+            }
+        }
+    }
+
+    // Add special user-defined mutable directories as bind-mounts into fstab
+    if !mutable_dirs.is_empty() {
+        for mount_path in mutable_dirs {
+            let source_path = format!("/.snapshots/mutable_dirs/snapshot-0/{}", mount_path);
+            DirBuilder::new().recursive(true)
+                             .create(format!("/.snapshots/mutable_dirs/snapshot-0/{}", mount_path))?;
+            DirBuilder::new().recursive(true)
+                             .create(format!("/.snapshots/rootfs/snapshot-{}/{}", tmp,mount_path))?;
+            let fstab = format!("{} /{} none defaults,bind 0 0", source_path,mount_path);
+            let mut fstab_file = OpenOptions::new().append(true)
+                                                   .create(true)
+                                                   .read(true)
+                                                   .open(format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", tmp))?;
+            fstab_file.write_all(format!("{}\n", fstab).as_bytes())?;
+        }
+    }
+
+    // Same thing but for shared directories
+    if !mutable_dirs_shared.is_empty() {
+        for mount_path in mutable_dirs_shared {
+            let source_path = format!("/.snapshots/mutable_dirs/{}", mount_path);
+            DirBuilder::new().recursive(true)
+                             .create(format!("/.snapshots/mutable_dirs/{}", mount_path))?;
+            DirBuilder::new().recursive(true)
+                             .create(format!("/.snapshots/rootfs/snapshot-{}/{}", tmp,mount_path))?;
+            let fstab = format!("{} /{} none defaults,bind 0 0", source_path,mount_path);
+            let mut fstab_file = OpenOptions::new().append(true)
+                                                   .create(true)
+                                                   .read(true)
+                                                   .open(format!("/.snapshots/rootfs/snapshot-{}/etc/fstab", tmp))?;
+            fstab_file.write_all(format!("{}\n", fstab).as_bytes())?;
+        }
+    }
+
+    create_snapshot("/var",
+                    format!("/.snapshots/rootfs/snapshot-{}/var", tmp),
+                    CreateSnapshotFlags::empty(), None).unwrap();
+    let snap_num = "0";
+    let mut snap_file = OpenOptions::new().truncate(true)
+                                          .create(true)
+                                          .read(true)
+                                          .write(true)
+                                          .open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", tmp))?;
+    snap_file.write_all(snap_num.as_bytes())?;
+
+    // Clean init system_clean
+    if Path::new("/var/lib/systemd/").try_exists().unwrap() {
+        remove_dir_content(&format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", tmp))?;
+    } //TODO add OpenRC in else
+
+    // Update recovery tmp
+    switch_recovery_tmp()?;
+    prepare("0")?;
+    let mut recovery_tmp = OpenOptions::new().truncate(true)
+                                             .create(true)
+                                             .read(true)
+                                             .write(true)
+                                             .open("/.snapshots/rootfs/snapshot-chr0/usr/share/ash/rec-tmp")?;
+    recovery_tmp.write_all(tmp.as_bytes())?;
+    post_transactions("0")?;
+
+    Ok(())
+}
+
 // Show diff of packages
 pub fn diff(snapshot1: &str, snapshot2: &str) {
     let diff = snapshot_diff(snapshot1, snapshot2);
@@ -892,6 +1066,29 @@ pub fn get_part() -> String {
     // Get partition path from UUID
     let cpart = PartitionID::new(PartitionSource::UUID, contents.trim_end().to_string());
     cpart.get_device_path().unwrap().to_string_lossy().into_owned()
+}
+
+// Get recovery aux tmp
+fn get_recovery_aux_tmp(tmp: &str) -> String {
+    let tmp = if tmp == "recovery-deploy-aux" {
+        tmp.replace("recovery-deploy-aux", "recovery-deploy")
+    } else {
+        tmp.replace("recovery-deploy", "recovery-deploy-aux")
+    };
+    tmp
+}
+
+// Get recovery tmp state
+fn get_recovery_tmp() -> String {
+    if Path::new("/.snapshots/rootfs/snapshot-0/usr/share/ash/rec-tmp").try_exists().unwrap() {
+        let mut file = File::open("/.snapshots/rootfs/snapshot-0/usr/share/ash/rec-tmp").unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+        let tmp = contents.trim().to_string();
+        return tmp;
+    } else {
+        return "recovery-deploy".to_string();
+    }
 }
 
 // Get tmp partition state
@@ -1796,6 +1993,10 @@ pub fn reset() -> Result<(), Error> {
         // Ignore deploy and deploy-aux
         snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/snapshot-deploy").to_path_buf());
         snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/snapshot-deploy-aux").to_path_buf());
+        snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/snapshot-deploy-secondary").to_path_buf());
+        snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/snapshot-deploy-aux-secondary").to_path_buf());
+        snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/recovery-deploy").to_path_buf());
+        snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/recovery-deploy-aux").to_path_buf());
 
         // Ignore base snapshot
         snapshots.retain(|s| s != &Path::new("/.snapshots/rootfs/snapshot-0").to_path_buf());
@@ -1895,10 +2096,10 @@ pub fn snapshot_base_new(desc: &str) -> Result<i32, Error> {
     create_snapshot("/.snapshots/boot/boot-0",
                     format!("/.snapshots/boot/boot-{}", i),
                     CreateSnapshotFlags::READ_ONLY, None).unwrap();
-     create_snapshot("/.snapshots/etc/etc-0",
+    create_snapshot("/.snapshots/etc/etc-0",
                     format!("/.snapshots/etc/etc-{}", i),
                     CreateSnapshotFlags::READ_ONLY, None).unwrap();
-     create_snapshot("/.snapshots/rootfs/snapshot-0",
+    create_snapshot("/.snapshots/rootfs/snapshot-0",
                     format!("/.snapshots/rootfs/snapshot-{}", i),
                     CreateSnapshotFlags::READ_ONLY, None).unwrap();
 
@@ -2126,12 +2327,123 @@ pub fn switch_distro() -> Result<(), Error>{
     Ok(())
 }
 
+// Switch between /recovery-tmp deployments
+fn switch_recovery_tmp() -> Result<(), Error> {
+    let distro_id = detect::distro_id();
+    let distro_suffix = &get_distro_suffix(&distro_id);
+    let grub = get_grub().unwrap();
+    let part = get_part();
+    let tmp_boot = TempDir::new_in("/.snapshots/tmp")?;
+
+    // Mount boot partition for writing
+    mount(Some(part.as_str()), tmp_boot.path().as_os_str(),
+          Some("btrfs"), MsFlags::empty(), Some(format!("subvol=@boot{}", distro_suffix).as_bytes()))?;
+
+    // Swap deployment subvolumes: deploy <-> deploy-aux
+    let source_dep = get_recovery_tmp();
+    let target_dep = get_recovery_aux_tmp(&source_dep);
+    let boot_location = tmp_boot.path().to_str().unwrap();
+
+    // Read the contents of the file into a string
+    let grub_cfg = format!("{}/{}/grub.cfg", boot_location, grub);
+    let src_file_path = format!("/.snapshots/rootfs/snapshot-{}/boot/{}/grub.cfg", source_dep,grub);
+    let sfile = if Path::new(&src_file_path).try_exists().unwrap() {
+        File::open(&src_file_path)?
+    } else {
+        File::open(format!("/.snapshots/rootfs/snapshot-{}/boot/{}/grub.cfg", target_dep,grub))?
+    };
+    let reader = BufReader::new(sfile);
+    let mut gconf = String::new();
+    let mut in_10_linux = false;
+    for line in reader.lines() {
+        let line = line?;
+        if line.contains("BEGIN /etc/grub.d/10_linux") {
+            in_10_linux = true;
+        } else if in_10_linux {
+            if line.contains("}") {
+                gconf.push_str(&line);
+                gconf.push_str("\n### END /etc/grub.d/41_custom ###");
+                break;
+            } else {
+                gconf.push_str(&format!("\n{}",&line));
+            }
+        }
+    }
+
+    // Remove old recovery
+    let gfile = File::open(&grub_cfg)?;
+    let reader = BufReader::new(gfile);
+    let mut ngrub_cfg = String::new();
+    let mut recovery_mode = false;
+    for line in reader.lines() {
+        let line = line?;
+        if line.contains("menuentry 'Recovery Mode'") {
+            recovery_mode = true;
+        } else if recovery_mode {
+            if line.contains("}") {
+                ngrub_cfg.retain(|s| s.to_string() != line);
+                break;
+            } else {
+                ngrub_cfg.retain(|s| s.to_string() != line);
+            }
+        } else {
+            ngrub_cfg.push_str(&format!("\n{}",&line));
+        }
+    }
+    let mut gfile = File::create(&grub_cfg)?;
+    gfile.write_all(ngrub_cfg.as_bytes())?;
+
+    // Remove END of 41_custom
+    let mut contents = String::new();
+    let mut sfile = File::open(&grub_cfg)?;
+    sfile.read_to_string(&mut contents)?;
+    let modified_grub_contents = contents.replace("### END /etc/grub.d/41_custom ###", "");
+    let mut nfile = File::create(&grub_cfg)?;
+    nfile.write_all(modified_grub_contents.as_bytes())?;
+
+    // Change recovery tmp
+    let first_quote_index = gconf.find('\'').unwrap_or(0);
+    let second_quote_index = gconf[first_quote_index + 1..].find('\'').unwrap_or(gconf.len()) + first_quote_index + 1;
+    let updated_line = gconf.replace(&gconf[first_quote_index + 1..second_quote_index], "Recovery Mode");
+    let modified_cfg_contents = if updated_line.contains(&source_dep) {
+        updated_line.replace(&format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,source_dep),
+                             &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep))
+    } else {
+        let src_tmp = if updated_line.contains("deploy-aux") && !updated_line.contains("secondary") {
+            "deploy-aux"
+        } else if updated_line.contains("secondary") && !updated_line.contains("aux") {
+            "deploy-secondary"
+        } else if updated_line.contains("aux-secondary") {
+            "deploy-aux-secondary"
+        } else {
+            "deploy"
+        };
+
+        updated_line.replace(&format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,src_tmp),
+                             &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep))
+    };
+
+    // Write the modified contents back to the file
+    let mut file = OpenOptions::new().append(true)
+                                     .create(true)
+                                     .read(true)
+                                     .open(grub_cfg)?;
+    file.write_all(modified_cfg_contents.as_bytes())?;
+
+    // Umount boot partition
+    umount2(Path::new(&format!("{}", tmp_boot.path().as_os_str().to_str().unwrap())),
+            MntFlags::MNT_DETACH)?;
+
+    Ok(())
+}
+
 // Switch between /tmp deployments
 pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
     let distro_id = detect::distro_id();
     let distro_suffix = &get_distro_suffix(&distro_id);
     let grub = get_grub().unwrap();
     let part = get_part();
+    let rec_tmp = get_recovery_tmp();
     let tmp_boot = TempDir::new_in("/.snapshots/tmp")?;
 
     // Mount boot partition for writing
@@ -2165,7 +2477,7 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
     // Recovery GRUB configurations
     if !reset {
         for boot_location in [&tmp_boot.path().to_str().unwrap()] {
-            // Get grub configurations
+            // Get old grub configurations
             let grub_path = format!("{}/{}/grub.cfg", boot_location, grub);
             let src_file_path = format!("/.snapshots/rootfs/snapshot-{}/boot/{}/grub.cfg", source_dep,grub);
             let sfile = File::open(&src_file_path)?;
@@ -2187,18 +2499,49 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
                 }
             }
 
-            // Remove last line
-            let contents = read_to_string(&grub_path)?;
-            let lines: Vec<&str> = contents.lines().collect();
-            let new_contents = lines[..lines.len() - 1].join("\n");
-            std::fs::write(&grub_path, new_contents)?;
+            // Remove END of 41_custom
+            let mut contents = String::new();
+            let mut sfile = File::open(&grub_path)?;
+            sfile.read_to_string(&mut contents)?;
+            let modified_grub_contents = contents.replace("### END /etc/grub.d/41_custom ###", "");
+            let mut nfile = File::create(&grub_path)?;
+            nfile.write_all(modified_grub_contents.as_bytes())?;
 
             // Open the file in read and write mode
             let mut file = OpenOptions::new().read(true).write(true).append(true).open(&grub_path)?;
 
             // Write the modified content back to the file
-            file.write_all(format!("\n\n{}", gconf).as_bytes())?;
+            file.write_all(format!("\n\n{}", &gconf).as_bytes())?;
+
+            // Add recovery mode
+            if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", rec_tmp)).try_exists().unwrap() {
+                // Remove END of 41_custom
+                let mut contents = String::new();
+                let mut sfile = File::open(&grub_path)?;
+                sfile.read_to_string(&mut contents)?;
+                let modified_grub_contents = contents.replace("### END /etc/grub.d/41_custom ###", "");
+                let mut nfile = File::create(&grub_path)?;
+                nfile.write_all(modified_grub_contents.as_bytes())?;
+
+                let first_quote_index = gconf.find('\'').unwrap_or(0);
+                let second_quote_index = gconf[first_quote_index + 1..].find('\'').unwrap_or(gconf.len()) + first_quote_index + 1;
+                let updated_line = gconf.replace(&gconf[first_quote_index + 1..second_quote_index], "Recovery Mode");
+
+                // Change recovery tmp
+                let gconf = updated_line.replace(&format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,source_dep),
+                                                 &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,rec_tmp));
+
+                // Open the file in read and write mode
+                let mut file = OpenOptions::new().read(true).write(true).append(true).open(&grub_path)?;
+
+                // Write the modified content back to the file
+                file.write_all(format!("\n\n{}", &gconf).as_bytes())?;
+            } else {
+                deploy_recovery()?;
+            }
         }
+    } else {
+        deploy_recovery()?;
     }
 
     // Umount boot partition
@@ -2757,7 +3100,7 @@ pub fn update_etc() -> Result<(), Error> {
 }
 
 // Upgrade snapshot
-pub fn upgrade(snapshot:  &str, baseup: bool) -> Result<(), Error> {
+pub fn upgrade(snapshot:  &str, baseup: bool, noconfirm: bool) -> Result<(), Error> {
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound,
@@ -2777,13 +3120,19 @@ pub fn upgrade(snapshot:  &str, baseup: bool) -> Result<(), Error> {
 
     } else {
         // Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
-        let excode = upgrade_helper(snapshot);
+        let excode = upgrade_helper(snapshot, noconfirm);
         if excode.success() {
             if post_transactions(snapshot).is_ok() {
+                if baseup {
+                    if deploy_recovery().is_err() {
+                        return Err(Error::new(ErrorKind::Other,
+                                              format!("Failed to deploy recovery snapshot")));
+                    }
+                }
                 println!("Snapshot {} upgraded successfully.", snapshot);
             }
         } else {
-            chr_delete(snapshot).unwrap();
+            chr_delete(snapshot)?;
             return Err(Error::new(ErrorKind::Other,
                                   format!("Upgrade failed and changes discarded.")));
         }
