@@ -1,11 +1,13 @@
 use crate::{check_mutability, chr_delete, get_current_snapshot, immutability_disable, immutability_enable, post_transactions,
             prepare, remove_dir_content, snapshot_config_get, sync_time};
 
-use std::fs::{DirBuilder, OpenOptions};
+use rustix::path::Arg;
+use std::fs::{DirBuilder, OpenOptions, read_dir};
 use std::io::{Error, ErrorKind, Write};
 use std::path::Path;
 use std::process::{Command, ExitStatus};
-use rustix::path::Arg;
+use users::get_user_by_name;
+use users::os::unix::UserExt;
 use walkdir::WalkDir;
 
 // Check if AUR is setup right
@@ -111,7 +113,7 @@ pub fn cache_copy(snapshot: &str) -> Result<(), Error> {
 // Fix signature invalid error
 pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
     // Make sure snapshot does exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() && !snapshot.is_empty() {
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Cannot fix package man database as snapshot {} doesn't exist.", snapshot)));
 
@@ -119,8 +121,12 @@ pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
         } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
         return Err(
             Error::new(ErrorKind::Unsupported,
-                       format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock {}'.",
+                       format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
                                snapshot,snapshot)));
+
+    } else if snapshot.is_empty() && get_current_snapshot() == "0" {
+        // Base snapshot unsupported
+        return Err(Error::new(ErrorKind::Unsupported, format!("Snapshot 0 (base) should not be modified.")));
 
     } else if snapshot == "0" {
         // Base snapshot unsupported
@@ -129,7 +135,7 @@ pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
     } else {
         let run_chroot: bool;
         // If snapshot is current running
-        run_chroot = if snapshot == get_current_snapshot() {
+        run_chroot = if snapshot.is_empty() {
             false
         } else {
             true
@@ -146,25 +152,66 @@ pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
         };
 
         // Fix package database
-        prepare(snapshot)?;
+        if run_chroot {
+            prepare(snapshot)?;
+        }
         let mut cmds: Vec<String> = Vec::new();
-        let home_dir = std::env::var_os("HOME").unwrap();
-        cmds.push(format!("rm -rf /etc/pacman.d/gnupg {}/.gnupg", home_dir.to_str().unwrap()));
-        cmds.push(format!("rm -r /var/lib/pacman/sync/*")); // NOTE return No such file or directory!
-        cmds.push(format!("pacman -Syy"));
-        cmds.push(format!("gpg --refresh-keys"));
-        cmds.push(format!("killall gpg-agent"));
-        cmds.push(format!("pacman-key --init"));
-        cmds.push(format!("pacman-key --populate archlinux"));
-        cmds.push(format!("pacman -Syvv --noconfirm archlinux-keyring"));
+        let username = std::env::var_os("SUDO_USER").unwrap();
+        let user = get_user_by_name(&username).unwrap();
+        let home_dir = user.home_dir();
+        let home = home_dir.to_str().unwrap();
+        if run_chroot {
+            let etc_gnupg = format!("/.snapshots/rootfs/snapshot-chr{}/etc/pacman.d/gnupg", snapshot);
+            if Path::new(&etc_gnupg).try_exists().unwrap() && read_dir(&etc_gnupg)?.count() > 0 {
+                cmds.push(format!("rm -rf /etc/pacman.d/gnupg"));
+            }
+            if Path::new(&format!("{}/.gnupg", home)).try_exists().unwrap() && read_dir(&format!("{}/.gnupg", home))?.count() > 0 {
+                cmds.push(format!("rm -rf {}/.gnupg", home));
+            }
+            if Path::new("/var/lib/pacman/sync").try_exists().unwrap() && read_dir("/var/lib/pacman/sync")?.count() > 0 {
+                cmds.push(format!("rm -r /var/lib/pacman/sync/*"));
+            }
+            cmds.push(format!("pacman -Syy"));
+            cmds.push(format!("sudo -u {} gpg --refresh-keys", username.to_str().unwrap()));
+            cmds.push(format!("pacman-key --init"));
+            cmds.push(format!("pacman-key --populate archlinux"));
+            cmds.push(format!("pacman -Syvv --noconfirm archlinux-keyring"));
+        } else {
+            if Path::new("/etc/pacman.d/gnupg").try_exists().unwrap() && read_dir("/etc/pacman.d/gnupg")?.count() > 0 {
+                cmds.push(format!("rm -rf /etc/pacman.d/gnupg"));
+            }
+            if Path::new(&format!("{}/.gnupg", home)).try_exists().unwrap() && read_dir(&format!("{}/.gnupg", home))?.count() > 0 {
+                cmds.push(format!("rm -rf {}/.gnupg", home));
+            }
+            if Path::new("/var/lib/pacman/sync").try_exists().unwrap() && read_dir("/var/lib/pacman/sync")?.count() > 0 {
+                cmds.push(format!("rm -r /var/lib/pacman/sync/*"));
+            }
+            cmds.push(format!("sudo -u {} gpg --refresh-keys", username.to_str().unwrap()));
+            cmds.push(format!("pacman-key --init"));
+            cmds.push(format!("pacman-key --populate archlinux"));
+        }
         for cmd in cmds {
             if run_chroot {
-                Command::new("sh").arg("-c").arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}",
-                                                   snapshot,cmd)).status()?;
+                let run_cmd = Command::new("sh").arg("-c")
+                                                .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}",
+                                                             snapshot,&cmd)).status()?;
+                if !run_cmd.success() {
+                    return Err(Error::new(ErrorKind::Other,
+                                          format!("Run command {} failed", &cmd)));
+                }
             } else {
-                Command::new("sh").arg("-c")
-                                  .arg(cmd).status()?;
+                let run_cmd = Command::new("sh").arg("-c")
+                                  .arg(&cmd).status()?;
+                if !run_cmd.success() {
+                    return Err(Error::new(ErrorKind::Other,
+                                          format!("Run command {} failed", &cmd)));
+                }
             }
+        }
+        if snapshot.is_empty() {
+            let snapshot = get_current_snapshot();
+            prepare(&snapshot)?;
+            refresh_helper(&snapshot).expect("Refresh failed");
         }
 
         // Return snapshot to immutable after fixdb is done if snapshot was immutable
@@ -312,14 +359,20 @@ pub fn pkg_query(pkg: &str) -> Result<ExitStatus, Error> {
 }
 
 // Refresh snapshot atomic-operation
-pub fn refresh_helper(snapshot: &str) -> ExitStatus {
-    let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                       .args(["pacman", "-Syy"]).status().unwrap();
+pub fn refresh_helper(snapshot: &str) -> Result<(), Error> {
+    let refresh = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                        .args(["pacman", "-Syy"])
+                                        .status()?;
     // Avoid invalid or corrupted package (PGP signature) error
     Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                           .args(["pacman", "-S", "--noconfirm", "archlinux-keyring"])
-                          .status().unwrap();
-    excode
+                          .status()
+                          .expect("Failed to install archlinux-keyring");
+    if !refresh.success() {
+        return Err(Error::new(ErrorKind::Other,
+                              "Refresh failed"));
+    }
+    Ok(())
 }
 
 // Show diff of packages between 2 snapshots

@@ -294,7 +294,11 @@ fn main() {
             // Switch distros
             Some(("dist", _matches)) => { //REVIEW
                 // Run switch_distro
-                switch_distro().unwrap();
+                if is_efi() {
+                    switch_distro().unwrap();
+                } else {
+                   eprintln!("dist command is not supported.");
+                }
             }
             // Edit Ash configuration
             Some(("edit", edit_matches)) => {
@@ -324,7 +328,7 @@ fn main() {
                     let snap_to_string = format!("{}", snap);
                     snap_to_string
                 } else {
-                    let snap = get_current_snapshot();
+                    let snap = String::new();
                     snap
                 };
 
@@ -332,6 +336,11 @@ fn main() {
                 let run = fixdb(&snapshot);
                 match run {
                     Ok(_) => {
+                        let snapshot = if snapshot.is_empty() {
+                            get_current_snapshot().to_string()
+                        } else {
+                            snapshot.clone()
+                        };
                         if post_transactions(&snapshot).is_ok() {
                             println!("Snapshot {}'s package manager database fixed successfully.", snapshot);
                         } else {
@@ -339,8 +348,13 @@ fn main() {
                         }
                     },
                     Err(e) => {
+                        let snapshot = if snapshot.is_empty() {
+                            get_current_snapshot().to_string()
+                        } else {
+                            snapshot.clone()
+                        };
                         chr_delete(&snapshot).unwrap();
-                        eprintln!("Fixing package manager database failed due to: {}", e);
+                        eprintln!("{}", e);
                     },
                 }
             }

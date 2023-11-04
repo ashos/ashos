@@ -28,4 +28,5 @@ proc-mounts = "0.3.0"
 rustix = "0.38.8"
 tempfile = "3.8.0"
 time = {version = "0.3.22", features = ["formatting"]}
+users = "0.11.0"
 walkdir = "2.3.3"

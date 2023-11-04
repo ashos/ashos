@@ -975,7 +975,8 @@ pub fn find_new() -> i32 {
 
 // FixDB
 pub fn fixdb(snapshot: &str) -> Result<(), Error> {
-    fix_package_db(snapshot)
+    fix_package_db(snapshot)?;
+    Ok(())
 }
 
 // Get aux tmp
@@ -1531,7 +1532,8 @@ pub fn is_pkg_installed(snapshot: &str, pkg: &str) -> bool {
 
 // Package list
 pub fn list(snapshot: &str, chr: &str) -> Vec<String> {
-    pkg_list(snapshot, chr)
+    let list = pkg_list(snapshot, chr);
+    list
 }
 
 // List sub-volumes for the booted distro only
@@ -1853,7 +1855,7 @@ pub fn refresh(snapshot: &str) -> Result<(), Error> {
         sync_time()?;
         prepare(snapshot)?;
         let excode = refresh_helper(snapshot);
-        if excode.success() {
+        if excode.is_ok() {
             post_transactions(snapshot)?;
             println!("Snapshot {} refreshed successfully.", snapshot);
         } else {
@@ -2238,7 +2240,7 @@ pub fn snapshot_unlock(snapshot: &str) -> Result<(), Error> {
     Ok(())
 }
 
-// Switch between distros
+// Switch between distros //REVIEW
 pub fn switch_distro() -> Result<(), Error>{
     loop {
         let map_tmp_output = Command::new("cat")
