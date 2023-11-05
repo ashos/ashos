@@ -364,15 +364,18 @@ pub fn refresh_helper(snapshot: &str) -> Result<(), Error> {
                                         .args(["pacman", "-Syy"])
                                         .status()?;
     // Avoid invalid or corrupted package (PGP signature) error
-    Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                          .args(["pacman", "-S", "--noconfirm", "archlinux-keyring"])
-                          .status()
-                          .expect("Failed to install archlinux-keyring");
+    let keyring = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                        .args(["pacman", "-S", "--noconfirm", "archlinux-keyring"])
+                                        .status()?;
     if !refresh.success() {
         return Err(Error::new(ErrorKind::Other,
                               "Refresh failed"));
     }
-    Ok(())
+    if !keyring.success() {
+        return Err(Error::new(ErrorKind::Other,
+                              "Failed to install archlinux-keyring"));
+    }
+   Ok(())
 }
 
 // Show diff of packages between 2 snapshots

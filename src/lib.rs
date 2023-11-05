@@ -6,7 +6,7 @@ use crate::detect_distro as detect;
 
 use configparser::ini::Ini;
 use curl::easy::{Easy, HttpVersion, List, SslVersion};
-use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, create_subvolume, CreateSubvolumeFlags,
+use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, /*create_subvolume,*/ /*CreateSubvolumeFlags,*/
                    delete_subvolume, DeleteSubvolumeFlags, set_subvolume_read_only};
 use nix::mount::{mount, MntFlags, MsFlags, umount2};
 use partition_identity::{PartitionID, PartitionSource};
@@ -1140,16 +1140,16 @@ pub fn hollow(snapshot: &str) -> Result<(), Error> {
         return Err(Error::new(ErrorKind::Unsupported, format!("Changing base snapshot is not allowed.")));
 
     } else {
-        // AUR step might be needed and if so make a distro_specific function with steps similar to install_package
-        // Call it hollow_helper and change this accordingly
         prepare(snapshot)?;
         // Mount root
         mount(Some("/"), format!("/.snapshots/rootfs/snapshot-chr{}", snapshot).as_str(),
               Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>)?;
         // Deploy or not
         if yes_no(&format!("Snapshot {} is now hollow! Whenever done, type yes to deploy and no to discard", snapshot)) {
-            post_transactions(snapshot)?;
-            immutability_enable(snapshot)?;
+            posttrans(snapshot)?;
+            if check_mutability(snapshot) {
+                immutability_enable(snapshot)?;
+            }
             deploy(snapshot, false, false)?;
         } else {
             chr_delete(snapshot)?;
@@ -1671,11 +1671,9 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
     Ok(())
 }
 
-// TODO IMPORTANT review 2023 older to revert if hollow introduces issues //NOTE systemd dependent!
+// Hollow  Post transaction function
 pub fn posttrans(snapshot: &str) -> Result<(), Error> {
-    let etc = snapshot;
     let tmp = get_tmp();
-    ash_umounts(snapshot, "chr")?;
     delete_subvolume(Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)),
                      DeleteSubvolumeFlags::empty()).unwrap();
     remove_dir_content(&format!("/.snapshots/etc/etc-chr{}", snapshot))?;
@@ -1683,13 +1681,13 @@ pub fn posttrans(snapshot: &str) -> Result<(), Error> {
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/*", snapshot))
                       .arg(format!("/.snapshots/boot/etc-chr{}", snapshot))
                       .output()?;
-    remove_dir_content(&format!("/.snapshots/var/var-chr{}", snapshot))?;
-    DirBuilder::new().recursive(true)
-                     .create(format!("/.snapshots/var/var-chr{}/lib/systemd", snapshot))?;
-    Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/*", snapshot))
-                      .arg(format!("/.snapshots/var/var-chr{}/lib/systemd", snapshot))
-                      .output()?;
+    //remove_dir_content(&format!("/.snapshots/var/var-chr{}", snapshot))?;
+    //DirBuilder::new().recursive(true)
+                     //.create(format!("/.snapshots/var/var-chr{}/lib/systemd", snapshot))?;
+    //Command::new("cp").args(["-r", "--reflink=auto"])
+                      //.arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/*", snapshot))
+                      //.arg(format!("/.snapshots/var/var-chr{}/lib/systemd", snapshot))
+                      //.output()?;
     Command::new("cp").args(["-r", "-n", "--reflink=auto"])
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg/*", snapshot))
                       .arg("/var/cache/pacman/pkg/")
@@ -1699,33 +1697,37 @@ pub fn posttrans(snapshot: &str) -> Result<(), Error> {
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/boot/*", snapshot))
                       .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
                       .output()?;
-    delete_subvolume(Path::new(&format!("/.snapshots/etc/etc-{}", etc)),
+    delete_subvolume(Path::new(&format!("/.snapshots/etc/etc-{}", snapshot)),
                      DeleteSubvolumeFlags::empty()).unwrap();
-    delete_subvolume(Path::new(&format!("/.snapshots/var/var-{}", etc)),
-                     DeleteSubvolumeFlags::empty()).unwrap();
-    delete_subvolume(Path::new(&format!("/.snapshots/boot/boot-{}", etc)),
+    //delete_subvolume(Path::new(&format!("/.snapshots/var/var-{}", snapshot)),
+                     //DeleteSubvolumeFlags::empty()).unwrap();
+    delete_subvolume(Path::new(&format!("/.snapshots/boot/boot-{}", snapshot)),
                      DeleteSubvolumeFlags::empty()).unwrap();
     create_snapshot(format!("/.snapshots/etc/etc-chr{}", snapshot),
-                    format!("/.snapshots/etc/etc-{}", etc),
+                    format!("/.snapshots/etc/etc-{}", snapshot),
                     CreateSnapshotFlags::READ_ONLY, None).unwrap();
-    create_subvolume(format!("/.snapshots/var/var-{}", etc), CreateSubvolumeFlags::empty(), None).unwrap();
-    DirBuilder::new().recursive(true)
-                     .create(format!("/.snapshots/var/var-{}/lib/systemd", etc))?;
-    Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/var/var-chr{}/lib/systemd/*", snapshot))
-                      .arg(format!("/.snapshots/var/var-{}/lib/systemd", etc))
-                      .output()?;
-    remove_dir_content("/var/lib/systemd/")?;
-    Command::new("cp").args(["-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/*", tmp))
-                      .arg("/var/lib/systemd")
-                      .output()?;
+    //create_subvolume(format!("/.snapshots/var/var-{}", snapshot), CreateSubvolumeFlags::empty(), None).unwrap();
+    //DirBuilder::new().recursive(true)
+                     //.create(format!("/.snapshots/var/var-{}/lib/systemd", snapshot))?;
+    //Command::new("cp").args(["-r", "--reflink=auto"])
+                      //.arg(format!("/.snapshots/var/var-chr{}/lib/systemd/*", snapshot))
+                      //.arg(format!("/.snapshots/var/var-{}/lib/systemd", snapshot))
+                      //.output()?;
+    if Path::new("/var/lib/systemd/").try_exists().unwrap() {
+        remove_dir_content("/var/lib/systemd/")?;
+        Command::new("cp").args(["-r", "--reflink=auto"])
+                          .arg(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/*", tmp))
+                          .arg("/var/lib/systemd")
+                          .output()?;
+    }
     create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
                     format!("/.snapshots/rootfs/snapshot-{}", snapshot),
                     CreateSnapshotFlags::READ_ONLY, None).unwrap();
     create_snapshot(format!("/.snapshots/boot/boot-chr{}", snapshot),
-                    format!("/.snapshots/boot/boot-{}", etc),
+                    format!("/.snapshots/boot/boot-{}", snapshot),
                     CreateSnapshotFlags::READ_ONLY, None).unwrap();
+    umount2(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/.snapshots/rootfs/snapshot-chr{}/", snapshot,snapshot)),
+            MntFlags::MNT_DETACH).unwrap();
     chr_delete(snapshot)?;
     Ok(())
 }
@@ -2143,7 +2145,6 @@ pub fn snapshot_config_edit(snapshot: &str, /*skip_prep: bool, skip_post: bool*/
                           .status()?;
             } else {
             // nano available
-            println!("You can use the default editor by running 'sudo -E ash edit'.");
             if Command::new("sh").arg("-c")
                                  .arg("[ -x \"$(command -v nano)\" ]")
                                  .status().unwrap().success() {
@@ -2242,7 +2243,7 @@ pub fn snapshot_unlock(snapshot: &str) -> Result<(), Error> {
 
 // Switch between distros //REVIEW
 pub fn switch_distro() -> Result<(), Error>{
-    loop {
+    /*loop {
         let map_tmp_output = Command::new("cat")
             .arg("/boot/efi/EFI/map.txt")
             .arg("|")
@@ -2325,7 +2326,7 @@ pub fn switch_distro() -> Result<(), Error>{
         } else {
             eprintln!("Invalid distribution!");
         }
-    }
+    }*/
     Ok(())
 }
 
