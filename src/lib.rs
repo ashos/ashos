@@ -263,7 +263,7 @@ pub fn chroot(snapshot: &str, cmds: Vec<String>) -> Result<(), Error> {
             for  cmd in cmds {
                 if prepare(snapshot).is_ok() {
                     // Run command in chroot
-                    if chroot_exec(&path, &cmd)?.success() {
+                    if chroot_exec(&path, &cmd).is_ok() {
                         // Make sure post_transactions exit properly
                         match post_transactions(snapshot) {
                             Ok(()) => {
@@ -319,9 +319,15 @@ pub fn chroot_check() -> bool {
 }
 
 // Run command in chroot
-pub fn chroot_exec(path: &str,cmd: &str) -> Result<ExitStatus, Error> {
-    let exocde = Command::new("sh").arg("-c").arg(format!("chroot {} {}", path,cmd)).status();
-    exocde
+pub fn chroot_exec(path: &str,cmd: &str) -> Result<(), Error> {
+    let exocde = Command::new("sh").arg("-c").arg(format!("chroot {} {}", path,cmd)).status()?;
+    if !exocde.success() {
+        return Err(
+            Error::new(
+                ErrorKind::Other,
+                format!("Failed to run {}", cmd)));
+    }
+    Ok(())
 }
 
 // Enter chroot
