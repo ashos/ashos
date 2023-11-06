@@ -325,7 +325,7 @@ pub fn chroot_exec(path: &str,cmd: &str) -> Result<(), Error> {
         return Err(
             Error::new(
                 ErrorKind::Other,
-                format!("Failed to run {}", cmd)));
+                format!("Failed to run {}.", cmd)));
     }
     Ok(())
 }
@@ -1151,7 +1151,7 @@ pub fn hollow(snapshot: &str) -> Result<(), Error> {
         mount(Some("/"), format!("/.snapshots/rootfs/snapshot-chr{}", snapshot).as_str(),
               Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>)?;
         // Deploy or not
-        if yes_no(&format!("Snapshot {} is now hollow! Whenever done, type yes to deploy and no to discard", snapshot)) {
+        if yes_no(&format!("Snapshot {} is now hollow! Whenever done, type yes to deploy and no to discard.", snapshot)) {
             posttrans(snapshot)?;
             if check_mutability(snapshot) {
                 immutability_enable(snapshot)?;
@@ -1296,7 +1296,7 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool, 
                               format!("Changing base snapshot is not allowed.")));
     } else {
         // Install profile
-        println!("Updating the system before installing profile {}.", profile);
+        println!("Updating the system before installing {} profile.", profile);
         // Prepare
         auto_upgrade(snapshot)?;
         prepare(snapshot)?;
@@ -1353,9 +1353,9 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
 
     // Prepare
     if user_profile.is_empty() {
-        println!("Updating the system before installing profile {}.", profile);
+        println!("Updating the system before installing {} profile.", profile);
     } else {
-        println!("Updating the system before installing profile {}.", user_profile);
+        println!("Updating the system before installing {} profile.", user_profile);
     }
     ash_mounts(&tmp, "")?;
     if upgrade_helper_live(&tmp).success() {
@@ -2595,7 +2595,7 @@ pub fn sync_time() -> Result<(), Error> {
     let date_header = response_headers_str
         .lines()
         .find(|line| line.starts_with("date:"))
-        .expect("Date header not found");
+        .expect("Date header not found.");
 
     let date_str: Vec<&str> = date_header.split_whitespace().collect();
     let date = &date_str[2..6].join(" ");
@@ -3135,7 +3135,7 @@ pub fn upgrade(snapshot:  &str, baseup: bool, noconfirm: bool) -> Result<(), Err
                 if baseup {
                     if deploy_recovery().is_err() {
                         return Err(Error::new(ErrorKind::Other,
-                                              format!("Failed to deploy recovery snapshot")));
+                                              format!("Failed to deploy recovery snapshot.")));
                     }
                 }
                 println!("Snapshot {} upgraded successfully.", snapshot);
@@ -3170,7 +3170,7 @@ pub fn which_snapshot_has(pkgs: Vec<String>) {
             i += 1;
         }
         if !snapshot.is_empty() {
-            println!("package {} installed in {snapshot:?}", pkg);
+            println!("package {} installed in {snapshot:?}.", pkg);
         }
     }
 }

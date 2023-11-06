@@ -146,7 +146,7 @@ pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
             false
         } else {
             if immutability_disable(snapshot).is_ok() {
-                println!("Snapshot {} successfully made mutable", snapshot);
+                println!("Snapshot {} successfully made mutable.", snapshot);
             }
             true
         };
@@ -197,27 +197,27 @@ pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
                                                              snapshot,&cmd)).status()?;
                 if !run_cmd.success() {
                     return Err(Error::new(ErrorKind::Other,
-                                          format!("Run command {} failed", &cmd)));
+                                          format!("Run command {} failed.", &cmd)));
                 }
             } else {
                 let run_cmd = Command::new("sh").arg("-c")
                                   .arg(&cmd).status()?;
                 if !run_cmd.success() {
                     return Err(Error::new(ErrorKind::Other,
-                                          format!("Run command {} failed", &cmd)));
+                                          format!("Run command {} failed.", &cmd)));
                 }
             }
         }
         if snapshot.is_empty() {
             let snapshot = get_current_snapshot();
             prepare(&snapshot)?;
-            refresh_helper(&snapshot).expect("Refresh failed");
+            refresh_helper(&snapshot).expect("Refresh failed.");
         }
 
         // Return snapshot to immutable after fixdb is done if snapshot was immutable
         if flip {
             if immutability_enable(snapshot).is_ok() {
-                println!("Snapshot {} successfully made immutable", snapshot);
+                println!("Snapshot {} successfully made immutable.", snapshot);
             }
         }
     }
@@ -267,9 +267,13 @@ pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool
             } else {
                 format!("pacman -S --needed --overwrite '/var/*' {}", pkg)
             };
-            Command::new("sh").arg("-c")
-                              .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,pacman_args))
-                              .status()?;
+            let install = Command::new("sh").arg("-c")
+                                            .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,pacman_args))
+                                            .status()?;
+            if !install.success() {
+                return Err(Error::new(ErrorKind::Other,
+                                      format!("Failed to install {}.", pkg)));
+            }
         } else if aur_check(snapshot) {
             // Use paru if aur is enabled
             let paru_args = if noconfirm {
@@ -277,18 +281,22 @@ pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool
             } else {
                 format!("paru -S --needed --overwrite '/var/*' {}", pkg)
             };
-            Command::new("chroot")
+            let install = Command::new("chroot")
                 .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
                 .args(["su", "aur", "-c"])
                 .arg(&paru_args)
                 .status()?;
+            if !install.success() {
+                return Err(Error::new(ErrorKind::Other,
+                                      format!("Failed to install {}.", pkg)));
+            }
         }
 
         // Check if succeeded
-        if !is_package_installed(pkg) {
-            return Err(Error::new(ErrorKind::NotFound,
-                                  format!("Failed to install {}", pkg)));
-        }
+        //if !is_package_installed(pkg) {
+            //return Err(Error::new(ErrorKind::NotFound,
+                                  //format!("Failed to install {}.", pkg)));
+        //}
     }
     Ok(())
 }
@@ -306,10 +314,14 @@ pub fn install_package_helper_live(snapshot: &str, tmp: &str, pkgs: &Vec<String>
             } else {
                 format!("pacman -Sy --overwrite '*' {}", pkg)
             };
-            Command::new("sh")
+            let install = Command::new("sh")
                 .arg("-c")
                 .arg(format!("chroot /.snapshots/rootfs/snapshot-{} {}", tmp,pacman_args))
                 .status()?;
+            if !install.success() {
+                return Err(Error::new(ErrorKind::Other,
+                                      format!("Failed to install {}.", pkg)));
+            }
         } else if aur_check(snapshot) {
             // Use paru if aur is enabled
             let paru_args = if noconfirm {
@@ -317,18 +329,22 @@ pub fn install_package_helper_live(snapshot: &str, tmp: &str, pkgs: &Vec<String>
             } else {
                 format!("paru -Sy --overwrite '*' {}", pkg)
             };
-            Command::new("chroot")
+            let install = Command::new("chroot")
                 .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
                 .args(["su", "aur", "-c"])
                 .arg(&paru_args)
                 .status()?;
+            if !install.success() {
+                return Err(Error::new(ErrorKind::Other,
+                                      format!("Failed to install {}.", pkg)));
+            }
         }
 
         // Check if succeeded
-        if !is_package_installed(pkg) {
-            return Err(Error::new(ErrorKind::NotFound,
-                                  format!("Failed to install {}", pkg)));
-        }
+        //if !is_package_installed(pkg) {
+            //return Err(Error::new(ErrorKind::NotFound,
+                                  //format!("Failed to install {}.", pkg)));
+        //}
     }
     Ok(())
 }
@@ -369,11 +385,11 @@ pub fn refresh_helper(snapshot: &str) -> Result<(), Error> {
                                         .status()?;
     if !refresh.success() {
         return Err(Error::new(ErrorKind::Other,
-                              "Refresh failed"));
+                              "Refresh failed."));
     }
     if !keyring.success() {
         return Err(Error::new(ErrorKind::Other,
-                              "Failed to install archlinux-keyring"));
+                              "Failed to update archlinux-keyring."));
     }
    Ok(())
 }
@@ -465,7 +481,7 @@ pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: b
         // Check if package installed
         if !is_package_installed(pkg) {
             return Err(Error::new(ErrorKind::NotFound,
-                                  format!("Package {} is not installed", pkg)));
+                                  format!("Package {} is not installed.", pkg)));
         } else {
             let pacman_args = if noconfirm {
                 ["pacman", "--noconfirm", "-Rns"]
@@ -473,15 +489,20 @@ pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: b
                 ["pacman", "--confirm", "-Rns"]
             };
 
-            Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                  .args(pacman_args)
-                                  .arg(format!("{}", pkg)).status()?;
+            let uninstall = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                                  .args(pacman_args)
+                                                  .arg(format!("{}", pkg)).status()?;
+
+            if !uninstall.success() {
+                return Err(Error::new(ErrorKind::Other,
+                                      format!("Failed to uninstall {}.", pkg)));
+            }
 
             // Check if package uninstalled successfully
-            if is_package_installed(pkg) {
-                return Err(Error::new(ErrorKind::AlreadyExists,
-                                      format!("Failed to uninstall {}", pkg)));
-            }
+            //if is_package_installed(pkg) {
+                //return Err(Error::new(ErrorKind::AlreadyExists,
+                                      //format!("Failed to uninstall {}.", pkg)));
+            //}
         }
     }
     Ok(())
@@ -493,7 +514,7 @@ pub fn uninstall_package_helper_live(tmp: &str, pkgs: &Vec<String>, noconfirm: b
         // Check if package installed
         if !is_package_installed(pkg) {
             return Err(Error::new(ErrorKind::NotFound,
-                                  format!("Package {} is not installed", pkg)));
+                                  format!("Package {} is not installed.", pkg)));
         } else {
             let pacman_args = if noconfirm {
                 ["pacman", "--noconfirm", "-Rns"]
@@ -501,15 +522,20 @@ pub fn uninstall_package_helper_live(tmp: &str, pkgs: &Vec<String>, noconfirm: b
                 ["pacman", "--confirm", "-Rns"]
             };
 
-            Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
-                                  .args(pacman_args)
-                                  .arg(format!("{}", pkg)).status()?;
+            let uninstall = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
+                                                  .args(pacman_args)
+                                                  .arg(format!("{}", pkg)).status()?;
+
+            if !uninstall.success() {
+                return Err(Error::new(ErrorKind::Other,
+                                      format!("Failed to uninstall {}.", pkg)));
+            }
 
             // Check if package uninstalled successfully
-            if is_package_installed(pkg) {
-                return Err(Error::new(ErrorKind::AlreadyExists,
-                                      format!("Failed to uninstall {}", pkg)));
-            }
+            //if is_package_installed(pkg) {
+                //return Err(Error::new(ErrorKind::AlreadyExists,
+                                      //format!("Failed to uninstall {}", pkg)));
+            //}
         }
     }
     Ok(())
