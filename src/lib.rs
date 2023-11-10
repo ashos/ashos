@@ -1275,8 +1275,13 @@ pub fn install_live(pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
 fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool, /*section_only: Option<String>,*/
                    user_profile: &str, noconfirm: bool) -> Result<bool, Error> {
     // Get some values
-    let dist = detect::distro_id();
-    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist);
+    let distro = detect::distro_id();
+    let dist_name = if distro.contains("_ashos") {
+        distro.replace("_ashos", "")
+    } else {
+        distro
+    };
+    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist_name);
 
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
@@ -1296,7 +1301,7 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool, 
                               format!("Changing base snapshot is not allowed.")));
     } else {
         // Install profile
-        println!("Updating the system before installing {} profile.", profile);
+        println!("Updating the system before installing {} profile...", profile);
         // Prepare
         auto_upgrade(snapshot)?;
         prepare(snapshot)?;
@@ -1306,14 +1311,17 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool, 
         profconf.set_comment_symbols(&['#']);
         profconf.set_multiline(true);
         // Load profile if exist
-        if !Path::new(&cfile).try_exists().unwrap() && !force && user_profile.is_empty() {
+        if Path::new(&cfile).try_exists().unwrap() && !force && user_profile.is_empty() {
             profconf.load(&cfile).unwrap();
         } else if force {
-            println!("Installing AshOS profiles.");
+            println!("Installing AshOS profiles...");
             install_package_helper(snapshot, &vec!["ash-profiles".to_string()], true)?;
             profconf.load(&cfile).unwrap();
         } else if !user_profile.is_empty() {
             profconf.load(user_profile).unwrap();
+        } else if !Path::new(&cfile).try_exists().unwrap() && !force {
+            return Err(Error::new(ErrorKind::NotFound,
+                                  format!("Please install ash-profiles package.")));
         }
 
         // Read presets section in configuration file
@@ -1347,15 +1355,20 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool, 
 // Install profile in live snapshot
 fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile: &str, noconfirm: bool) -> Result<(), Error> {
     // Get some values
-    let dist = detect::distro_id();
-    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist);
+    let distro = detect::distro_id();
+    let dist_name = if distro.contains("_ashos") {
+        distro.replace("_ashos", "")
+    } else {
+        distro
+    };
+    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist_name);
     let tmp = get_tmp();
 
     // Prepare
     if user_profile.is_empty() {
-        println!("Updating the system before installing {} profile.", profile);
+        println!("Updating the system before installing {} profile...", profile);
     } else {
-        println!("Updating the system before installing {} profile.", user_profile);
+        println!("Updating the system before installing {} profile...", user_profile);
     }
     ash_mounts(&tmp, "")?;
     if upgrade_helper_live(&tmp).success() {
@@ -1366,14 +1379,17 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
         profconf.set_multiline(true);
 
         // Load profile if exist
-        if !Path::new(&cfile).try_exists().unwrap() && !force && user_profile.is_empty() {
+        if Path::new(&cfile).try_exists().unwrap() && !force && user_profile.is_empty() {
             profconf.load(&cfile).unwrap();
         } else if force {
-            println!("Installing AshOS profiles.");
+            println!("Installing AshOS profiles...");
             install_package_helper_live(snapshot, &tmp, &vec!["ash-profiles".to_string()], true)?;
             profconf.load(&cfile).unwrap();
         } else if !user_profile.is_empty() {
             profconf.load(user_profile).unwrap();
+        } else if !Path::new(&cfile).try_exists().unwrap() && !force {
+            return Err(Error::new(ErrorKind::NotFound,
+                                  format!("Please install ash-profiles package.")));
         }
 
         // Read presets section in configuration file
@@ -1424,21 +1440,25 @@ pub fn install_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &s
     if !live {
         // Install profile
         if !profile.is_empty() {
-            let excode = install_profile(snapshot, profile, force, secondary, user_profile, true);
+            let excode = install_profile(snapshot, profile, force, secondary, user_profile, noconfirm);
             match excode {
                 Ok(secondary) => {
                     if post_transactions(snapshot).is_ok() {
                         println!("Profile {} installed in snapshot {} successfully.", p,snapshot);
-                        println!("Deploying snapshot {}.", snapshot);
-                        if deploy(snapshot, secondary, false).is_ok() {
-                            println!("Snapshot {} deployed to '/'.", snapshot);
+                        if yes_no(
+                            &format!
+                                ("Would you like to proceed with the deployment of snapshot {}?", snapshot)) {
+                            if deploy(snapshot, secondary, false).is_ok() {
+                                println!("Snapshot {} deployed to '/'.", snapshot);
+                            }
                         }
                     } else {
                         chr_delete(snapshot)?;
                         eprintln!("Install failed and changes discarded!");
                     }
                 },
-                Err(_) => {
+                Err(e) => {
+                    eprintln!("{}",e);
                     chr_delete(snapshot)?;
                     eprintln!("Install failed and changes discarded!");
                 },
@@ -1454,21 +1474,23 @@ pub fn install_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &s
 
         } else if !user_profile.is_empty() {
             // Install user_profile
-            let excode = install_profile(snapshot, profile, force, secondary, user_profile, true);
+            let excode = install_profile(snapshot, profile, force, secondary, user_profile, noconfirm);
             match excode {
                 Ok(secondary) => {
                     if post_transactions(snapshot).is_ok() {
                         println!("Profile {} installed in snapshot {} successfully.", p,snapshot);
-                        println!("Deploying snapshot {}.", snapshot);
-                        if deploy(snapshot, secondary, false).is_ok() {
-                            println!("Snapshot {} deployed to '/'.", snapshot);
+                        if yes_no(&format!("Would you like to proceed with the deployment of snapshot {}?", snapshot)) {
+                            if deploy(snapshot, secondary, false).is_ok() {
+                                println!("Snapshot {} deployed to '/'.", snapshot);
+                            }
                         }
                     } else {
                         chr_delete(snapshot)?;
                         eprintln!("Install failed and changes discarded!");
                     }
                 },
-                Err(_) => {
+                Err(e) => {
+                    eprintln!("{}",e);
                     chr_delete(snapshot)?;
                     eprintln!("Install failed and changes discarded!");
                 },
@@ -1482,7 +1504,7 @@ pub fn install_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &s
         // Do live install only if: live flag is used OR target snapshot is current
         if !profile.is_empty() {
             // Live profile installation
-            let excode = install_profile_live(snapshot, profile, force, user_profile, true);
+            let excode = install_profile_live(snapshot, profile, force, user_profile, noconfirm);
             match excode {
                 Ok(_) => println!("Profile {} installed in current/live snapshot.", p),
                 Err(e) => eprintln!("{}", e),
@@ -1498,7 +1520,7 @@ pub fn install_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &s
 
         } else if !user_profile.is_empty() {
             // Live user_profile installation
-            let excode = install_profile_live(snapshot, profile, force, user_profile, true);
+            let excode = install_profile_live(snapshot, profile, force, user_profile, noconfirm);
             match excode {
                 Ok(_) => println!("Profile {} installed in current/live snapshot.", p),
                 Err(e) => eprintln!("{}", e),
@@ -2248,7 +2270,7 @@ pub fn snapshot_unlock(snapshot: &str) -> Result<(), Error> {
 }
 
 // Switch between distros //REVIEW
-pub fn switch_distro() -> Result<(), Error>{
+pub fn efi_boot_order() -> Result<(), Error>{
     /*loop {
         let map_tmp_output = Command::new("cat")
             .arg("/boot/efi/EFI/map.txt")
@@ -2843,8 +2865,13 @@ pub fn uninstall_live(pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> 
 // Uninstall a profile from a text file
 fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfirm: bool) -> Result<(), Error> {
     // Get some values
-    let dist = detect::distro_id();
-    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist);
+    let distro = detect::distro_id();
+    let dist_name = if distro.contains("_ashos") {
+        distro.replace("_ashos", "")
+    } else {
+        distro
+    };
+    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist_name);
 
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
@@ -2872,7 +2899,7 @@ fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfir
         profconf.set_comment_symbols(&['#']);
         profconf.set_multiline(true);
         // Load profile if exist
-        if !Path::new(&cfile).try_exists().unwrap() && user_profile.is_empty() {
+        if Path::new(&cfile).try_exists().unwrap() && user_profile.is_empty() {
             profconf.load(&cfile).unwrap();
         } else if !user_profile.is_empty() {
             profconf.load(user_profile).unwrap();
@@ -2901,8 +2928,13 @@ fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfir
 // Uninstall profile in live snapshot
 fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noconfirm: bool) -> Result<(), Error> {
     // Get some values
-    let dist = detect::distro_id();
-    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist);
+    let distro = detect::distro_id();
+    let dist_name = if distro.contains("_ashos") {
+        distro.replace("_ashos", "")
+    } else {
+        distro
+    };
+    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist_name);
     let tmp = get_tmp();
 
     // Prepare
@@ -2956,7 +2988,7 @@ pub fn uninstall_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: 
     if !live {
         // Uninstall profile
         if !profile.is_empty() {
-            let excode = uninstall_profile(snapshot, profile, user_profile, true);
+            let excode = uninstall_profile(snapshot, profile, user_profile, noconfirm);
             match excode {
                 Ok(_) => {
                     if post_transactions(snapshot).is_ok() {
@@ -2966,7 +2998,8 @@ pub fn uninstall_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: 
                         eprintln!("Uninstall failed and changes discarded!");
                     }
                 },
-                Err(_) => {
+                Err(e) => {
+                    eprintln!("{}",e);
                     chr_delete(snapshot)?;
                     eprintln!("Uninstall failed and changes discarded!");
                 },
@@ -2978,7 +3011,7 @@ pub fn uninstall_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: 
 
         } else if !user_profile.is_empty() {
             // Uninstall user_profile
-            let excode = uninstall_profile(snapshot, profile, user_profile, true);
+            let excode = uninstall_profile(snapshot, profile, user_profile, noconfirm);
             match excode {
                 Ok(_) => {
                     if post_transactions(snapshot).is_ok() {
@@ -2988,7 +3021,8 @@ pub fn uninstall_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: 
                         eprintln!("Uninstall failed and changes discarded!");
                     }
                 },
-                Err(_) => {
+                Err(e) => {
+                    eprintln!("{}",e);
                     chr_delete(snapshot)?;
                     eprintln!("uninstall failed and changes discarded!");
                 },
@@ -3003,7 +3037,7 @@ pub fn uninstall_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: 
         // Do live uninstall only if: live flag is used OR target snapshot is current
         if !profile.is_empty() {
             // Live profile uninstall
-            let excode = uninstall_profile_live(snapshot, profile, user_profile, true);
+            let excode = uninstall_profile_live(snapshot, profile, user_profile, noconfirm);
             match excode {
                 Ok(_) => println!("Profile {} removed from current/live snapshot.", p),
                 Err(e) => eprintln!("{}", e),
@@ -3019,7 +3053,7 @@ pub fn uninstall_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: 
 
         } else if !user_profile.is_empty() {
             // Live user_profile uninstall
-            let excode = uninstall_profile_live(snapshot, profile, user_profile, true);
+            let excode = uninstall_profile_live(snapshot, profile, user_profile, noconfirm);
             match excode {
                 Ok(_) => println!("Profile {} removed from current/live snapshot.", p),
                 Err(e) => eprintln!("{}", e),

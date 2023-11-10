@@ -292,12 +292,12 @@ fn main() {
                 diff(&snapshot1, &snapshot2);
             }
             // Switch distros
-            Some(("dist", _matches)) => { //REVIEW
-                // Run switch_distro
+            Some(("efi-update", _matches)) => { //REVIEW
+                // Run efi_boot_order
                 if is_efi() {
-                    switch_distro().unwrap();
+                    efi_boot_order().unwrap();
                 } else {
-                   eprintln!("dist command is not supported.");
+                   eprintln!("efi-update command is not supported.");
                 }
             }
             // Edit Ash configuration
@@ -463,7 +463,7 @@ fn main() {
                 let live = install_matches.get_flag("live");
                 let noconfirm = install_matches.get_flag("noconfirm");
                 let force = install_matches.get_flag("force");
-                let  secondary= install_matches.get_flag("secondary");
+                let secondary = install_matches.get_flag("secondary");
 
                 // Run install_triage
                 install_triage(&snapshot, live, pkgs, &profile, force, &user_profile, noconfirm, secondary).unwrap();

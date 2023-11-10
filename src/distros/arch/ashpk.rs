@@ -258,10 +258,15 @@ pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool
     prepare(snapshot)?;
     for pkg in pkgs {
         // This extra pacman check is to avoid unwantedly triggering AUR if package is official
-        let excode = Command::new("pacman").arg("-Si")
-                                           .arg(format!("{}", pkg))
-                                           .output()?; // --sysroot
-        if excode.status.success() {
+        let pacman_si_arg = format!("pacman -Si {}", pkg);
+        let excode = Command::new("sh").arg("-c")
+                                       .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,pacman_si_arg))
+                                       .output()?; // --sysroot
+        let pacman_sg_arg = format!("pacman -Sg {}", pkg);
+        let excode_group = Command::new("sh").arg("-c")
+                                             .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,pacman_sg_arg))
+                                             .output()?;
+        if excode.status.success() || excode_group.status.success() {
             let pacman_args = if noconfirm {
                 format!("pacman -S --noconfirm --needed --overwrite '/var/*' {}", pkg)
             } else {
@@ -290,13 +295,10 @@ pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool
                 return Err(Error::new(ErrorKind::Other,
                                       format!("Failed to install {}.", pkg)));
             }
+        } else if !aur_check(snapshot) {
+            return Err(Error::new(ErrorKind::NotFound,
+                                  "Please enable AUR."));
         }
-
-        // Check if succeeded
-        //if !is_package_installed(pkg) {
-            //return Err(Error::new(ErrorKind::NotFound,
-                                  //format!("Failed to install {}.", pkg)));
-        //}
     }
     Ok(())
 }
@@ -308,7 +310,10 @@ pub fn install_package_helper_live(snapshot: &str, tmp: &str, pkgs: &Vec<String>
         let excode = Command::new("pacman").arg("-Si")
                                            .arg(format!("{}", pkg))
                                            .output()?; // --sysroot
-        if excode.status.success() {
+        let excode_group = Command::new("pacman").arg("-Sg")
+                                                 .arg(format!("{}", pkg))
+                                                 .output()?;
+        if excode.status.success() || excode_group.status.success() {
             let pacman_args = if noconfirm {
                 format!("pacman -Sy --noconfirm --overwrite '*' {}", pkg)
             } else {
@@ -339,20 +344,32 @@ pub fn install_package_helper_live(snapshot: &str, tmp: &str, pkgs: &Vec<String>
                                       format!("Failed to install {}.", pkg)));
             }
         }
-
-        // Check if succeeded
-        //if !is_package_installed(pkg) {
-            //return Err(Error::new(ErrorKind::NotFound,
-                                  //format!("Failed to install {}.", pkg)));
-        //}
     }
     Ok(())
 }
 
 // Check if package installed
-fn is_package_installed(pkg: &str) -> bool {
+fn is_package_installed(snapshot: &str, pkg: &str) -> bool {
+    let pacman_q = format!("pacman -Q {}", pkg);
+    let is_installed = Command::new("sh").arg("-c")
+                                         .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,pacman_q))
+                                         .output().unwrap();
+    let pacman_qg = format!("pacman -Qg {}", pkg);
+    let is_group_installed = Command::new("sh").arg("-c")
+                                               .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,pacman_qg))
+                                               .output().unwrap();
+    if is_installed.status.success() || is_group_installed.status.success() {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+// Check if package installed in live snapshot
+fn is_package_installed_live(pkg: &str) -> bool {
     let is_installed = Command::new("pacman").arg("-Q").arg(pkg).output();
-    if is_installed.unwrap().status.success() {
+    /*let is_group_installed =*/ Command::new("pacman").arg("-Qg").arg(pkg).status().unwrap();
+    if is_installed.unwrap().status.success() /*|| is_group_installed.unwrap().status.success()*/ {
         return true;
     } else {
         return false;
@@ -479,7 +496,7 @@ pub fn tree_sync_helper(s_f: &str, s_t: &str, chr: &str) -> Result<(), Error>  {
 pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     for pkg in pkgs {
         // Check if package installed
-        if !is_package_installed(pkg) {
+        if !is_package_installed(snapshot, pkg) {
             return Err(Error::new(ErrorKind::NotFound,
                                   format!("Package {} is not installed.", pkg)));
         } else {
@@ -497,12 +514,6 @@ pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: b
                 return Err(Error::new(ErrorKind::Other,
                                       format!("Failed to uninstall {}.", pkg)));
             }
-
-            // Check if package uninstalled successfully
-            //if is_package_installed(pkg) {
-                //return Err(Error::new(ErrorKind::AlreadyExists,
-                                      //format!("Failed to uninstall {}.", pkg)));
-            //}
         }
     }
     Ok(())
@@ -512,7 +523,7 @@ pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: b
 pub fn uninstall_package_helper_live(tmp: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     for pkg in pkgs {
         // Check if package installed
-        if !is_package_installed(pkg) {
+        if !is_package_installed_live(pkg) {
             return Err(Error::new(ErrorKind::NotFound,
                                   format!("Package {} is not installed.", pkg)));
         } else {
@@ -530,12 +541,6 @@ pub fn uninstall_package_helper_live(tmp: &str, pkgs: &Vec<String>, noconfirm: b
                 return Err(Error::new(ErrorKind::Other,
                                       format!("Failed to uninstall {}.", pkg)));
             }
-
-            // Check if package uninstalled successfully
-            //if is_package_installed(pkg) {
-                //return Err(Error::new(ErrorKind::AlreadyExists,
-                                      //format!("Failed to uninstall {}", pkg)));
-            //}
         }
     }
     Ok(())

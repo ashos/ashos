@@ -212,8 +212,8 @@ pub fn cli() -> Command {
                          .required(true)
                          .help("target snapshot"),),)
         // Switch distros
-        .subcommand(Command::new("dist")
-                    .alias("distro")
+        .subcommand(Command::new("efi-update")
+                    .aliases(["efiup", "update-efi"])
                     .about("Switch to another distribution"))
         // Edit Ash configuration
         .subcommand(Command::new("edit")
@@ -325,7 +325,7 @@ pub fn cli() -> Command {
                          .short('P')
                          .value_parser(clap::value_parser!(String))
                          .required_unless_present_any(["PACKAGE", "USER_PROFILE"])
-                         .conflicts_with_all(["PACKAGE", "noconfirm"])
+                         .conflicts_with("PACKAGE")
                          .help("profile(s) to be installed"),)
                     .arg(Arg::new("USER_PROFILE")
                          .long("user-profile")
@@ -333,7 +333,7 @@ pub fn cli() -> Command {
                          .short('U')
                          .value_parser(clap::value_parser!(String))
                          .required_unless_present_any(["PACKAGE", "PROFILE"])
-                         .conflicts_with_all(["PACKAGE", "PROFILE", "noconfirm"])
+                         .conflicts_with_all(["PACKAGE", "PROFILE"])
                          .help("profile(s) to be installed"),),)
         // Package list
         .subcommand(Command::new("list")
@@ -534,7 +534,7 @@ pub fn cli() -> Command {
                          .short('P')
                          .value_parser(clap::value_parser!(String))
                          .required_unless_present_any(["PACKAGE", "USER_PROFILE"])
-                         .conflicts_with_all(["PACKAGE", "noconfirm"])
+                         .conflicts_with("PACKAGE")
                          .help("profile(s) to be uninstalled"),)
                     .arg(Arg::new("USER_PROFILE")
                          .long("user-profile")
@@ -542,7 +542,7 @@ pub fn cli() -> Command {
                          .short('U')
                          .value_parser(clap::value_parser!(String))
                          .required_unless_present_any(["PACKAGE", "PROFILE"])
-                         .conflicts_with_all(["PACKAGE", "PROFILE", "noconfirm"])
+                         .conflicts_with_all(["PACKAGE", "PROFILE"])
                          .help("profile(s) to be uninstalled"),),)
         // Unlock a snapshot
         .subcommand(Command::new("unlock")
