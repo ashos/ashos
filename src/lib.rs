@@ -1371,7 +1371,7 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
         println!("Updating the system before installing {} profile...", user_profile);
     }
     ash_mounts(&tmp, "")?;
-    if upgrade_helper_live(&tmp).success() {
+    if upgrade_helper_live(&tmp, noconfirm).is_ok() {
 
         // profile configurations
         let mut profconf = Ini::new();
@@ -1500,8 +1500,9 @@ pub fn install_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: &s
     } else if live && snapshot != get_current_snapshot() {
         // Prevent live option if snapshot is not current snapshot
         eprintln!("Can't use the live option with any other snapshot than the current one.");
+
+    // Do live install only if: live flag is used OR target snapshot is current
     } else if live && snapshot == get_current_snapshot() {
-        // Do live install only if: live flag is used OR target snapshot is current
         if !profile.is_empty() {
             // Live profile installation
             let excode = install_profile_live(snapshot, profile, force, user_profile, noconfirm);
@@ -2946,7 +2947,7 @@ fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noco
     profconf.set_multiline(true);
 
     // Load profile if exist
-    if !Path::new(&cfile).try_exists().unwrap() && user_profile.is_empty() {
+    if Path::new(&cfile).try_exists().unwrap() && user_profile.is_empty() {
         profconf.load(&cfile).unwrap();
     } else if !user_profile.is_empty() {
         profconf.load(user_profile).unwrap();
@@ -2958,7 +2959,7 @@ fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noco
         for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
             pkgs.push(pkg.to_string());
         }
-        // Install package(s)
+        // Uninstall package(s)
         uninstall_package_helper_live(&tmp, &pkgs, noconfirm)?;
     }
 
@@ -3033,8 +3034,8 @@ pub fn uninstall_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: 
         // Prevent live Uninstall except for current snapshot
         eprintln!("Can't use the live option with any other snapshot than the current one.");
 
+    // Do live uninstall only if: live flag is used OR target snapshot is current
     } else if live && snapshot == get_current_snapshot() {
-        // Do live uninstall only if: live flag is used OR target snapshot is current
         if !profile.is_empty() {
             // Live profile uninstall
             let excode = uninstall_profile_live(snapshot, profile, user_profile, noconfirm);
@@ -3164,7 +3165,7 @@ pub fn upgrade(snapshot:  &str, baseup: bool, noconfirm: bool) -> Result<(), Err
     } else {
         // Default upgrade behaviour is now "safe" update, meaning failed updates get fully discarded
         let excode = upgrade_helper(snapshot, noconfirm);
-        if excode.success() {
+        if excode.is_ok() {
             if post_transactions(snapshot).is_ok() {
                 if baseup {
                     if deploy_recovery().is_err() {
