@@ -552,7 +552,7 @@ pub fn upgrade_helper(snapshot: &str, noconfirm: bool) -> Result<(), Error> {
 }
 
 // Live upgrade snapshot atomic-operation
-pub fn upgrade_helper_live(snapshot: &str, noconfirm: bool) -> Result<(), Error> {
+pub fn upgrade_helper_live(tmp: &str, noconfirm: bool) -> Result<(), Error> {
     // Avoid invalid or corrupted package (PGP signature) error
     let pacman_args = if noconfirm {
         ["pacman", "--noconfirm", "-Syy", "archlinux-keyring"]
@@ -560,22 +560,22 @@ pub fn upgrade_helper_live(snapshot: &str, noconfirm: bool) -> Result<(), Error>
         ["pacman", "--confirm", "-Syy", "archlinux-keyring"]
     };
 
-    Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
+    Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
                           .args(pacman_args)
                           .status().unwrap();
-    if !aur_check(snapshot) {
+    if !aur_check(tmp) {
         let pacman_args = if noconfirm {
             ["pacman", "--noconfirm", "-Syyu"]
         } else {
             ["pacman", "--confirm", "-Syyu"]
         };
 
-        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}", snapshot))
+        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
                                            .args(pacman_args)
                                            .status().unwrap();
         if !excode.success() {
             return Err(Error::new(ErrorKind::Other,
-                                  format!("Failed to upgrade snapshot {}.", snapshot)));
+                                  "Failed to upgrade current/live snapshot."));
         }
     } else {
         let paru_args = if noconfirm {
@@ -587,11 +587,11 @@ pub fn upgrade_helper_live(snapshot: &str, noconfirm: bool) -> Result<(), Error>
         let excode = Command::new("sh")
             .arg("-c")
             .arg(format!("chroot /.snapshots/rootfs/snapshot-{} su aur -c '{}'",
-                         snapshot,paru_args))
+                         tmp,paru_args))
             .status().unwrap();
         if !excode.success() {
             return Err(Error::new(ErrorKind::Other,
-                                  format!("Failed to upgrade snapshot {}.", snapshot)));
+                                  "Failed to upgrade current/live snapshot."));
         }
     }
     Ok(())
