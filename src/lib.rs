@@ -2141,6 +2141,8 @@ pub fn snapshot_base_new(desc: &str) -> Result<i32, Error> {
 
     // Add to root tree
     append_base_tree(&tree, i).unwrap();
+    // Save tree to fstree
+    write_tree(&tree)?;
     // Write description
     if desc.is_empty() {
         write_desc(&i.to_string(), "clone of base.", true).unwrap();
