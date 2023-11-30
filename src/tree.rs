@@ -218,30 +218,30 @@ pub fn tree_print(tree: &PyObject) {
         if Path::new(&format!("/.snapshots/ash/snapshots/{}-desc", node.getattr(py, "name").unwrap().to_string())).is_file() {
             let desc = read_to_string(format!("/.snapshots/ash/snapshots/{}-desc", node.getattr(py, "name").unwrap().to_string())).unwrap();
             if snapshot != node.getattr(py, "name").unwrap().to_string() {
-                println!("{}{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
+                println!("{}{} - {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
             } else {
-                println!("{}*{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
+                println!("{}{}*- {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
             }
         } else if node.getattr(py, "name").unwrap().to_string() == "0" {
             let desc = "base snapshot";
             if snapshot != node.getattr(py, "name").unwrap().to_string() {
-                println!("{}{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
+                println!("{}{} - {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
             } else {
-                println!("{}*{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
+                println!("{}{}*- {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
             }
         } else if node.getattr(py, "name").unwrap().to_string() == "root" {
             let desc = "";
             if snapshot != node.getattr(py, "name").unwrap().to_string() {
                 println!("{}{} {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
             } else {
-                println!("{}*{} {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
+                println!("{}{} {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
             }
         } else {
             let desc = "";
             if snapshot != node.getattr(py, "name").unwrap().to_string() {
-                println!("{}{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
+                println!("{}{} - {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
             } else {
-                println!("{}*{} is {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
+                println!("{}{}*- {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
             }
         }
     }

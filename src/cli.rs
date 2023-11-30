@@ -413,7 +413,7 @@ pub fn cli() -> Command {
                          .required(false)
                          .help("snapshot number"),)
                     .arg(Arg::new("force")
-                         .aliases(["force", "force-offline"])
+                         .alias("force-offline")
                          .short('f')
                          .action(ArgAction::SetTrue)
                          .required(false)
