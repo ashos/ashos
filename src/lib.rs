@@ -693,6 +693,13 @@ pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<(), Error>
                           .arg(format!("/.snapshots/etc/etc-{}/.", snapshot))
                           .arg(format!("/.snapshots/rootfs/snapshot-{}/etc", tmp))
                           .output()?;
+        //if reset {
+            //std::fs::remove_dir_all("/var")?;
+            //Command::new("cp").args(["-r", "--reflink=auto"])
+                              //.arg(format!("/.snapshots/rootfs/snapshot-{}/var/.", snapshot))
+                              //.arg("/var")
+                              //.output()?;
+        //}
 
         // If snapshot is mutable, modify '/' entry in fstab to read-write
         if check_mutability(snapshot) {
@@ -2745,44 +2752,44 @@ pub fn tree_sync(treename: &str, force_offline: bool, live: bool) -> Result<(), 
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Cannot sync as tree {} doesn't exist.", treename)));
 
+    // Make sure snapshot is not in use by another ash process
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", treename)).try_exists().unwrap() {
+        return Err(Error::new(ErrorKind::Other,
+                              format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
+                                      treename, treename)));
     } else {
         // Syncing tree automatically updates it, unless 'force-sync' is used
         if !force_offline {
-            tree_upgrade(treename)?;
+            if tree_upgrade(treename).is_err() {
+                return Err(Error::new(ErrorKind::Other,
+                                      format!("Failed to upgrade tree {}.", treename)));
+            }
         }
 
         // Import tree file
         let tree = fstree().unwrap();
 
-        let mut order = recurse_tree(&tree, treename);
-        if order.len() > 2 {
-            order.remove(0);
-            order.remove(0);
-        }
-        loop {
-            if order.len() < 2 {
-                break;
-            }
-            let snap_from = &order[0];
-            let snap_to = &order[1];
-            println!("{}, {}", snap_from, snap_to);
-            if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snap_to)).try_exists().unwrap() {
-                eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.", snap_to,snap_to);
-                eprintln!("Tree sync canceled.");
-            } else {
-                prepare(snap_to)?;
-                // Pre-sync
-                tree_sync_helper(snap_from, snap_to, "chr")?;
-                // Live sync
-                if live && snap_to == &get_current_snapshot() {
-                    // Post-sync
-                    tree_sync_helper(snap_from, &get_tmp(), "")?;
+        let order = recurse_tree(&tree, treename);
+        for branch in order {
+            if branch != treename {
+                println!("{}, {}", treename, branch);
+                if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", branch)).try_exists().unwrap() {
+                    return Err(Error::new(ErrorKind::Other,
+                                          format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
+                                                  branch, branch)));
+                } else {
+                    prepare(&branch)?;
+                    // Pre-sync
+                    tree_sync_helper(treename, &branch, "chr")?;
+                    // Live sync
+                    if live && &branch == &get_current_snapshot() {
+                        // Post-sync
+                        tree_sync_helper(&branch, &get_tmp(), "")?;
+                    }
+                    // Moved here from the line immediately after first sync_tree_helper
+                    post_transactions(&branch)?;
                 }
-                // Moved here from the line immediately after first sync_tree_helper
-                post_transactions(snap_to).unwrap();
             }
-            order.remove(0);
-            order.remove(0);
         }
     }
     Ok(())
@@ -2794,28 +2801,42 @@ pub fn tree_upgrade(treename: &str) -> Result<(), Error> {
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Cannot update as tree {} doesn't exist.", treename)));
+
+        // Make sure snapshot is not in use by another ash process
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", treename)).try_exists().unwrap() {
+        return Err(
+            Error::new(ErrorKind::Unsupported,
+                       format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
+                               treename, treename)));
+
     } else {
         // Run update
-        auto_upgrade(treename)?;
+        if auto_upgrade(treename).is_err() {
+            return Err(Error::new(ErrorKind::Other,
+                                  format!("Failed to auto upgrade tree {}.", treename)));
+        };
 
         // Import tree file
         let tree = fstree().unwrap();
 
-        let mut order = recurse_tree(&tree, treename);
-        if order.len() > 2 {
-            order.remove(0);
-            order.remove(0);
-        }
-        loop {
-            if order.len() < 2 {
-                break;
-            } else {
-                let arg = &order[0];
-                let sarg = &order[1];
-                println!("{}, {}", arg, sarg);
-                auto_upgrade(&sarg).unwrap();
-                order.remove(0);
-                order.remove(0);
+        let order = recurse_tree(&tree, treename);
+
+        // Auto upgrade braches in sync_tree
+        for branch in order {
+            if branch != treename {
+                println!("{}, {}", treename, branch);
+                // Make sure snapshot is not in use by another ash process
+                if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", branch)).try_exists().unwrap() {
+                    return Err(
+                        Error::new(ErrorKind::Unsupported,
+                                   format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
+                                           branch, branch)));
+                }
+                // Run update
+                if auto_upgrade(&branch).is_err() {
+                    return Err(Error::new(ErrorKind::Other,
+                                          format!("Failed to auto upgrade tree {}.",  branch)));
+                }
             }
         }
     }

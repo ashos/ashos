@@ -572,7 +572,7 @@ fn main() {
                 list_subvolumes();
             }
             // Tree sync
-            Some(("sync", sync_matches)) => { //REVIEW
+            Some(("sync", sync_matches)) => {
                 // Get treename value
                 let treename = if sync_matches.contains_id("TREENAME") {
                     let snap = sync_matches.get_one::<i32>("TREENAME").unwrap();
