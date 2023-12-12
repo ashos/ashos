@@ -651,7 +651,7 @@ fn main() {
                 }
             }
             // Tree run
-            Some(("trun", trun_matches)) => { //REVIEW
+            Some(("trun", trun_matches)) => {
                 // Get snapshot value
                 let treename = if trun_matches.contains_id("TREENAME") {
                     let snap = trun_matches.get_one::<i32>("TREENAME").unwrap();
@@ -675,7 +675,7 @@ fn main() {
                 }
             }
             // Tree upgrade
-            Some(("tupgrade", tupgrade_matches)) => { //REVIEW
+            Some(("tupgrade", tupgrade_matches)) => {
                 // Get treename value
                 let treename = if tupgrade_matches.contains_id("TREENAME") {
                     let snap = tupgrade_matches.get_one::<i32>("TREENAME").unwrap();

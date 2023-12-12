@@ -2703,6 +2703,10 @@ pub fn tree_run(treename: &str, cmd: &str) -> Result<(), Error> {
                 return Err(Error::new(ErrorKind::NotFound,
                               format!("Cannot update as tree {} doesn't exist.", treename)));
 
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", treename)).try_exists().unwrap() {
+        return Err(Error::new(ErrorKind::Other,
+                              format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
+                                      treename, treename)));
     } else {
         // Run command
         prepare(treename)?;
@@ -2712,28 +2716,20 @@ pub fn tree_run(treename: &str, cmd: &str) -> Result<(), Error> {
         // Import tree file
         let tree = fstree().unwrap();
 
-        let mut order = recurse_tree(&tree, treename);
-        if order.len() > 2 {
-            order.remove(0);
-            order.remove(0);
-        }
-        loop {
-            if order.len() < 2 {
-                break;
+        let order = recurse_tree(&tree, treename);
+        for branch in order {
+            if branch != treename {
+                println!("{}, {}", treename, branch);
+                if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", branch)).try_exists().unwrap() {
+                    return Err(Error::new(ErrorKind::Other,
+                                          format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
+                                                  branch, branch)));
+                } else {
+                    prepare(&branch)?;
+                    chroot_exec(&format!("/.snapshots/rootfs/snapshot-chr{}", branch), cmd)?;
+                    post_transactions(&branch)?;
+                }
             }
-            let arg = &order[0];
-            let sarg = &order[1];
-            println!("{}, {}", arg,sarg);
-            if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", sarg)).try_exists().unwrap() {
-                eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.", sarg,sarg);
-                eprintln!("Tree command canceled.");
-            } else {
-                prepare(&sarg)?;
-                chroot_exec(&format!("/.snapshots/rootfs/snapshot-chr{}", sarg), cmd)?;
-                post_transactions(&sarg)?;
-            }
-            order.remove(0);
-            order.remove(0);
         }
     }
     Ok(())
