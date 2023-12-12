@@ -1929,97 +1929,6 @@ pub fn remove_dir_content(dir_path: &str) -> Result<(), Error> {
     Ok(())
 }
 
-// Recursively remove package in tree
-pub fn remove_from_tree(treename: &str, pkgs: &Vec<String>, profiles: &Vec<String>, user_profiles: &Vec<String>) -> Result<(), Error> {
-    // Make sure treename exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
-        eprintln!("Cannot remove as tree {} doesn't exist.", treename);
-
-    } else {
-        // Import tree value
-        let tree = fstree().unwrap();
-        // Remove packages
-        if !pkgs.is_empty() {
-            for pkg in pkgs {
-                uninstall(treename, &vec![pkg.to_string()], true)?;
-                let mut order = recurse_tree(&tree, treename);
-                if order.len() > 2 {
-                    order.remove(0);
-                    order.remove(0);
-                }
-                loop {
-                    if order.len() < 2 {
-                        break;
-                    }
-                    let arg = &order[0];
-                    let sarg = &order[1];
-                    println!("{}, {}", arg,sarg);
-                    uninstall(sarg, &vec![pkg.to_string()], true)?;
-                    order.remove(0);
-                    order.remove(0);
-                }
-            }
-        } else if !profiles.is_empty() {
-            // Remove profiles
-            for profile in profiles {
-                let user_profile = "";
-                uninstall_profile(treename, &profile, &user_profile, true)?;
-                let mut order = recurse_tree(&tree, treename);
-                if order.len() > 2 {
-                    order.remove(0);
-                    order.remove(0);
-                }
-                loop {
-                    if order.len() < 2 {
-                        break;
-                    }
-                    let arg = &order[0];
-                    let sarg = &order[1];
-                    println!("{}, {}", arg,sarg);
-                    if uninstall_profile(sarg, &profile, &user_profile, true).is_ok() {
-                        post_transactions(sarg)?;
-                    } else {
-                        chr_delete(sarg)?;
-                        return Err(Error::new(ErrorKind::Other,
-                                              format!("Failed to remove and changes discarded.")));
-                    }
-                    order.remove(0);
-                    order.remove(0);
-                }
-            }
-        } else if !user_profiles.is_empty() {
-            // Remove profiles
-            for user_profile in user_profiles {
-                let profile = "";
-                uninstall_profile_live(treename, &profile, &user_profile, true)?;
-                let mut order = recurse_tree(&tree, treename);
-                if order.len() > 2 {
-                    order.remove(0);
-                    order.remove(0);
-                }
-                loop {
-                    if order.len() < 2 {
-                        break;
-                    }
-                    let arg = &order[0];
-                    let sarg = &order[1];
-                    println!("{}, {}", arg,sarg);
-                    if uninstall_profile(sarg, &profile, &user_profile, true).is_ok() {
-                        post_transactions(sarg)?;
-                    } else {
-                        chr_delete(sarg)?;
-                        return Err(Error::new(ErrorKind::Other,
-                                              format!("Failed to remove and changes discarded.")));
-                    }
-                    order.remove(0);
-                    order.remove(0);
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 // System reset
 pub fn reset() -> Result<(), Error> {
     let current_snapshot = get_current_snapshot();
@@ -2696,6 +2605,159 @@ pub fn tmp_delete(secondary: bool) -> Result<(), Error> {
     Ok(())
 }
 
+// Recursively install package in tree
+pub fn tree_install(treename: &str, pkgs: &Vec<String>, profiles: &Vec<String>, force: bool
+                    ,user_profiles: &Vec<String>, noconfirm: bool, secondary: bool) -> Result<(), Error> {
+    // Make sure treename exist
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
+        eprintln!("Cannot remove as tree {} doesn't exist.", treename);
+
+    } else {
+        // Import tree value
+        let tree = fstree().unwrap();
+        // Install packages
+        if !pkgs.is_empty() {
+            for pkg in pkgs {
+                install(treename, &vec![pkg.to_string()], noconfirm)?;
+                let order = recurse_tree(&tree, treename);
+                for branch in order {
+                    if branch != treename {
+                        println!("{}, {}", treename,branch);
+                        install(&branch, &vec![pkg.to_string()], noconfirm)?;
+                    }
+                }
+            }
+        } else if !profiles.is_empty() {
+            // Install profiles
+            for profile in profiles {
+                let user_profile = "";
+                if install_profile(treename, &profile, force, secondary, &user_profile, noconfirm).is_ok() {
+                    post_transactions(treename)?;
+                } else {
+                    chr_delete(treename)?;
+                    return Err(Error::new(ErrorKind::Other,
+                                          format!("Failed to install and changes discarded.")));
+                }
+                let order = recurse_tree(&tree, treename);
+                for branch in order {
+                    if branch != treename {
+                        println!("{}, {}", treename,branch);
+                        if install_profile(&branch, &profile, force, secondary, &user_profile, noconfirm).is_ok() {
+                            post_transactions(&branch)?;
+                        } else {
+                            chr_delete(&branch)?;
+                            return Err(Error::new(ErrorKind::Other,
+                                                  format!("Failed to install and changes discarded.")));
+                        }
+                    }
+                }
+            }
+        } else if !user_profiles.is_empty() {
+            // Install profiles
+            for user_profile in user_profiles {
+                let profile = "";
+                if install_profile(treename, &profile, force, secondary, &user_profile, noconfirm).is_ok() {
+                    post_transactions(treename)?;
+                } else {
+                    chr_delete(treename)?;
+                    return Err(Error::new(ErrorKind::Other,
+                                          format!("Failed to install and changes discarded.")));
+                }
+                let order = recurse_tree(&tree, treename);
+                for branch in order {
+                    if branch != treename {
+                        println!("{}, {}", treename,branch);
+                        if install_profile(&branch, &profile, force, secondary, &user_profile, noconfirm).is_ok() {
+                            post_transactions(&branch)?;
+                        } else {
+                            chr_delete(&branch)?;
+                            return Err(Error::new(ErrorKind::Other,
+                                                  format!("Failed to install and changes discarded.")));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+// Recursively remove package in tree
+pub fn tree_remove(treename: &str, pkgs: &Vec<String>, profiles: &Vec<String>, user_profiles: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
+    // Make sure treename exist
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
+        eprintln!("Cannot remove as tree {} doesn't exist.", treename);
+
+    } else {
+        // Import tree value
+        let tree = fstree().unwrap();
+        // Remove packages
+        if !pkgs.is_empty() {
+            for pkg in pkgs {
+                uninstall(treename, &vec![pkg.to_string()], noconfirm)?;
+                let order = recurse_tree(&tree, treename);
+                for branch in order {
+                    if branch != treename {
+                        println!("{}, {}", treename,branch);
+                        uninstall(&branch, &vec![pkg.to_string()], noconfirm)?;
+                    }
+                }
+            }
+        } else if !profiles.is_empty() {
+            // Remove profiles
+            for profile in profiles {
+                let user_profile = "";
+                if uninstall_profile(treename, &profile, &user_profile, noconfirm).is_ok() {
+                    post_transactions(treename)?;
+                } else {
+                    chr_delete(treename)?;
+                    return Err(Error::new(ErrorKind::Other,
+                                          format!("Failed to remove and changes discarded.")));
+                }
+                let order = recurse_tree(&tree, treename);
+                for branch in order {
+                    if branch != treename {
+                        println!("{}, {}", treename,branch);
+                        if uninstall_profile(&branch, &profile, &user_profile, noconfirm).is_ok() {
+                            post_transactions(&branch)?;
+                        } else {
+                            chr_delete(&branch)?;
+                            return Err(Error::new(ErrorKind::Other,
+                                                  format!("Failed to remove and changes discarded.")));
+                        }
+                    }
+                }
+            }
+        } else if !user_profiles.is_empty() {
+            // Remove profiles
+            for user_profile in user_profiles {
+                let profile = "";
+                if uninstall_profile(treename, &profile, &user_profile, noconfirm).is_ok() {
+                    post_transactions(treename)?;
+                } else {
+                    chr_delete(treename)?;
+                    return Err(Error::new(ErrorKind::Other,
+                                          format!("Failed to remove and changes discarded.")));
+                }
+                let order = recurse_tree(&tree, treename);
+                for branch in order {
+                    if branch != treename {
+                        println!("{}, {}", treename,branch);
+                        if uninstall_profile(&branch, &profile, &user_profile, noconfirm).is_ok() {
+                            post_transactions(&branch)?;
+                        } else {
+                            chr_delete(&branch)?;
+                            return Err(Error::new(ErrorKind::Other,
+                                                  format!("Failed to remove and changes discarded.")));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 // Recursively run a command in tree
 pub fn tree_run(treename: &str, cmd: &str) -> Result<(), Error> {
     // Make sure treename exist
@@ -2706,7 +2768,7 @@ pub fn tree_run(treename: &str, cmd: &str) -> Result<(), Error> {
     } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", treename)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::Other,
                               format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
-                                      treename, treename)));
+                                      treename,treename)));
     } else {
         // Run command
         prepare(treename)?;
@@ -2719,11 +2781,11 @@ pub fn tree_run(treename: &str, cmd: &str) -> Result<(), Error> {
         let order = recurse_tree(&tree, treename);
         for branch in order {
             if branch != treename {
-                println!("{}, {}", treename, branch);
+                println!("{}, {}", treename,branch);
                 if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", branch)).try_exists().unwrap() {
                     return Err(Error::new(ErrorKind::Other,
                                           format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
-                                                  branch, branch)));
+                                                  branch,branch)));
                 } else {
                     prepare(&branch)?;
                     chroot_exec(&format!("/.snapshots/rootfs/snapshot-chr{}", branch), cmd)?;
@@ -2752,7 +2814,7 @@ pub fn tree_sync(treename: &str, force_offline: bool, live: bool) -> Result<(), 
     } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", treename)).try_exists().unwrap() {
         return Err(Error::new(ErrorKind::Other,
                               format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
-                                      treename, treename)));
+                                      treename,treename)));
     } else {
         // Syncing tree automatically updates it, unless 'force-sync' is used
         if !force_offline {
@@ -2768,11 +2830,11 @@ pub fn tree_sync(treename: &str, force_offline: bool, live: bool) -> Result<(), 
         let order = recurse_tree(&tree, treename);
         for branch in order {
             if branch != treename {
-                println!("{}, {}", treename, branch);
+                println!("{}, {}", treename,branch);
                 if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", branch)).try_exists().unwrap() {
                     return Err(Error::new(ErrorKind::Other,
                                           format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
-                                                  branch, branch)));
+                                                  branch,branch)));
                 } else {
                     prepare(&branch)?;
                     // Pre-sync
@@ -2803,7 +2865,7 @@ pub fn tree_upgrade(treename: &str) -> Result<(), Error> {
         return Err(
             Error::new(ErrorKind::Unsupported,
                        format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
-                               treename, treename)));
+                               treename,treename)));
 
     } else {
         // Run update
@@ -2820,13 +2882,13 @@ pub fn tree_upgrade(treename: &str) -> Result<(), Error> {
         // Auto upgrade braches in sync_tree
         for branch in order {
             if branch != treename {
-                println!("{}, {}", treename, branch);
+                println!("{}, {}", treename,branch);
                 // Make sure snapshot is not in use by another ash process
                 if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", branch)).try_exists().unwrap() {
                     return Err(
                         Error::new(ErrorKind::Unsupported,
                                    format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
-                                           branch, branch)));
+                                           branch,branch)));
                 }
                 // Run update
                 if auto_upgrade(&branch).is_err() {

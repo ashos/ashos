@@ -594,6 +594,53 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Tree install
+            Some(("tinstall", tinstall_matches)) => {
+                // Get treename value
+                let treename = if tinstall_matches.contains_id("TREENAME") {
+                    let snap = tinstall_matches.get_one::<i32>("TREENAME").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Get pkgs value
+                let pkgs = if tinstall_matches.contains_id("PACKAGE") {
+                    let pkgs: Vec<String> = tinstall_matches.get_many::<String>("PACKAGE").unwrap().map(|s| format!("{}", s)).collect();
+                    pkgs
+                } else {
+                    let pkgs: Vec<String> = Vec::new();
+                    pkgs
+                };
+
+                // Get profiles value
+                let profiles = if tinstall_matches.contains_id("PROFILE") {
+                    let profiles: Vec<String> = tinstall_matches.get_many::<String>("PROFILE").unwrap().map(|s| format!("{}", s)).collect();
+                    profiles
+                } else {
+                    let profiles: Vec<String> = Vec::new();
+                    profiles
+                };
+
+                // Get user_profiles value
+                let user_profiles = if tinstall_matches.contains_id("USER_PROFILE") {
+                    let user_profiles: Vec<String> = tinstall_matches.get_many::<String>("USER_PROFILE").unwrap().map(|s| format!("{}", s)).collect();
+                    user_profiles
+                } else {
+                    let user_profiles: Vec<String> = Vec::new();
+                    user_profiles
+                };
+
+                // Optional values
+                let noconfirm = tinstall_matches.get_flag("noconfirm");
+                let force = tinstall_matches.get_flag("force");
+                let secondary = tinstall_matches.get_flag("secondary");
+
+                // Run tree_install
+                tree_install(&treename, &pkgs, &profiles, force, &user_profiles, noconfirm, secondary).unwrap();
+            }
             // tmp (clear tmp)
             Some(("tmp", _matches)) => {
                 // Run temp_snapshots_clear
@@ -605,7 +652,7 @@ fn main() {
                 tree_show();
             }
             // Tree remove
-            Some(("tremove", tremove_matches)) => { //REVIEW
+            Some(("tremove", tremove_matches)) => {
                 // Get treename value
                 let treename = if tremove_matches.contains_id("TREENAME") {
                     let snap = tremove_matches.get_one::<i32>("TREENAME").unwrap();
@@ -643,8 +690,11 @@ fn main() {
                     user_profiles
                 };
 
-                // Run remove_from_tree
-                let run = remove_from_tree(&treename, &pkgs, &profiles, &user_profiles);
+                // Optional values
+                let noconfirm = tremove_matches.get_flag("noconfirm");
+
+                // Run tree_remove
+                let run = tree_remove(&treename, &pkgs, &profiles, &user_profiles, noconfirm);
                 match run {
                     Ok(_) => println!("Tree {} updated.", treename),
                     Err(e) => eprintln!("{}", e),
