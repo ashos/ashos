@@ -70,8 +70,10 @@ pub fn ash_mounts(i: &str, chr: &str) -> nix::Result<()> {
     mount(Some("/tmp"), format!("{}/tmp", snapshot_path).as_str(),
           Some("tmpfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /var
-    mount(Some("/var"), format!("{}/var", snapshot_path).as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
+    if i != "0" {
+        mount(Some("/var"), format!("{}/var", snapshot_path).as_str(),
+              Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
+    }
 
     // Check EFI
     if is_efi() {
@@ -104,8 +106,10 @@ pub fn ash_umounts(i: &str, chr: &str) -> nix::Result<()> {
     }
 
     // Unmount /var
-    umount2(Path::new(&format!("{}/var", snapshot_path)),
-            MntFlags::empty())?;
+    if i != "0" {
+        umount2(Path::new(&format!("{}/var", snapshot_path)),
+                MntFlags::empty())?;
+    }
     // Unmount chroot /tmp
     umount2(Path::new(&format!("{}/tmp", snapshot_path)),
             MntFlags::MNT_DETACH)?;
@@ -693,13 +697,13 @@ pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<(), Error>
                           .arg(format!("/.snapshots/etc/etc-{}/.", snapshot))
                           .arg(format!("/.snapshots/rootfs/snapshot-{}/etc", tmp))
                           .output()?;
-        //if reset {
-            //std::fs::remove_dir_all("/var")?;
-            //Command::new("cp").args(["-r", "--reflink=auto"])
-                              //.arg(format!("/.snapshots/rootfs/snapshot-{}/var/.", snapshot))
-                              //.arg("/var")
-                              //.output()?;
-        //}
+        if reset {
+            std::fs::remove_dir_all("/var")?;
+            Command::new("cp").args(["-r", "--reflink=auto"])
+                              .arg(format!("/.snapshots/rootfs/snapshot-{}/var/.", snapshot))
+                              .arg("/var")
+                              .output()?;
+        }
 
         // If snapshot is mutable, modify '/' entry in fstab to read-write
         if check_mutability(snapshot) {
@@ -764,7 +768,9 @@ pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<(), Error>
                                               .open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", tmp))?;
         snap_file.write_all(snap_num.as_bytes())?;
         switch_tmp(secondary, reset)?;
-        init_system_clean(&tmp, "deploy")?;
+        if !reset {
+            init_system_clean(&tmp, "deploy")?;
+        }
 
         // Set default volume
         Command::new("btrfs").args(["sub", "set-default"])
@@ -828,7 +834,7 @@ fn deploy_recovery() -> Result<(), Error> {
                      .create(format!("/.snapshots/rootfs/snapshot-{}/boot", tmp))?;
     DirBuilder::new().recursive(true)
                      .create(format!("/.snapshots/rootfs/snapshot-{}/etc", tmp))?;
-    std::fs::remove_dir_all(format!("/.snapshots/rootfs/snapshot-{}/var", tmp))?;
+    //std::fs::remove_dir_all(format!("/.snapshots/rootfs/snapshot-{}/var", tmp))?;
     Command::new("cp").args(["-r", "--reflink=auto"])
                       .arg("/.snapshots/boot/boot-0/.")
                       .arg(format!("/.snapshots/rootfs/snapshot-{}/boot", tmp))
@@ -918,9 +924,9 @@ fn deploy_recovery() -> Result<(), Error> {
         }
     }
 
-    create_snapshot("/var",
-                    format!("/.snapshots/rootfs/snapshot-{}/var", tmp),
-                    CreateSnapshotFlags::empty(), None).unwrap();
+    //create_snapshot("/var",
+                    //format!("/.snapshots/rootfs/snapshot-{}/var", tmp),
+                    //CreateSnapshotFlags::empty(), None).unwrap();
     let snap_num = "0";
     let mut snap_file = OpenOptions::new().truncate(true)
                                           .create(true)
@@ -930,9 +936,9 @@ fn deploy_recovery() -> Result<(), Error> {
     snap_file.write_all(snap_num.as_bytes())?;
 
     // Clean init system_clean
-    if Path::new("/var/lib/systemd/").try_exists().unwrap() {
-        remove_dir_content(&format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", tmp))?;
-    } //TODO add OpenRC in else
+    //if Path::new("/var/lib/systemd/").try_exists().unwrap() {
+        //remove_dir_content(&format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", tmp))?;
+    //} //TODO add OpenRC in else
 
     // Update recovery tmp
     switch_recovery_tmp()?;
@@ -1860,7 +1866,9 @@ pub fn prepare(snapshot: &str) -> Result<(), Error> {
                       .output()?;
 
     // Clean init system
-    init_system_clean(snapshot, "prepare")?;
+    if snapshot != "0" {
+        init_system_clean(snapshot, "prepare")?;
+    }
 
     // Copy ash related configurations
     if Path::new("/etc/systemd").try_exists().unwrap() {
