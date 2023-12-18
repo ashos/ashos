@@ -1,5 +1,5 @@
 use crate::{check_mutability, chr_delete, get_current_snapshot, immutability_disable, immutability_enable, post_transactions,
-            prepare, remove_dir_content, snapshot_config_get, sync_time};
+            prepare, remove_dir_content, snapshot_config_get, sync_time, get_tmp};
 
 use rustix::path::Arg;
 use std::fs::{DirBuilder, OpenOptions, read_dir};
@@ -103,9 +103,10 @@ pub fn auto_upgrade(snapshot: &str) -> Result<(), Error> {
 
 // Copy cache of downloaded packages to shared
 pub fn cache_copy(snapshot: &str) -> Result<(), Error> {
+    let tmp = get_tmp();
     Command::new("cp").args(["-n", "-r", "--reflink=auto"])
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg", snapshot))
-                      .arg("/var/cache/pacman/")
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/var/cache/pacman/pkg", tmp))
                       .output().unwrap();
     Ok(())
 }
@@ -220,35 +221,6 @@ pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
                 println!("Snapshot {} successfully made immutable.", snapshot);
             }
         }
-    }
-    Ok(())
-}
-
-// Delete init system files (Systemd, OpenRC, etc.)
-pub fn init_system_clean(snapshot: &str, from: &str) -> Result<(), Error> {
-    if from == "prepare" {
-        if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/", snapshot)).try_exists().unwrap() {
-            remove_dir_content(&format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/systemd/", snapshot))?;
-        } //TODO add OpenRC in else
-    } else if from == "deploy" {
-        if Path::new("/var/lib/systemd/").try_exists().unwrap() {
-            remove_dir_content("/var/lib/systemd/")?;
-            remove_dir_content(&format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", snapshot))?;
-        } //TODO add OpenRC in else
-    }
-    Ok(())
-}
-
-// Copy init system files (Systemd, OpenRC, etc.) to shared
-pub fn init_system_copy(snapshot: &str, from: &str) -> Result<(), Error> {
-    if from == "post_transactions" {
-        if Path::new("/var/lib/systemd/").try_exists().unwrap() {
-            remove_dir_content("/var/lib/systemd/").unwrap();
-            Command::new("cp").args(["-r", "--reflink=auto",])
-                              .arg(format!("/.snapshots/rootfs/snapshot-{}/var/lib/systemd/", snapshot))
-                              .arg("/var/lib/systemd/")
-                              .output().unwrap();
-        } // TODO add OpenRC in else
     }
     Ok(())
 }
@@ -508,6 +480,7 @@ pub fn uninstall_package_helper_live(tmp: &str, pkgs: &Vec<String>, noconfirm: b
 
 // Upgrade snapshot atomic-operation
 pub fn upgrade_helper(snapshot: &str, noconfirm: bool) -> Result<(), Error> {
+    // Prepare snapshot
     prepare(snapshot).unwrap();
     // Avoid invalid or corrupted package (PGP signature) error
     let pacman_args = if noconfirm {

@@ -842,7 +842,7 @@ fn main() {
             // Which deployment is active
             Some(("whichtmp", _matches)) => {
                 // Run get_tmp
-                println!("{}", get_tmp());
+                println!("{}", print_tmp());
             }
            _=> unreachable!(), // If all subcommands called, anything else is unreachable
         }
