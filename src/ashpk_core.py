@@ -476,7 +476,7 @@ def get_distro_suffix():
     if distro and "ashos" in distro:
         return f'_{distro.replace("_ashos", "")}'
     else:
-        sys.exit(1) ### REVIEW before: return ""
+        return f'_{distro}'
 
 #   Get deployed snapshot
 def get_next_snapshot(secondary=False):
