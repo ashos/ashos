@@ -48,8 +48,10 @@ pub fn ash_mounts(i: &str, chr: &str) -> nix::Result<()> {
     mount(Some("/dev"), format!("{}/dev", snapshot_path).as_str(),
           Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /etc
-    mount(Some("/etc"), format!("{}/etc", snapshot_path).as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
+    if chr != "chr" {
+        mount(Some("/etc"), format!("{}/etc", snapshot_path).as_str(),
+              Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
+    }
     // Mount /home
     mount(Some("/home"), format!("{}/home", snapshot_path).as_str(),
           Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
@@ -69,8 +71,10 @@ pub fn ash_mounts(i: &str, chr: &str) -> nix::Result<()> {
     mount(Some("/tmp"), format!("{}/tmp", snapshot_path).as_str(),
           Some("tmpfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /var
+    if chr != "chr" {
     mount(Some("/var"), format!("{}/var", snapshot_path).as_str(),
           Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
+    }
 
     // Check EFI
     if is_efi() {
@@ -103,8 +107,10 @@ pub fn ash_umounts(i: &str, chr: &str) -> nix::Result<()> {
     }
 
     // Unmount /var
-    umount2(Path::new(&format!("{}/var", snapshot_path)),
-            MntFlags::empty())?;
+    if chr != "chr" {
+        umount2(Path::new(&format!("{}/var", snapshot_path)),
+                MntFlags::empty())?;
+    }
     // Unmount chroot /tmp
     umount2(Path::new(&format!("{}/tmp", snapshot_path)),
             MntFlags::MNT_DETACH)?;
@@ -124,8 +130,10 @@ pub fn ash_umounts(i: &str, chr: &str) -> nix::Result<()> {
     umount2(Path::new(&format!("{}/home", snapshot_path)),
             MntFlags::MNT_DETACH)?;
     // Unmount chroot /etc
-    umount2(Path::new(&format!("{}/etc", snapshot_path)),
-            MntFlags::MNT_DETACH)?;
+    if chr != "chr" {
+        umount2(Path::new(&format!("{}/etc", snapshot_path)),
+                MntFlags::MNT_DETACH)?;
+    }
     // Unmount chroot /dev
     umount2(Path::new(&format!("{}/dev", snapshot_path)),
             MntFlags::MNT_DETACH)?;
@@ -1629,15 +1637,14 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/.", snapshot))
                       .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
                       .output()?;
+    // Keep package manager's cache after installing packages
+    // This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
+    cache_copy(snapshot, false)?;
     remove_dir_content(&format!("/.snapshots/var/var-chr{}", snapshot))?;
     Command::new("cp").args(["-r", "--reflink=auto"])
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/.", snapshot))
                       .arg(format!("/.snapshots/var/var-chr{}", snapshot))
                       .output()?;
-
-    // Keep package manager's cache after installing packages
-    // This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
-    cache_copy(snapshot)?;
 
     // Delete old snapshot
     delete_subvolume(Path::new(&format!("/.snapshots/boot/boot-{}", snapshot)),
@@ -1885,7 +1892,13 @@ pub fn prepare(snapshot: &str) -> Result<(), Error> {
                      .create(format!("{}/.snapshots/ash", snapshot_chr))?;
     copy("/.snapshots/ash/fstree", format!("{}/.snapshots/ash/fstree", snapshot_chr))?;
 
-   Ok(())
+    // Keep package manager's cache after installing packages
+    // This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
+    if snapshot != "0" {
+        cache_copy(snapshot, true)?;
+    }
+
+    Ok(())
 }
 
 // Show tmp partition state

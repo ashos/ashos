@@ -102,12 +102,19 @@ pub fn auto_upgrade(snapshot: &str) -> Result<(), Error> {
 }
 
 // Copy cache of downloaded packages to shared
-pub fn cache_copy(snapshot: &str) -> Result<(), Error> {
+pub fn cache_copy(snapshot: &str, prepare: bool) -> Result<(), Error> {
     let tmp = get_tmp();
-    Command::new("cp").args(["-n", "-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg", snapshot))
-                      .arg(format!("/.snapshots/rootfs/snapshot-{}/var/cache/pacman/pkg", tmp))
-                      .output().unwrap();
+    if prepare {
+        Command::new("cp").args(["-n", "-r", "--reflink=auto"])
+                          .arg(format!("/.snapshots/rootfs/snapshot-{}/var/cache/pacman/pkg", snapshot))
+                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg", tmp))
+                          .output().unwrap();
+    } else {
+        Command::new("cp").args(["-n", "-r", "--reflink=auto"])
+                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg", snapshot))
+                          .arg(format!("/.snapshots/rootfs/snapshot-{}/var/cache/pacman/pkg", tmp))
+                          .output().unwrap();
+    }
     Ok(())
 }
 
