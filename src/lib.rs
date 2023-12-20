@@ -2655,16 +2655,10 @@ pub fn tmp_delete(secondary: bool) -> Result<(), Error> {
     let tmp = get_aux_tmp(tmp, secondary);
 
     // Clean tmp
-    if Path::new(&format!("/.snapshots/boot/boot-{}", tmp)).try_exists().unwrap() {
-        delete_subvolume(&format!("/.snapshots/boot/boot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
-    }
-    if Path::new(&format!("/.snapshots/etc/etc-{}", tmp)).try_exists().unwrap() {
-        delete_subvolume(&format!("/.snapshots/etc/etc-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
-    }
-    if Path::new(&format!("/.snapshots/var/var-{}", tmp)).try_exists().unwrap() {
-        delete_subvolume(&format!("/.snapshots/var/var-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
-    }
     if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", tmp)).try_exists().unwrap() {
+        delete_subvolume(&format!("/.snapshots/boot/boot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
+        delete_subvolume(&format!("/.snapshots/etc/etc-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
+        delete_subvolume(&format!("/.snapshots/var/var-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
         delete_subvolume(&format!("/.snapshots/rootfs/snapshot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
     }
     Ok(())
