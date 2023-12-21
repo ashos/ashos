@@ -669,6 +669,7 @@ pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<(), Error>
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot deploy as snapshot {} doesn't exist.", snapshot)));
 
     } else {
+        let current_snapshot = get_current_snapshot();
         update_boot(snapshot, secondary)?;
 
         // Set default volume
@@ -731,6 +732,21 @@ pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<(), Error>
                           .arg(format!("/.snapshots/var/var-{}/.", snapshot))
                           .arg(format!("/.snapshots/rootfs/snapshot-{}/var", tmp))
                           .output()?;
+
+        // Prepare rc.local
+        if reset {
+            copy(format!("/.snapshots/rootfs/snapshot-{}/etc/rc.local", tmp), format!("/.snapshots/rootfs/snapshot-{}/etc/rc.local.bak", tmp))?;
+            let start = "#!/bin/sh";
+            let del_snap = format!("/usr/sbin/ash del -q -n -s {}", current_snapshot);
+            let cp_rc = "cp /etc/rc.local.bak /etc/rc.local";
+            let end = "exit 0";
+            let mut file = OpenOptions::new().truncate(true)
+                                             .read(true)
+                                             .write(true)
+                                             .open(format!("/.snapshots/rootfs/snapshot-{}/etc/rc.local", tmp))?;
+            let new_content = format!("{}\n{}\n{}\n{}\nexit 0", start,del_snap,cp_rc,end);
+            file.write_all(new_content.as_bytes())?;
+        }
 
         // If snapshot is mutable, modify '/' entry in fstab to read-write
         if check_mutability(snapshot) {
@@ -1640,6 +1656,10 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
     // Keep package manager's cache after installing packages
     // This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
     cache_copy(snapshot, false)?;
+    // Clean cache for base snapshot
+    if snapshot == "0" {
+        remove_dir_content(&format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg", snapshot))?;
+    }
     remove_dir_content(&format!("/.snapshots/var/var-chr{}", snapshot))?;
     Command::new("cp").args(["-r", "--reflink=auto"])
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/.", snapshot))
@@ -2000,21 +2020,6 @@ pub fn reset() -> Result<(), Error> {
         // Collect snapshots
         let tree = fstree().unwrap();
         let snapshots = return_children(&tree, "root");
-
-        // Prepare base snapshot
-        prepare("0")?;
-        copy("/.snapshots/rootfs/snapshot-chr0/etc/rc.local", "/.snapshots/rootfs/snapshot-chr0/etc/rc.local.bak")?;
-        let start = "#!/bin/sh";
-        let del_snap = format!("/usr/sbin/ash del -q -n -s {}", current_snapshot);
-        let cp_rc = "cp /etc/rc.local.bak /etc/rc.local";
-        let end = "exit 0";
-        let mut file = OpenOptions::new().truncate(true)
-                                         .read(true)
-                                         .write(true)
-                                         .open("/.snapshots/rootfs/snapshot-chr0/etc/rc.local")?;
-        let new_content = format!("{}\n{}\n{}\n{}\nexit 0", start,del_snap,cp_rc,end);
-        file.write_all(new_content.as_bytes())?;
-        post_transactions("0")?;
 
         // Deploy the base snapshot and remove all the other snapshots
         if deploy("0", false, true).is_ok() {
