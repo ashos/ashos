@@ -544,21 +544,18 @@ fn comment_after_hash(line: &mut String) -> &str {
 }
 
 // Delete deploys subvolumes //TODO
-pub fn delete_deploys() -> Result<(), Error> {
-    for snap in ["deploy", "deploy-aux"] {
-        if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snap)).try_exists().unwrap() {
-            delete_subvolume(format!("/.snapshots/boot/boot-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(format!("/.snapshots/etc/etc-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(format!("/.snapshots/var/var-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
-        }
-
-        // Make sure temporary chroot directories are deleted as well
-        if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snap)).try_exists().unwrap() {
-            delete_subvolume(format!("/.snapshots/boot/boot-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(format!("/.snapshots/etc/etc-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(format!("/.snapshots/var/var-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(format!("/.snapshots/rootfs/snapshot-chr{}", snap), DeleteSubvolumeFlags::empty()).unwrap();
+pub fn delete_deploys(secondary: bool) -> Result<(), Error> {
+    let tmp = get_tmp();
+    let sec_tmp = get_aux_tmp(tmp.clone(), secondary);
+    let rec_tmp = get_recovery_tmp();
+    for deploy in ["deploy", "deploy-aux", "deploy-secondary", "deploy-aux-secondary", "recovery-deploy", "recovery-deploy-aux"] {
+        if deploy != tmp && deploy != sec_tmp && deploy != rec_tmp {
+            if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", deploy)).try_exists().unwrap() {
+                delete_subvolume(format!("/.snapshots/boot/boot-{}", deploy), DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(format!("/.snapshots/etc/etc-{}", deploy), DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(format!("/.snapshots/var/var-{}", deploy), DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", deploy), DeleteSubvolumeFlags::empty()).unwrap();
+            }
         }
     }
     Ok(())
@@ -611,10 +608,12 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
             if Path::new(&desc_path).try_exists().unwrap() {
                 std::fs::remove_file(desc_path)?;
             }
-            delete_subvolume(format!("/.snapshots/boot/boot-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(format!("/.snapshots/etc/etc-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(format!("/.snapshots/var/var-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+            if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+                delete_subvolume(format!("/.snapshots/boot/boot-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(format!("/.snapshots/etc/etc-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(format!("/.snapshots/var/var-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+            }
 
             // Make sure temporary chroot directories are deleted as well
             if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
@@ -627,11 +626,15 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
             for child in children {
                 // This deletes the node itself along with its children
                 let desc_path = format!("/.snapshots/ash/snapshots/{}-desc", child);
-                std::fs::remove_file(desc_path)?;
-                delete_subvolume(&format!("/.snapshots/boot/boot-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
-                delete_subvolume(format!("/.snapshots/etc/etc-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
-                delete_subvolume(format!("/.snapshots/var/var-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
-                delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
+                if Path::new(&desc_path).try_exists().unwrap() {
+                    std::fs::remove_file(desc_path)?;
+                }
+                if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", child)).try_exists().unwrap() {
+                    delete_subvolume(&format!("/.snapshots/boot/boot-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
+                    delete_subvolume(format!("/.snapshots/etc/etc-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
+                    delete_subvolume(format!("/.snapshots/var/var-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
+                    delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
+                }
                 if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", child)).try_exists().unwrap() {
                     delete_subvolume(format!("/.snapshots/boot/boot-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                     delete_subvolume(format!("/.snapshots/etc/etc-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
@@ -669,7 +672,6 @@ pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<(), Error>
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot deploy as snapshot {} doesn't exist.", snapshot)));
 
     } else {
-        let current_snapshot = get_current_snapshot();
         update_boot(snapshot, secondary)?;
 
         // Set default volume
@@ -732,21 +734,6 @@ pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<(), Error>
                           .arg(format!("/.snapshots/var/var-{}/.", snapshot))
                           .arg(format!("/.snapshots/rootfs/snapshot-{}/var", tmp))
                           .output()?;
-
-        // Prepare rc.local
-        if reset {
-            copy(format!("/.snapshots/rootfs/snapshot-{}/etc/rc.local", tmp), format!("/.snapshots/rootfs/snapshot-{}/etc/rc.local.bak", tmp))?;
-            let start = "#!/bin/sh";
-            let del_snap = format!("/usr/sbin/ash del -q -n -s {}", current_snapshot);
-            let cp_rc = "cp /etc/rc.local.bak /etc/rc.local";
-            let end = "exit 0";
-            let mut file = OpenOptions::new().truncate(true)
-                                             .read(true)
-                                             .write(true)
-                                             .open(format!("/.snapshots/rootfs/snapshot-{}/etc/rc.local", tmp))?;
-            let new_content = format!("{}\n{}\n{}\n{}\nexit 0", start,del_snap,cp_rc,end);
-            file.write_all(new_content.as_bytes())?;
-        }
 
         // If snapshot is mutable, modify '/' entry in fstab to read-write
         if check_mutability(snapshot) {
@@ -2021,8 +2008,26 @@ pub fn reset() -> Result<(), Error> {
         let tree = fstree().unwrap();
         let snapshots = return_children(&tree, "root");
 
+        // Prepare rc.local
+        prepare("0")?;
+        copy("/.snapshots/rootfs/snapshot-chr0/etc/rc.local", "/.snapshots/rootfs/snapshot-chr0/etc/rc.local.bak")?;
+        let start = "#!/bin/sh";
+        let del_snap = format!("/usr/sbin/ash del -q -n -s {}", current_snapshot);
+        let cp_rc = "cp /etc/rc.local.bak /etc/rc.local";
+        let mut file = OpenOptions::new().truncate(true)
+                                         .read(true)
+                                         .write(true)
+                                         .open("/.snapshots/rootfs/snapshot-chr0/etc/rc.local")?;
+        let new_content = format!("{}\n{}\n{}\nexit 0", start,del_snap,cp_rc);
+        file.write_all(new_content.as_bytes())?;
+        post_transactions("0")?;
+
         // Deploy the base snapshot and remove all the other snapshots
         if deploy("0", false, true).is_ok() {
+            // Revers rc.local
+            prepare("0")?;
+            copy("/.snapshots/rootfs/snapshot-chr0/etc/rc.local.bak", "/.snapshots/rootfs/snapshot-chr0/etc/rc.local")?;
+            post_transactions("0")?;
             for snapshot in snapshots {
                 // Delete snapshot if exist
                 if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap()
@@ -2034,6 +2039,9 @@ pub fn reset() -> Result<(), Error> {
             return Err(Error::new(ErrorKind::Other,
                                   "Failed to deploy base snapshot."));
         }
+    } else {
+        return Err(Error::new(ErrorKind::Interrupted,
+                              "Aborted."));
     }
     Ok(())
 }
@@ -3271,20 +3279,26 @@ pub fn update_etc() -> Result<(), Error> {
     let snapshot = get_current_snapshot();
     let tmp = get_tmp();
 
-    // Remove old /etc
-    delete_subvolume(&format!("/.snapshots/etc/etc-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
-
-    // Check mutability
-    let immutability: CreateSnapshotFlags = if check_mutability(&snapshot) {
-        CreateSnapshotFlags::empty()
+    // Make sure snapshot is not base snapshot
+    if snapshot == "0" {
+        return Err(Error::new(ErrorKind::Unsupported,
+                              format!("Changing base snapshot is not allowed.")));
     } else {
-        CreateSnapshotFlags::READ_ONLY
-    };
+        // Remove old /etc
+        delete_subvolume(&format!("/.snapshots/etc/etc-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
 
-    // Create new /etc
-    create_snapshot(format!("/.snapshots/etc/etc-{}", tmp),
-                    format!("/.snapshots/etc/etc-{}", snapshot),
-                    immutability, None).unwrap();
+        // Check mutability
+        let immutability: CreateSnapshotFlags = if check_mutability(&snapshot) {
+            CreateSnapshotFlags::empty()
+        } else {
+            CreateSnapshotFlags::READ_ONLY
+        };
+
+        // Create new /etc
+        create_snapshot(format!("/.snapshots/etc/etc-{}", tmp),
+                        format!("/.snapshots/etc/etc-{}", snapshot),
+                        immutability, None).unwrap();
+    }
     Ok(())
 }
 

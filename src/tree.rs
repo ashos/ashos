@@ -223,7 +223,7 @@ pub fn tree_print(tree: &PyObject) {
                 println!("{}{}*- {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
             }
         } else if node.getattr(py, "name").unwrap().to_string() == "0" {
-            let desc = "base snapshot";
+            let desc = "base snapshot.";
             if snapshot != node.getattr(py, "name").unwrap().to_string() {
                 println!("{}{} - {}", row.unwrap().getattr(py, "pre").unwrap().to_string(), node.getattr(py, "name").unwrap().to_string(), desc);
             } else {

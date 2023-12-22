@@ -318,7 +318,11 @@ fn main() {
             // etc update
             Some(("etc-update", _matches)) => {
                 // Run etc-update
-                update_etc().unwrap();
+                let run = update_etc();
+                match run {
+                    Ok(_) => println!("etc has been successfully updated."),
+                    Err(e) => eprintln!("{}", e),
+                }
             }
             // Fix db commands
             Some(("fixdb", fixdb_matches)) => {
