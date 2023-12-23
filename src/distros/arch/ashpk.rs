@@ -20,7 +20,7 @@ pub fn aur_check(snapshot: &str) -> bool {
         let aur = false;
         return aur;
     } else {
-        panic!("Please insert valid value for aur in /.snapshots/etc/etc-{}/ash.conf", snapshot);
+        panic!("Please insert valid value for aur in /.snapshots/etc/etc-{}/ash/ash.conf", snapshot);
     }
 }
 

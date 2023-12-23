@@ -573,26 +573,25 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
         // Make sure snapshot is not base snapshot
         if snapshot.as_str() == "0" {
             return Err(Error::new(ErrorKind::Unsupported, format!("Changing base snapshot is not allowed.")));
+
+        // Make sure snapshot does exist
+        } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+            return Err(Error::new(ErrorKind::NotFound, format!(
+                "Cannot delete as snapshot {} doesn't exist.", snapshot)));
         }
 
         if !nuke {
-            // Make sure snapshot does exist
-            if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-                return Err(Error::new(ErrorKind::NotFound, format!(
-                    "Cannot delete as snapshot {} doesn't exist.", snapshot)));
-
-                // Make sure snapshot is not current working snapshot
-                } else if snapshot == &current_snapshot {
+            // Make sure snapshot is not current working snapshot
+            if snapshot == &current_snapshot {
                 return Err(Error::new(ErrorKind::Unsupported, format!(
                     "Cannot delete booted snapshot.")));
-
-                // Make sure snapshot is not deploy snapshot
-                } else if snapshot == &next_snapshot {
+            // Make sure snapshot is not deploy snapshot
+            } else if snapshot == &next_snapshot {
                 return Err(Error::new(ErrorKind::Unsupported, format!(
                     "Cannot delete deployed snapshot.")));
 
-                // Abort if not quiet and confirmation message is false
-                } else if !quiet && !yes_no(&format!("Are you sure you want to delete snapshot {}?", snapshot)) {
+            // Abort if not quiet and confirmation message is false
+            } else if !quiet && !yes_no(&format!("Are you sure you want to delete snapshot {}?", snapshot)) {
                 return Err(Error::new(ErrorKind::Interrupted, format!(
                     "Aborted.")));
             } else {
@@ -1321,7 +1320,7 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
     } else {
         distro
     };
-    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist_name);
+    let cfile = format!("/usr/share/ash/profiles/{}/{}", profile,dist_name);
 
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
@@ -1401,7 +1400,7 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
     } else {
         distro
     };
-    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist_name);
+    let cfile = format!("/usr/share/ash/profiles/{}/{}", profile,dist_name);
     let tmp = get_tmp();
 
     // Prepare
@@ -1722,7 +1721,7 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
         for mount_path in mutable_dirs {
             if !allow_dir_mut(mount_path) {
                 return Err(Error::new(ErrorKind::InvalidInput,
-                                      format!("Please insert valid value for mutable_dirs in /.snapshots/etc/etc-{}/ash.conf", snapshot)));
+                                      format!("Please insert valid value for mutable_dirs in /.snapshots/etc/etc-{}/ash/ash.conf", snapshot)));
             }
             if is_mounted(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))) {
                 umount2(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path)),
@@ -1734,7 +1733,7 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
         for mount_path in mutable_dirs_shared {
             if !allow_dir_mut(mount_path) {
                 return Err(Error::new(ErrorKind::InvalidInput,
-                                      format!("Please insert valid value for mutable_dirs_shared in /.snapshots/etc/etc-{}/ash.conf", snapshot)));
+                                      format!("Please insert valid value for mutable_dirs_shared in /.snapshots/etc/etc-{}/ash/ash.conf", snapshot)));
             }
             if is_mounted(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))) {
                 umount2(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path)),
@@ -2152,7 +2151,7 @@ pub fn snapshot_config_edit(snapshot: &str) -> Result<(), Error> {
         prepare(snapshot)?;
         if std::env::var("EDITOR").is_ok() {
         Command::new("sh").arg("-c")
-                          .arg(format!("$EDITOR /.snapshots/rootfs/snapshot-chr{}/etc/ash.conf", snapshot))
+                          .arg(format!("$EDITOR /.snapshots/rootfs/snapshot-chr{}/etc/ash/ash.conf", snapshot))
                           .status()?;
             } else {
             // nano available
@@ -2160,7 +2159,7 @@ pub fn snapshot_config_edit(snapshot: &str) -> Result<(), Error> {
                                  .arg("[ -x \"$(command -v nano)\" ]")
                                  .status().unwrap().success() {
                                      Command::new("sh").arg("-c")
-                                                       .arg(format!("nano /.snapshots/rootfs/snapshot-chr{}/etc/ash.conf", snapshot))
+                                                       .arg(format!("nano /.snapshots/rootfs/snapshot-chr{}/etc/ash/ash.conf", snapshot))
                                                        .status()?;
                                  }
             // vi available
@@ -2168,7 +2167,7 @@ pub fn snapshot_config_edit(snapshot: &str) -> Result<(), Error> {
                                       .arg("[ -x \"$(command -v vi)\" ]")
                                       .status().unwrap().success() {
                                           Command::new("sh").arg("-c")
-                                                            .arg(format!("vi /.snapshots/rootfs/snapshot-chr{}/etc/ash.conf", snapshot))
+                                                            .arg(format!("vi /.snapshots/rootfs/snapshot-chr{}/etc/ash/ash.conf", snapshot))
                                                             .status()?;
                                       }
             // vim available
@@ -2176,7 +2175,7 @@ pub fn snapshot_config_edit(snapshot: &str) -> Result<(), Error> {
                                       .arg("[ -x \"$(command -v vim)\" ]")
                                       .status().unwrap().success() {
                                           Command::new("sh").arg("-c")
-                                                            .arg(format!("vim /.snapshots/rootfs/snapshot-chr{}/etc/ash.conf", snapshot))
+                                                            .arg(format!("vim /.snapshots/rootfs/snapshot-chr{}/etc/ash/ash.conf", snapshot))
                                                             .status()?;
                                       }
             // neovim
@@ -2184,7 +2183,7 @@ pub fn snapshot_config_edit(snapshot: &str) -> Result<(), Error> {
                                       .arg("[ -x \"$(command -v nvim)\" ]")
                                       .status().unwrap().success() {
                                           Command::new("sh").arg("-c")
-                                                            .arg(format!("nvim /.snapshots/rootfs/snapshot-chr{}/etc/ash.conf", snapshot))
+                                                            .arg(format!("nvim /.snapshots/rootfs/snapshot-chr{}/etc/ash/ash.conf", snapshot))
                                                             .status()?;
                                       }
             // micro
@@ -2192,7 +2191,7 @@ pub fn snapshot_config_edit(snapshot: &str) -> Result<(), Error> {
                                       .arg("[ -x \"$(command -v micro)\" ]")
                                       .status().unwrap().success() {
                                           Command::new("sh").arg("-c")
-                                                            .arg(format!("micro /.snapshots/rootfs/snapshot-chr{}/etc/ash.conf", snapshot))
+                                                            .arg(format!("micro /.snapshots/rootfs/snapshot-chr{}/etc/ash/ash.conf", snapshot))
                                                             .status()?;
                                       }
             else {
@@ -2208,14 +2207,14 @@ pub fn snapshot_config_edit(snapshot: &str) -> Result<(), Error> {
 pub fn snapshot_config_get(snapshot: &str) -> HashMap<String, String> {
     let mut options = HashMap::new();
 
-    if !Path::new(&format!("/.snapshots/etc/etc-{}/ash.conf", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/etc/etc-{}/ash/ash.conf", snapshot)).try_exists().unwrap() {
         // Defaults here
         options.insert(String::from("aur"), String::from("False"));
         options.insert(String::from("mutable_dirs"), String::new());
         options.insert(String::from("mutable_dirs_shared"), String::new());
         return options;
     } else {
-        let optfile = File::open(format!("/.snapshots/etc/etc-{}/ash.conf", snapshot)).unwrap();
+        let optfile = File::open(format!("/.snapshots/etc/etc-{}/ash/ash.conf", snapshot)).unwrap();
         let reader = BufReader::new(optfile);
 
         for line in reader.lines() {
@@ -3025,7 +3024,7 @@ fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfir
     } else {
         distro
     };
-    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist_name);
+    let cfile = format!("/usr/share/ash/profiles/{}/{}", profile,dist_name);
 
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
@@ -3088,7 +3087,7 @@ fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noco
     } else {
         distro
     };
-    let cfile = format!("/usr/share/ash/profiles/{}/{}.conf", profile,dist_name);
+    let cfile = format!("/usr/share/ash/profiles/{}/{}", profile,dist_name);
     let tmp = get_tmp();
 
     // Prepare
