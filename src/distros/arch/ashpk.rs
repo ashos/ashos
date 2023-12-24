@@ -362,6 +362,44 @@ pub fn refresh_helper(snapshot: &str) -> Result<(), Error> {
    Ok(())
 }
 
+// Enable service(s) (Systemd, OpenRC, etc.)
+pub fn service_enable(services: &Vec<String>) -> Result<(), Error> {
+    for service in services {
+        // Systemd
+        if Path::new("/var/lib/systemd/").try_exists().unwrap() {
+            let excode = Command::new("systemctl").arg("enable").arg(&service).output();
+            match excode {
+                Ok(_) => {
+                    /*Do nothing*/
+                },
+                Err(e) => {
+                    eprintln!("{}", e);
+                },
+            }
+        } //TODO add OpenRC
+    }
+    Ok(())
+}
+
+// Disable service(s) (Systemd, OpenRC, etc.)
+pub fn service_disable(services: &Vec<String>) -> Result<(), Error> {
+    for service in services {
+        // Systemd
+        if Path::new("/var/lib/systemd/").try_exists().unwrap() {
+            let excode = Command::new("systemctl").arg("disable").arg(&service).output();
+            match excode {
+                Ok(_) => {
+                    /*Do nothing*/
+                },
+                Err(e) => {
+                    eprintln!("{}", e);
+                },
+            }
+        } //TODO add OpenRC
+    }
+    Ok(())
+}
+
 // Show diff of packages between 2 snapshots
 pub fn snapshot_diff(snapshot1: &str, snapshot2: &str) -> Result<(), Error> {
     // Make sure snapshot one does exist

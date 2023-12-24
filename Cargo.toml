@@ -16,6 +16,7 @@ debian = []
 
 [dependencies]
 cfg-if = "1.0.0"
+chrono = "0.4.31"
 clap = "4.1.8"
 configparser = "3.0.2"
 cpython = "0.7"
@@ -27,6 +28,5 @@ partition-identity = "0.3.0"
 proc-mounts = "0.3.0"
 rustix = "0.38.8"
 tempfile = "3.8.0"
-time = {version = "0.3.22", features = ["formatting"]}
 users = "0.11.0"
 walkdir = "2.3.3"

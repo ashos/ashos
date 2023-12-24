@@ -4,6 +4,7 @@ mod tree;
 
 use crate::detect_distro as detect;
 
+use chrono::{NaiveDateTime, Local};
 use configparser::ini::Ini;
 use curl::easy::{Easy, HttpVersion, List, SslVersion};
 use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, delete_subvolume, DeleteSubvolumeFlags, set_subvolume_read_only};
@@ -543,24 +544,6 @@ fn comment_after_hash(line: &mut String) -> &str {
     }
 }
 
-// Delete deploys subvolumes //TODO
-pub fn delete_deploys(secondary: bool) -> Result<(), Error> {
-    let tmp = get_tmp();
-    let sec_tmp = get_aux_tmp(tmp.clone(), secondary);
-    let rec_tmp = get_recovery_tmp();
-    for deploy in ["deploy", "deploy-aux", "deploy-secondary", "deploy-aux-secondary", "recovery-deploy", "recovery-deploy-aux"] {
-        if deploy != tmp && deploy != sec_tmp && deploy != rec_tmp {
-            if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", deploy)).try_exists().unwrap() {
-                delete_subvolume(format!("/.snapshots/boot/boot-{}", deploy), DeleteSubvolumeFlags::empty()).unwrap();
-                delete_subvolume(format!("/.snapshots/etc/etc-{}", deploy), DeleteSubvolumeFlags::empty()).unwrap();
-                delete_subvolume(format!("/.snapshots/var/var-{}", deploy), DeleteSubvolumeFlags::empty()).unwrap();
-                delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", deploy), DeleteSubvolumeFlags::empty()).unwrap();
-            }
-        }
-    }
-    Ok(())
-}
-
 // Delete tree or branch
 pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(), Error> {
     // Get some values
@@ -653,12 +636,16 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
 // Delete old grub.cfg
 pub fn delete_old_grub_files(grub: &str) -> Result<(), Error> {
     let bak_path = Path::new(grub).join("BAK");
-    let cutoff_time = std::time::SystemTime::now() - std::time::Duration::from_secs(30 * 24 * 60 * 60);
     for entry in WalkDir::new(bak_path) {
         let entry = entry?;
         let path = entry.path();
-        if path.is_file() && path.to_str().unwrap().contains("grub.cfg") && path.metadata()?.modified()? < cutoff_time {
-            std::fs::remove_file(path)?;
+        if path.is_file() && path.to_str().unwrap().contains("grub.cfg") {
+            let file_ext = path.extension().unwrap().to_str().unwrap();
+            let file_create_time = NaiveDateTime::parse_from_str(file_ext, "%Y%m%d-%H%M%S").unwrap();
+            let cutoff_time = Local::now().naive_local().signed_duration_since(file_create_time);
+            if cutoff_time.num_days() >= 30 {
+                std::fs::remove_file(path)?;
+            }
         }
     }
     Ok(())
@@ -805,8 +792,6 @@ pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<(), Error>
 
 // Deploy recovery snapshot
 fn deploy_recovery() -> Result<(), Error> {
-    let distro_id = detect::distro_id();
-    let distro_suffix = &get_distro_suffix(&distro_id);
     let tmp = get_recovery_tmp();
 
     // Update boot
@@ -893,14 +878,14 @@ fn deploy_recovery() -> Result<(), Error> {
         "deploy"
     };
 
-    let modified_boot_contents = contents.replace(&format!("@.snapshots{}/boot/boot-{}", distro_suffix,src_tmp),
-                                                  &format!("@.snapshots{}/boot/boot-{}", distro_suffix,tmp));
-    let modified_etc_contents = modified_boot_contents.replace(&format!("@.snapshots{}/etc/etc-{}", distro_suffix,src_tmp),
-                                                               &format!("@.snapshots{}/etc/etc-{}", distro_suffix,tmp));
-    let modified_var_contents = modified_etc_contents.replace(&format!("@.snapshots{}/var/var-{}", distro_suffix,src_tmp),
-                                                               &format!("@.snapshots{}/var/var-{}", distro_suffix,tmp));
-    let modified_rootfs_contents = modified_var_contents.replace(&format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,src_tmp),
-                                                                 &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,tmp));
+    let modified_boot_contents = contents.replace(&format!("@.snapshots_linux/boot/boot-{}", src_tmp),
+                                                  &format!("@.snapshots_linux/boot/boot-{}", tmp));
+    let modified_etc_contents = modified_boot_contents.replace(&format!("@.snapshots_linux/etc/etc-{}", src_tmp),
+                                                               &format!("@.snapshots_linux/etc/etc-{}", tmp));
+    let modified_var_contents = modified_etc_contents.replace(&format!("@.snapshots_linux/var/var-{}", src_tmp),
+                                                               &format!("@.snapshots_linux/var/var-{}", tmp));
+    let modified_rootfs_contents = modified_var_contents.replace(&format!("@.snapshots_linux/rootfs/snapshot-{}", src_tmp),
+                                                                 &format!("@.snapshots_linux/rootfs/snapshot-{}", tmp));
 
     // Write the modified contents back to the file
     let mut file = File::create(fstab_file)?;
@@ -1055,15 +1040,6 @@ pub fn get_aux_tmp(tmp: String, secondary: bool) -> String {
 pub fn get_current_snapshot() -> String {
     let csnapshot = read_to_string("/usr/share/ash/snap").unwrap();
     csnapshot.trim_end().to_string()
-}
-
-// This function returns either empty string or underscore plus name of distro if it was appended to sub-volume names to distinguish
-pub fn get_distro_suffix(distro: &str) -> String {
-    if distro.contains("ashos") {
-        return format!("_{}", distro.replace("_ashos", ""));
-    } else {
-        std::process::exit(1);
-    }
 }
 
 // Get Grub path
@@ -1314,7 +1290,7 @@ pub fn install_live(pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
 fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
                    user_profile: &str, noconfirm: bool) -> Result<bool, Error> {
     // Get some values
-    let distro = detect::distro_id();
+    let distro = detect::distro_id(snapshot.to_string(), true);
     let dist_name = if distro.contains("_ashos") {
         distro.replace("_ashos", "")
     } else {
@@ -1381,6 +1357,26 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
             install_package_helper(snapshot, &pkgs, noconfirm)?;
         }
 
+        // Read disable services section in configuration file
+        if profconf.sections().contains(&"disable-services".to_string()) {
+            let mut services: Vec<String> = Vec::new();
+            for service in profconf.get_map().unwrap().get("disable-services").unwrap().keys() {
+                services.push(service.to_string());
+            }
+            // Disable service(s)
+            service_disable(&services)?;
+        }
+
+        // Read enable services section in configuration file
+        if profconf.sections().contains(&"enable-services".to_string()) {
+            let mut services: Vec<String> = Vec::new();
+            for service in profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
+                services.push(service.to_string());
+            }
+            // Enable service(s)
+            service_enable(&services)?;
+        }
+
         // Read commands section in configuration file
         if profconf.sections().contains(&"install-commands".to_string()) {
             for cmd in profconf.get_map().unwrap().get("install-commands").unwrap().keys() {
@@ -1394,7 +1390,7 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
 // Install profile in live snapshot
 fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile: &str, noconfirm: bool) -> Result<(), Error> {
     // Get some values
-    let distro = detect::distro_id();
+    let distro = detect::distro_id(snapshot.to_string(), false);
     let dist_name = if distro.contains("_ashos") {
         distro.replace("_ashos", "")
     } else {
@@ -1447,6 +1443,26 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
             }
             // Install package(s)
             install_package_helper_live(snapshot, &tmp, &pkgs, noconfirm)?;
+        }
+
+        // Read disable services section in configuration file
+        if profconf.sections().contains(&"disable-services".to_string()) {
+            let mut services: Vec<String> = Vec::new();
+            for service in profconf.get_map().unwrap().get("disable-services").unwrap().keys() {
+                services.push(service.to_string());
+            }
+            // Disable service(s)
+            service_disable(&services)?;
+        }
+
+        // Read enable services section in configuration file
+        if profconf.sections().contains(&"enable-services".to_string()) {
+            let mut services: Vec<String> = Vec::new();
+            for service in profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
+                services.push(service.to_string());
+            }
+            // Enable service(s)
+            service_enable(&services)?;
         }
 
         // Read commands section in configuration file
@@ -1606,9 +1622,7 @@ pub fn list(snapshot: &str, chr: &str) -> Vec<String> {
 
 // List sub-volumes for the booted distro only
 pub fn list_subvolumes() {
-    let distro_id = detect::distro_id();
-    let args = format!("btrfs sub list / | grep -i {} | sort -f -k 9",
-                       &get_distro_suffix(&distro_id));
+    let args = "btrfs sub list / | grep -i _linux | sort -f -k 9";
     Command::new("sh").arg("-c").arg(args).status().unwrap();
 }
 
@@ -2055,51 +2069,6 @@ pub fn rollback() -> Result<(), Error> {
     Ok(())
 }
 
-// Enable service(s) (Systemd, OpenRC, etc.) //TODO
-//fn service_enable(snapshot: &str, profile: &str, tmp_prof: &str) -> std::io::Result<()> {
-    //if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
-        //return Err(Error::new(ErrorKind::NotFound,
-                              //format!("Cannot enable services as snapshot {} doesn't exist.", snapshot)));
-
-    //} else {
-        //loop {
-            //let postinst: Vec<String> = String::from_utf8(Command::new("sh")
-                                                          //.arg("-c")
-                                                          //.arg(format!("cat {}/packages.txt | grep -E -w '^&' | sed 's|& ||'", tmp_prof))
-                                                          //.output()
-                                                          //.unwrap()
-                                                          //.stdout).unwrap()
-                                                                  //.trim()
-                                                                  //.split('\n')
-                                                                  //.map(|s| s.to_string()).collect();
-
-            //for cmd in postinst.into_iter().filter(|cmd| !cmd.is_empty()) {
-                //Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{} {}", snapshot,cmd)).status().unwrap();
-            //}
-
-            //let services: Vec<String> = String::from_utf8(Command::new("sh")
-                                                          //.arg("-c")
-                                                          //.arg(format!("cat {}/packages.txt | grep -E -w '^%' | sed 's|% ||'", tmp_prof))
-                                                          //.output()
-                                                          //.unwrap().stdout).unwrap()
-                                                                           //.trim()
-                                                                           //.split('\n')
-                                                                           //.map(|s| s.to_string()).collect();
-
-            //for cmd in services.into_iter().filter(|cmd| !cmd.is_empty()) {
-                //let excode = Command::new("chroot")
-                    //.arg(format!("/.snapshots/rootfs/snapshot-chr{} {}",snapshot,cmd))
-                    //.status().unwrap();
-                //if excode.success() {
-                    //println!("Failed to enable service(s) from {}.", profile);
-                //} else {
-                    //println!("Installed service(s) from {}.", profile);
-                //}
-            //}
-        //}
-    //}
-//}
-
 // Creates new tree from base file
 pub fn snapshot_base_new(desc: &str) -> Result<i32, Error> {
     // Immutability toggle not used as base should always be immutable
@@ -2336,20 +2305,19 @@ pub fn efi_boot_order() -> Result<(), Error>{
             eprintln!("Invalid distribution!");
         }
     }*/
+    println!("This feature is currently under construction.");
     Ok(())
 }
 
 // Switch between /recovery-tmp deployments
 fn switch_recovery_tmp() -> Result<(), Error> {
-    let distro_id = detect::distro_id();
-    let distro_suffix = &get_distro_suffix(&distro_id);
     let grub = get_grub().unwrap();
     let part = get_part();
     let tmp_boot = TempDir::new_in("/.snapshots/tmp")?;
 
     // Mount boot partition for writing
     mount(Some(part.as_str()), tmp_boot.path().as_os_str(),
-          Some("btrfs"), MsFlags::empty(), Some(format!("subvol=@boot{}", distro_suffix).as_bytes()))?;
+          Some("btrfs"), MsFlags::empty(), Some("subvol=@boot_linux".as_bytes()))?;
 
     // Swap deployment subvolumes: deploy <-> deploy-aux
     let source_dep = get_recovery_tmp();
@@ -2418,8 +2386,8 @@ fn switch_recovery_tmp() -> Result<(), Error> {
     let second_quote_index = gconf[first_quote_index + 1..].find('\'').unwrap_or(gconf.len()) + first_quote_index + 1;
     let updated_line = gconf.replace(&gconf[first_quote_index + 1..second_quote_index], "Recovery Mode");
     let modified_cfg_contents = if updated_line.contains(&source_dep) {
-        updated_line.replace(&format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,source_dep),
-                             &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep))
+        updated_line.replace(&format!("@.snapshots_linux/rootfs/snapshot-{}", source_dep),
+                             &format!("@.snapshots_linux/rootfs/snapshot-{}", target_dep))
     } else {
         let src_tmp = if updated_line.contains("deploy-aux") && !updated_line.contains("secondary") {
             "deploy-aux"
@@ -2431,8 +2399,8 @@ fn switch_recovery_tmp() -> Result<(), Error> {
             "deploy"
         };
 
-        updated_line.replace(&format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,src_tmp),
-                             &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep))
+        updated_line.replace(&format!("@.snapshots_linux/rootfs/snapshot-{}", src_tmp),
+                             &format!("@.snapshots_linux/rootfs/snapshot-{}", target_dep))
     };
 
     // Write the modified contents back to the file
@@ -2451,8 +2419,6 @@ fn switch_recovery_tmp() -> Result<(), Error> {
 
 // Switch between /tmp deployments
 pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
-    let distro_id = detect::distro_id();
-    let distro_suffix = &get_distro_suffix(&distro_id);
     let grub = get_grub().unwrap();
     let part = get_part();
     let rec_tmp = get_recovery_tmp();
@@ -2460,7 +2426,7 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
 
     // Mount boot partition for writing
     mount(Some(part.as_str()), tmp_boot.path().as_os_str(),
-          Some("btrfs"), MsFlags::empty(), Some(format!("subvol=@boot{}", distro_suffix).as_bytes()))?;
+          Some("btrfs"), MsFlags::empty(), Some("subvol=@boot_linux".as_bytes()))?;
 
     // Swap deployment subvolumes: deploy <-> deploy-aux
     let source_dep = get_tmp();
@@ -2476,14 +2442,14 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
     let mut contents = String::new();
     let mut file = File::open(&fstab_file)?;
     file.read_to_string(&mut contents)?;
-    let modified_boot_contents = contents.replace(&format!("@.snapshots{}/boot/boot-{}", distro_suffix,source_dep),
-                                                  &format!("@.snapshots{}/boot/boot-{}", distro_suffix,target_dep));
-    let modified_etc_contents = modified_boot_contents.replace(&format!("@.snapshots{}/etc/etc-{}", distro_suffix,source_dep),
-                                                               &format!("@.snapshots{}/etc/etc-{}", distro_suffix,target_dep));
-    let modified_var_contents = modified_etc_contents.replace(&format!("@.snapshots{}/var/var-{}", distro_suffix,source_dep),
-                                                               &format!("@.snapshots{}/var/var-{}", distro_suffix,target_dep));
-    let modified_rootfs_contents = modified_var_contents.replace(&format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,source_dep),
-                                                                 &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,target_dep));
+    let modified_boot_contents = contents.replace(&format!("@.snapshots_linux/boot/boot-{}", source_dep),
+                                                  &format!("@.snapshots_linux/boot/boot-{}", target_dep));
+    let modified_etc_contents = modified_boot_contents.replace(&format!("@.snapshots_linux/etc/etc-{}", source_dep),
+                                                               &format!("@.snapshots_linux/etc/etc-{}", target_dep));
+    let modified_var_contents = modified_etc_contents.replace(&format!("@.snapshots_linux/var/var-{}", source_dep),
+                                                               &format!("@.snapshots_linux/var/var-{}", target_dep));
+    let modified_rootfs_contents = modified_var_contents.replace(&format!("@.snapshots_linux/rootfs/snapshot-{}", source_dep),
+                                                                 &format!("@.snapshots_linux/rootfs/snapshot-{}", target_dep));
     // Write the modified contents back to the file
     let mut file = File::create(fstab_file)?;
     file.write_all(modified_rootfs_contents.as_bytes())?;
@@ -2542,8 +2508,8 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
                 let updated_line = gconf.replace(&gconf[first_quote_index + 1..second_quote_index], "Recovery Mode");
 
                 // Change recovery tmp
-                let gconf = updated_line.replace(&format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,source_dep),
-                                                 &format!("@.snapshots{}/rootfs/snapshot-{}", distro_suffix,rec_tmp));
+                let gconf = updated_line.replace(&format!("@.snapshots_linux/rootfs/snapshot-{}", source_dep),
+                                                 &format!("@.snapshots_linux/rootfs/snapshot-{}", rec_tmp));
 
                 // Open the file in read and write mode
                 let mut file = OpenOptions::new().read(true).write(true).append(true).open(&grub_path)?;
@@ -3018,7 +2984,7 @@ pub fn uninstall_live(pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> 
 // Uninstall a profile from a text file
 fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfirm: bool) -> Result<(), Error> {
     // Get some values
-    let distro = detect::distro_id();
+    let distro = detect::distro_id(snapshot.to_string(), true);
     let dist_name = if distro.contains("_ashos") {
         distro.replace("_ashos", "")
     } else {
@@ -3068,6 +3034,16 @@ fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfir
             uninstall_package_helper(snapshot, &pkgs, noconfirm)?;
         }
 
+        // Read enable services section in configuration file
+        if profconf.sections().contains(&"enable-services".to_string()) {
+            let mut services: Vec<String> = Vec::new();
+            for service in profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
+                services.push(service.to_string());
+            }
+            // Disable service(s)
+            service_disable(&services)?;
+        }
+
         // Read commands section in configuration file
         if profconf.sections().contains(&"uninstall-commands".to_string()) {
             for cmd in profconf.get_map().unwrap().get("uninstall-commands").unwrap().keys() {
@@ -3081,7 +3057,7 @@ fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfir
 // Uninstall profile in live snapshot
 fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noconfirm: bool) -> Result<(), Error> {
     // Get some values
-    let distro = detect::distro_id();
+    let distro = detect::distro_id(snapshot.to_string(), false);
     let dist_name = if distro.contains("_ashos") {
         distro.replace("_ashos", "")
     } else {
@@ -3113,6 +3089,16 @@ fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noco
         }
         // Uninstall package(s)
         uninstall_package_helper_live(&tmp, &pkgs, noconfirm)?;
+    }
+
+    // Read enable services section in configuration file
+    if profconf.sections().contains(&"enable-services".to_string()) {
+        let mut services: Vec<String> = Vec::new();
+        for service in profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
+            services.push(service.to_string());
+        }
+        // Disable service(s)
+        service_disable(&services)?;
     }
 
     // Read commands section in configuration file
@@ -3245,19 +3231,22 @@ pub fn update_boot(snapshot: &str, secondary: bool) -> Result<(), Error> {
         prepare(snapshot)?;
 
         // Remove grub configurations older than 30 days
-        if Path::new(&format!("/boot/{}/BAK/", grub)).try_exists().unwrap() {
-            delete_old_grub_files(&format!("/boot/{}", grub).as_str())?;
+        if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/boot/{}/BAK/", snapshot,grub)).try_exists().unwrap() && snapshot != "0" {
+            delete_old_grub_files(&format!("/.snapshots/rootfs/snapshot-chr{}/boot/{}", snapshot,grub).as_str())?;
         }
 
         // Get current time
-        let time = time::OffsetDateTime::now_utc();
-        let formatted = time.format(&time::format_description::parse("[year][month][day]-[hour][minute][second]").unwrap()).unwrap();
+        let time = Local::now().naive_local();
+        let formatted = time.format("%Y%m%d-%H%M%S").to_string();
 
         // Copy backup
-        copy(format!("/boot/{}/grub.cfg", grub), format!("/boot/{}/BAK/grub.cfg.{}", grub,formatted))?;
+        if snapshot != "0" {
+            copy(format!("/.snapshots/rootfs/snapshot-chr{}/boot/{}/grub.cfg", snapshot,grub),
+                 format!("/.snapshots/rootfs/snapshot-chr{}/boot/{}/BAK/grub.cfg.{}", snapshot,grub,formatted))?;
+        }
 
         // Run update commands in chroot
-        let distro_name = detect::distro_name();
+        let distro_name = detect::distro_name(snapshot.to_string(), true);
         let mkconfig = format!("grub-mkconfig {} -o /boot/{}/grub.cfg", part,grub);
         let sed_snap = format!("sed -i 's|snapshot-chr{}|snapshot-{}|g' /boot/{}/grub.cfg", snapshot,tmp,grub);
         let sed_distro = format!("sed -i '0,\\|{}| s||{} snapshot {}|' /boot/{}/grub.cfg",

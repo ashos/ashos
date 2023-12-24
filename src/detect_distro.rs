@@ -1,5 +1,7 @@
 use std::fs::{read_dir, read_to_string};
 
+use crate::get_tmp;
+
 // Capitalize first letter
 fn capitalize(s: &str) -> String {
     let mut chars = s.chars();
@@ -11,10 +13,16 @@ fn capitalize(s: &str) -> String {
 }
 
 // Detect distro ID
-pub fn distro_id() -> String {
+pub fn distro_id(snapshot: String, chroot: bool) -> String {
     let mut distro_id = String::new();
+    let tmp = if chroot {
+        snapshot
+    } else {
+        get_tmp()
+    };
+
     // Check if /etc/lsb-release exists and contains DISTRIB_ID
-    if let Ok(file) = read_to_string("/etc/lsb-release") {
+    if let Ok(file) = read_to_string(format!("/.snapshot/etc/etc-{}/lsb-release", tmp)) {
         for line in file.lines() {
             if line.starts_with("DISTRIB_ID=") {
                 distro_id = line.split('=').nth(1).unwrap()
@@ -28,7 +36,7 @@ pub fn distro_id() -> String {
 
     // If /etc/lsb-release check fails, check if /etc/os-release exists and contains ID
     if distro_id.is_empty() {
-        if let Ok(file) = read_to_string("/etc/os-release") {
+        if let Ok(file) = read_to_string(format!("/.snapshot/etc/etc-{}/etc/os-release", tmp)) {
             for line in file.lines() {
                 if line.starts_with("ID=") {
                     distro_id = line.split('=').nth(1).unwrap()
@@ -43,7 +51,7 @@ pub fn distro_id() -> String {
 
     // If both checks fail, loop through all files in /etc/ and check for -release files
     if distro_id.is_empty() {
-        for entry in read_dir("/etc").unwrap() {
+        for entry in read_dir(format!("/.snapshot/etc/etc-{}/etc", tmp)).unwrap() {
             if let Ok(entry) = entry {
                 let path = entry.path();
                 if path.is_file() && path.to_str().unwrap().ends_with("-release") {
@@ -63,10 +71,16 @@ pub fn distro_id() -> String {
 }
 
 // Detect distro name
-pub fn distro_name() -> String {
+pub fn distro_name(snapshot: String, chroot: bool) -> String {
     let mut distro_name = String::new();
+    let tmp = if chroot {
+        snapshot
+    } else {
+        get_tmp()
+    };
+
     // If /etc/lsb-release check fails, check if /etc/os-release exists and contains ID
-    if let Ok(file) = read_to_string("/etc/os-release") {
+    if let Ok(file) = read_to_string(format!("/.snapshot/etc/etc-{}/etc/os-release", tmp)) {
         for line in file.lines() {
             if line.starts_with("NAME=") {
                 distro_name = line.split('=').nth(1).unwrap().trim_matches('"').to_string();
@@ -77,7 +91,7 @@ pub fn distro_name() -> String {
 
     // Check if /etc/lsb-release exists and contains DISTRIB_NAME
     if distro_name.is_empty() {
-        if let Ok(file) = read_to_string("/etc/lsb-release") {
+        if let Ok(file) = read_to_string(format!("/.snapshot/etc/etc-{}/etc/lsb-release", tmp)) {
             for line in file.lines() {
                 if line.starts_with("DISTRIB_DESCRIPTION=") {
                     distro_name = line.split('=').nth(1).unwrap().split(' ').nth(0).unwrap().trim_matches('"').to_string();
@@ -89,7 +103,7 @@ pub fn distro_name() -> String {
 
     // If both checks fail, loop through all files in /etc/ and check for -release files
     if distro_name.is_empty() {
-        for entry in read_dir("/etc").unwrap() {
+        for entry in read_dir(format!("/.snapshot/etc/etc-{}/etc", tmp)).unwrap() {
             if let Ok(entry) = entry {
                 let path = entry.path();
                 if path.is_file() && path.to_str().unwrap().ends_with("-release") {
