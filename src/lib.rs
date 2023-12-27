@@ -1290,7 +1290,7 @@ pub fn install_live(pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
 fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
                    user_profile: &str, noconfirm: bool) -> Result<bool, Error> {
     // Get some values
-    let distro = detect::distro_id(snapshot.to_string(), true);
+    let distro = detect::distro_id();
     let dist_name = if distro.contains("_ashos") {
         distro.replace("_ashos", "")
     } else {
@@ -1390,7 +1390,7 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
 // Install profile in live snapshot
 fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile: &str, noconfirm: bool) -> Result<(), Error> {
     // Get some values
-    let distro = detect::distro_id(snapshot.to_string(), false);
+    let distro = detect::distro_id();
     let dist_name = if distro.contains("_ashos") {
         distro.replace("_ashos", "")
     } else {
@@ -2984,7 +2984,7 @@ pub fn uninstall_live(pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> 
 // Uninstall a profile from a text file
 fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfirm: bool) -> Result<(), Error> {
     // Get some values
-    let distro = detect::distro_id(snapshot.to_string(), true);
+    let distro = detect::distro_id();
     let dist_name = if distro.contains("_ashos") {
         distro.replace("_ashos", "")
     } else {
@@ -3057,7 +3057,7 @@ fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfir
 // Uninstall profile in live snapshot
 fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noconfirm: bool) -> Result<(), Error> {
     // Get some values
-    let distro = detect::distro_id(snapshot.to_string(), false);
+    let distro = detect::distro_id();
     let dist_name = if distro.contains("_ashos") {
         distro.replace("_ashos", "")
     } else {
@@ -3246,7 +3246,7 @@ pub fn update_boot(snapshot: &str, secondary: bool) -> Result<(), Error> {
         }
 
         // Run update commands in chroot
-        let distro_name = detect::distro_name(snapshot.to_string(), true);
+        let distro_name = detect::distro_name();
         let mkconfig = format!("grub-mkconfig {} -o /boot/{}/grub.cfg", part,grub);
         let sed_snap = format!("sed -i 's|snapshot-chr{}|snapshot-{}|g' /boot/{}/grub.cfg", snapshot,tmp,grub);
         let sed_distro = format!("sed -i '0,\\|{}| s||{} snapshot {}|' /boot/{}/grub.cfg",
