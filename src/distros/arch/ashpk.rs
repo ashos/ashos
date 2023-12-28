@@ -363,18 +363,17 @@ pub fn refresh_helper(snapshot: &str) -> Result<(), Error> {
 }
 
 // Enable service(s) (Systemd, OpenRC, etc.)
-pub fn service_enable(services: &Vec<String>) -> Result<(), Error> {
+pub fn service_enable(snapshot: &str, services: &Vec<String>) -> Result<(), Error> {
     for service in services {
         // Systemd
         if Path::new("/var/lib/systemd/").try_exists().unwrap() {
-            let excode = Command::new("systemctl").arg("enable").arg(&service).output();
-            match excode {
-                Ok(_) => {
-                    /*Do nothing*/
-                },
-                Err(e) => {
-                    eprintln!("{}", e);
-                },
+            let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                               .arg("systemctl")
+                                               .arg("enable")
+                                               .arg(&service).status()?;
+            if !excode.success() {
+                return Err(Error::new(ErrorKind::Other,
+                                      format!("Failed to enable {}.", service)));
             }
         } //TODO add OpenRC
     }
@@ -382,18 +381,17 @@ pub fn service_enable(services: &Vec<String>) -> Result<(), Error> {
 }
 
 // Disable service(s) (Systemd, OpenRC, etc.)
-pub fn service_disable(services: &Vec<String>) -> Result<(), Error> {
+pub fn service_disable(snapshot: &str, services: &Vec<String>) -> Result<(), Error> {
     for service in services {
         // Systemd
         if Path::new("/var/lib/systemd/").try_exists().unwrap() {
-            let excode = Command::new("systemctl").arg("disable").arg(&service).output();
-            match excode {
-                Ok(_) => {
-                    /*Do nothing*/
-                },
-                Err(e) => {
-                    eprintln!("{}", e);
-                },
+            let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                               .arg("systemctl")
+                                               .arg("disable")
+                                               .arg(&service).status()?;
+            if !excode.success() {
+                return Err(Error::new(ErrorKind::Other,
+                                      format!("Failed to disable {}.", service)));
             }
         } //TODO add OpenRC
     }

@@ -1364,7 +1364,7 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
                 services.push(service.to_string());
             }
             // Disable service(s)
-            service_disable(&services)?;
+            service_disable(snapshot, &services)?;
         }
 
         // Read enable services section in configuration file
@@ -1374,7 +1374,7 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
                 services.push(service.to_string());
             }
             // Enable service(s)
-            service_enable(&services)?;
+            service_enable(snapshot, &services)?;
         }
 
         // Read commands section in configuration file
@@ -1452,7 +1452,7 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
                 services.push(service.to_string());
             }
             // Disable service(s)
-            service_disable(&services)?;
+            service_disable(snapshot, &services)?;
         }
 
         // Read enable services section in configuration file
@@ -1462,7 +1462,7 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
                 services.push(service.to_string());
             }
             // Enable service(s)
-            service_enable(&services)?;
+            service_enable(snapshot, &services)?;
         }
 
         // Read commands section in configuration file
@@ -3034,16 +3034,6 @@ fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfir
             uninstall_package_helper(snapshot, &pkgs, noconfirm)?;
         }
 
-        // Read enable services section in configuration file
-        if profconf.sections().contains(&"enable-services".to_string()) {
-            let mut services: Vec<String> = Vec::new();
-            for service in profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
-                services.push(service.to_string());
-            }
-            // Disable service(s)
-            service_disable(&services)?;
-        }
-
         // Read commands section in configuration file
         if profconf.sections().contains(&"uninstall-commands".to_string()) {
             for cmd in profconf.get_map().unwrap().get("uninstall-commands").unwrap().keys() {
@@ -3089,16 +3079,6 @@ fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noco
         }
         // Uninstall package(s)
         uninstall_package_helper_live(&tmp, &pkgs, noconfirm)?;
-    }
-
-    // Read enable services section in configuration file
-    if profconf.sections().contains(&"enable-services".to_string()) {
-        let mut services: Vec<String> = Vec::new();
-        for service in profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
-            services.push(service.to_string());
-        }
-        // Disable service(s)
-        service_disable(&services)?;
     }
 
     // Read commands section in configuration file
