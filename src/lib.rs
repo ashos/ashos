@@ -208,6 +208,103 @@ pub fn check_mutability(snapshot: &str) -> bool {
         .try_exists().unwrap()
 }
 
+// Check if snapshot profile was changed
+fn check_profile(snapshot: &str) -> Result<(), Error> {
+    // Get values before edit
+    let old_cfile = format!("/.snapshots/rootfs/snapshot-{}/etc/ash/profile", snapshot);
+    let mut old_profconf = Ini::new();
+    old_profconf.set_comment_symbols(&['#']);
+    old_profconf.set_multiline(true);
+    old_profconf.load(&old_cfile).unwrap();
+    let mut old_pkgs: Vec<String> = Vec::new();
+    if old_profconf.sections().contains(&"packages".to_string()) {
+        for pkg in old_profconf.get_map().unwrap().get("packages").unwrap().keys() {
+            old_pkgs.push(pkg.to_string());
+        }
+    }
+    let mut old_enable: Vec<String> = Vec::new();
+    if old_profconf.sections().contains(&"enable-services".to_string()) {
+        for service in old_profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
+            old_enable.push(service.to_string());
+        }
+    }
+    let mut old_disable: Vec<String> = Vec::new();
+    if old_profconf.sections().contains(&"disable-services".to_string()) {
+        for service in old_profconf.get_map().unwrap().get("disable-services").unwrap().keys() {
+            old_disable.push(service.to_string());
+        }
+    }
+
+    // Get new values
+    let cfile = format!("/.snapshots/rootfs/snapshot-chr{}/etc/ash/profile", snapshot);
+    let mut profconf = Ini::new();
+    profconf.set_comment_symbols(&['#']);
+    profconf.set_multiline(true);
+    profconf.load(&cfile).unwrap();
+    let mut new_pkgs: Vec<String> = Vec::new();
+    if profconf.sections().contains(&"packages".to_string()) {
+        for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+            new_pkgs.push(pkg.to_string());
+        }
+    }
+    let mut new_enable: Vec<String> = Vec::new();
+    if profconf.sections().contains(&"enable-services".to_string()) {
+        for service in profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
+            new_enable.push(service.to_string());
+        }
+    }
+    let mut new_disable: Vec<String> = Vec::new();
+    if profconf.sections().contains(&"disable-services".to_string()) {
+        for service in profconf.get_map().unwrap().get("disable-services").unwrap().keys() {
+            new_disable.push(service.to_string());
+        }
+    }
+
+    // Apply changes
+    let mut pkgs_to_install: Vec<String> = Vec::new();
+    for pkg in &new_pkgs {
+        if !old_pkgs.contains(&pkg) {
+            pkgs_to_install.push(pkg.to_string());
+        }
+    }
+    if !pkgs_to_install.is_empty() {
+        install_package_helper_chroot(snapshot, &pkgs_to_install, true)?;
+    }
+    let mut services_to_disable: Vec<String> = Vec::new();
+    for service in &old_enable {
+        if !new_enable.contains(&service) {
+            services_to_disable.push(service.to_string());
+        }
+    }
+    for service in new_disable {
+        if !old_disable.contains(&service) {
+            services_to_disable.push(service.to_string());
+        }
+    }
+    if !services_to_disable.is_empty() {
+        service_disable(snapshot, &services_to_disable)?;
+    }
+    let mut services_to_enable: Vec<String> = Vec::new();
+    for service in new_enable {
+        if !old_enable.contains(&service) {
+            services_to_enable.push(service.to_string());
+        }
+    }
+    if !services_to_enable.is_empty() {
+        service_enable(snapshot, &services_to_enable)?;
+    }
+    let mut pkgs_to_uninstall: Vec<String> = Vec::new();
+    for pkg in old_pkgs {
+        if !new_pkgs.contains(&pkg) {
+            pkgs_to_uninstall.push(pkg.to_string());
+        }
+    }
+    if !pkgs_to_uninstall.is_empty() {
+        uninstall_package_helper_chroot(snapshot, &pkgs_to_uninstall, true)?;
+    }
+    Ok(())
+}
+
 // Check if last update was successful
 pub fn check_update() -> Result<(), Error> {
     // Open and read upstate file
@@ -2216,30 +2313,6 @@ pub fn snapshot_profile_edit(snapshot: &str) -> Result<(), Error> {
     } else {
         // Edit profile
         prepare(snapshot)?;
-        // Save values before edit
-        let old_cfile = format!("/.snapshots/rootfs/snapshot-{}/etc/ash/profile", snapshot);
-        let mut old_profconf = Ini::new();
-        old_profconf.set_comment_symbols(&['#']);
-        old_profconf.set_multiline(true);
-        old_profconf.load(&old_cfile).unwrap();
-        let mut old_pkgs: Vec<String> = Vec::new();
-        if old_profconf.sections().contains(&"packages".to_string()) {
-            for pkg in old_profconf.get_map().unwrap().get("packages").unwrap().keys(){
-                old_pkgs.push(pkg.to_string());
-            }
-        }
-        let mut old_enable: Vec<String> = Vec::new();
-        if old_profconf.sections().contains(&"enable-services".to_string()) {
-            for service in old_profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
-                old_enable.push(service.to_string());
-            }
-        }
-        let mut old_disable: Vec<String> = Vec::new();
-        if old_profconf.sections().contains(&"disable-services".to_string()) {
-            for service in old_profconf.get_map().unwrap().get("disable-services").unwrap().keys() {
-                old_disable.push(service.to_string());
-            }
-        }
 
         // Launch editor
         if std::env::var("EDITOR").is_ok() {
@@ -2291,74 +2364,10 @@ pub fn snapshot_profile_edit(snapshot: &str) -> Result<(), Error> {
                 return Err(Error::new(ErrorKind::NotFound,
                                       "No text editor available!"));
             }
-
-            // Get new values
-            let cfile = format!("/.snapshots/rootfs/snapshot-chr{}/etc/ash/profile", snapshot);
-            let mut profconf = Ini::new();
-            profconf.set_comment_symbols(&['#']);
-            profconf.set_multiline(true);
-            profconf.load(&cfile).unwrap();
-            let mut new_pkgs: Vec<String> = Vec::new();
-            if profconf.sections().contains(&"packages".to_string()) {
-                for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
-                    new_pkgs.push(pkg.to_string());
-                }
-            }
-            let mut new_enable: Vec<String> = Vec::new();
-            if profconf.sections().contains(&"enable-services".to_string()) {
-                for service in profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
-                    new_enable.push(service.to_string());
-                }
-            }
-            let mut new_disable: Vec<String> = Vec::new();
-            if profconf.sections().contains(&"disable-services".to_string()) {
-                for service in profconf.get_map().unwrap().get("disable-services").unwrap().keys() {
-                    new_disable.push(service.to_string());
-                }
-            }
-
-            // Apply changes
-            let mut pkgs_to_install: Vec<String> = Vec::new();
-            for pkg in &new_pkgs {
-                if !old_pkgs.contains(&pkg) {
-                    pkgs_to_install.push(pkg.to_string());
-                }
-            }
-            if !pkgs_to_install.is_empty() {
-                install_package_helper_chroot(snapshot, &pkgs_to_install, true)?;
-            }
-            let mut services_to_disable: Vec<String> = Vec::new();
-            for service in &old_enable {
-                if !new_enable.contains(&service) {
-                    services_to_disable.push(service.to_string());
-                }
-            }
-            for service in new_disable {
-                if !old_disable.contains(&service) {
-                    services_to_disable.push(service.to_string());
-                }
-            }
-            if !services_to_disable.is_empty() {
-                service_disable(snapshot, &services_to_disable)?;
-            }
-            let mut services_to_enable: Vec<String> = Vec::new();
-            for service in new_enable {
-                if !old_enable.contains(&service) {
-                    services_to_enable.push(service.to_string());
-                }
-            }
-            if !services_to_enable.is_empty() {
-                service_enable(snapshot, &services_to_enable)?;
-            }
-            let mut pkgs_to_uninstall: Vec<String> = Vec::new();
-            for pkg in old_pkgs {
-                if !new_pkgs.contains(&pkg) {
-                    pkgs_to_uninstall.push(pkg.to_string());
-                }
-            }
-            if !pkgs_to_uninstall.is_empty() {
-                uninstall_package_helper_chroot(snapshot, &pkgs_to_uninstall, true)?;
-            }
+        }
+        if check_profile(snapshot).is_err() {
+            return Err(Error::new(ErrorKind::Other,
+                                  "Failed to apply changes."));
         }
     }
     Ok(())
