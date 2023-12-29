@@ -18,7 +18,7 @@ debian = []
 cfg-if = "1.0.0"
 chrono = "0.4.31"
 clap = "4.1.8"
-configparser = "3.0.2"
+configparser = { version = "3.0.2", features = ["indexmap"] }
 cpython = "0.7"
 csv = "1.2.2"
 curl = "0.4.44"

@@ -1,6 +1,7 @@
 use crate::{check_mutability, chr_delete, get_current_snapshot, immutability_disable, immutability_enable, post_transactions,
             prepare, remove_dir_content, snapshot_config_get, sync_time, get_tmp};
 
+use configparser::ini::Ini;
 use rustix::path::Arg;
 use std::fs::{DirBuilder, OpenOptions, read_dir};
 use std::io::{Error, ErrorKind, Write};
@@ -235,7 +236,19 @@ pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
 // Install atomic-operation
 pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     prepare(snapshot)?;
+    //Live profile configurations
+    let cfile = format!("/.snapshots/rootfs/snapshot-chr{}/etc/ash/live-profile", snapshot);
+    let mut profconf = Ini::new();
+    profconf.set_comment_symbols(&['#']);
+    profconf.set_multiline(true);
+    // Load profile
+    profconf.load(&cfile).unwrap();
+
     for pkg in pkgs {
+        let mut pkgs_list: Vec<String> = Vec::new();
+        for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+            pkgs_list.push(pkg.to_string());
+        }
         // This extra pacman check is to avoid unwantedly triggering AUR if package is official
         let pacman_si_arg = format!("pacman -Si {}", pkg);
         let excode = Command::new("sh").arg("-c")
@@ -257,6 +270,14 @@ pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool
             if !excode.success() {
                 return Err(Error::new(ErrorKind::Other,
                                       format!("Failed to install {}.", pkg)));
+            } else if !pkgs_list.contains(pkg) {
+                pkgs_list.push(pkg.to_string());
+                pkgs_list.sort();
+                for key in pkgs_list {
+                    profconf.remove_key("packages", &key);
+                    profconf.set("packages", &key, None);
+                }
+                profconf.write(&cfile)?;
             }
         } else if aur_check(snapshot) {
             // Use paru if aur is enabled
@@ -273,6 +294,14 @@ pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool
             if !excode.success() {
                 return Err(Error::new(ErrorKind::Other,
                                       format!("Failed to install {}.", pkg)));
+            } else if !pkgs_list.contains(pkg) {
+                pkgs_list.push(pkg.to_string());
+                pkgs_list.sort();
+                for key in pkgs_list {
+                    profconf.remove_key("packages", &key);
+                    profconf.set("packages", &key, None);
+                }
+                profconf.write(&cfile)?;
             }
         } else if !aur_check(snapshot) {
             return Err(Error::new(ErrorKind::NotFound,
@@ -481,7 +510,19 @@ pub fn tree_sync_helper(s_f: &str, s_t: &str, chr: &str) -> Result<(), Error>  {
 
 // Uninstall package(s) atomic-operation
 pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
+    // Live profile configurations
+    let cfile = format!("/.snapshots/rootfs/snapshot-chr{}/etc/ash/live-profile", snapshot);
+    let mut profconf = Ini::new();
+    profconf.set_comment_symbols(&['#']);
+    profconf.set_multiline(true);
+    // Load profile
+    profconf.load(&cfile).unwrap();
+
     for pkg in pkgs {
+        let mut pkgs_list: Vec<String> = Vec::new();
+        for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+            pkgs_list.push(pkg.to_string());
+        }
         let pacman_args = if noconfirm {
             ["pacman", "--noconfirm", "-Rns"]
         } else {
@@ -495,6 +536,9 @@ pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: b
         if !excode.success() {
             return Err(Error::new(ErrorKind::Other,
                                   format!("Failed to uninstall {}.", pkg)));
+        } else if pkgs_list.contains(pkg) {
+            profconf.remove_key("packages", &pkg);
+            profconf.write(&cfile)?;
         }
     }
     Ok(())

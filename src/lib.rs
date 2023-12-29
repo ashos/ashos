@@ -1321,7 +1321,7 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
         auto_upgrade(snapshot)?;
         prepare(snapshot)?;
 
-        // profile configurations
+        // Profile configurations
         let mut profconf = Ini::new();
         profconf.set_comment_symbols(&['#']);
         profconf.set_multiline(true);
@@ -1408,7 +1408,7 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
     ash_mounts(&tmp, "")?;
     if upgrade_helper_live(&tmp, noconfirm).is_ok() {
 
-        // profile configurations
+        // Profile configurations
         let mut profconf = Ini::new();
         profconf.set_comment_symbols(&['#']);
         profconf.set_multiline(true);
@@ -2198,6 +2198,139 @@ pub fn snapshot_config_get(snapshot: &str) -> HashMap<String, String> {
         }
         return options;
     }
+}
+
+// Edit per-snapshot live profile
+pub fn snapshot_profile_edit(snapshot: &str) -> Result<(), Error> {
+    // Make sure snapshot exist
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+        eprintln!("Cannot chroot as snapshot {} doesn't exist.", snapshot);
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        // Make sure snapshot is not in use by another ash process
+        eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.", snapshot,snapshot)
+
+    } else if snapshot == "0" {
+        // Make sure is not base snapshot
+        eprintln!("Changing base snapshot is not allowed.")
+
+    } else {
+        // Edit live profile
+        prepare(snapshot)?;
+        // Live profile configurations
+        let cfile = format!("/.snapshots/rootfs/snapshot-chr{}/etc/ash/live-profile", snapshot);
+        let mut profconf = Ini::new();
+        profconf.set_comment_symbols(&['#']);
+        profconf.set_multiline(true);
+        // Load profile
+        profconf.load(&cfile).unwrap();
+        // Save values before edit
+        let mut old_pkgs: Vec<String> = Vec::new();
+        for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+            old_pkgs.push(pkg.to_string());
+        }
+        let mut old_enable: Vec<String> = Vec::new();
+        for service in profconf.get_map().unwrap().get("enable_services").unwrap().keys() {
+            old_enable.push(service.to_string());
+        }
+        let mut old_disable: Vec<String> = Vec::new();
+        for service in profconf.get_map().unwrap().get("disable_services").unwrap().keys() {
+            old_disable.push(service.to_string());
+        }
+
+        // Launch editor
+        if std::env::var("EDITOR").is_ok() {
+        Command::new("sh").arg("-c")
+                          .arg(format!("$EDITOR /.snapshots/rootfs/snapshot-chr{}/etc/ash/live-profile", snapshot))
+                          .status()?;
+            } else {
+            // nano available
+            if Command::new("sh").arg("-c")
+                                 .arg("[ -x \"$(command -v nano)\" ]")
+                                 .status().unwrap().success() {
+                                     Command::new("sh").arg("-c")
+                                                       .arg(format!("nano /.snapshots/rootfs/snapshot-chr{}/etc/ash/live-profile", snapshot))
+                                                       .status()?;
+                                 }
+            // vi available
+            else if Command::new("sh").arg("-c")
+                                      .arg("[ -x \"$(command -v vi)\" ]")
+                                      .status().unwrap().success() {
+                                          Command::new("sh").arg("-c")
+                                                            .arg(format!("vi /.snapshots/rootfs/snapshot-chr{}/etc/ash/live-profile", snapshot))
+                                                            .status()?;
+                                      }
+            // vim available
+            else if Command::new("sh").arg("-c")
+                                      .arg("[ -x \"$(command -v vim)\" ]")
+                                      .status().unwrap().success() {
+                                          Command::new("sh").arg("-c")
+                                                            .arg(format!("vim /.snapshots/rootfs/snapshot-chr{}/etc/ash/live-profile", snapshot))
+                                                            .status()?;
+                                      }
+            // neovim
+            else if Command::new("sh").arg("-c")
+                                      .arg("[ -x \"$(command -v nvim)\" ]")
+                                      .status().unwrap().success() {
+                                          Command::new("sh").arg("-c")
+                                                            .arg(format!("nvim /.snapshots/rootfs/snapshot-chr{}/etc/ash/live-profile", snapshot))
+                                                            .status()?;
+                                      }
+            // micro
+            else if Command::new("sh").arg("-c")
+                                      .arg("[ -x \"$(command -v micro)\" ]")
+                                      .status().unwrap().success() {
+                                          Command::new("sh").arg("-c")
+                                                            .arg(format!("micro /.snapshots/rootfs/snapshot-chr{}/etc/ash/live-profile", snapshot))
+                                                            .status()?;
+                                      }
+            else {
+                return Err(Error::new(ErrorKind::NotFound,
+                                      "No text editor available!"));
+            }
+
+            // Get new values
+            let mut new_pkgs: Vec<String> = Vec::new();
+            for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+                new_pkgs.push(pkg.to_string());
+            }
+            let mut new_enable: Vec<String> = Vec::new();
+            for service in profconf.get_map().unwrap().get("enable_services").unwrap().keys() {
+                new_enable.push(service.to_string());
+            }
+            let mut new_disable: Vec<String> = Vec::new();
+            for service in profconf.get_map().unwrap().get("disable_services").unwrap().keys() {
+                new_disable.push(service.to_string());
+            }
+
+            // Apply changes
+            for pkg in &new_pkgs {
+                if !old_pkgs.contains(&pkg) {
+                    //install
+                }
+            }
+            for pkg in old_pkgs {
+                if !new_pkgs.contains(&pkg) {
+                    // uninstall
+                }
+            }
+            for service in &new_enable {
+                if !old_enable.contains(&service) {
+                    // enable
+                }
+            }
+            for service in old_enable {
+                if !new_enable.contains(&service) {
+                    // disable
+                }
+            }
+            for service in new_disable {
+                if !old_disable.contains(&service) {
+                    // disable
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 // Remove temporary chroot for specified snapshot only
@@ -3013,7 +3146,7 @@ fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfir
         // Prepare
         prepare(snapshot)?;
 
-        // profile configurations
+        // Profile configurations
         let mut profconf = Ini::new();
         profconf.set_comment_symbols(&['#']);
         profconf.set_multiline(true);
@@ -3059,7 +3192,7 @@ fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noco
     // Prepare
     ash_mounts(&tmp, "")?;
 
-    // profile configurations
+    // Profile configurations
     let mut profconf = Ini::new();
     profconf.set_comment_symbols(&['#']);
     profconf.set_multiline(true);
@@ -3226,7 +3359,7 @@ pub fn update_boot(snapshot: &str, secondary: bool) -> Result<(), Error> {
         }
 
         // Run update commands in chroot
-        let distro_name = detect::distro_name();
+        let distro_name = detect::distro_name(snapshot);
         let mkconfig = format!("grub-mkconfig {} -o /boot/{}/grub.cfg", part,grub);
         let sed_snap = format!("sed -i 's|snapshot-chr{}|snapshot-{}|g' /boot/{}/grub.cfg", snapshot,tmp,grub);
         let sed_distro = format!("sed -i '0,\\|{}| s||{} snapshot {}|' /boot/{}/grub.cfg",
