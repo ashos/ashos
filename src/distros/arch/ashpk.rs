@@ -234,10 +234,59 @@ pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
 }
 
 // Install atomic-operation
+pub fn install_package_helper_chroot(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
+    for pkg in pkgs {
+        // This extra pacman check is to avoid unwantedly triggering AUR if package is official
+        let pacman_si_arg = format!("pacman -Si {}", pkg);
+        let excode = Command::new("sh").arg("-c")
+                                       .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,pacman_si_arg))
+                                       .output()?; // --sysroot
+        let pacman_sg_arg = format!("pacman -Sg {}", pkg);
+        let excode_group = Command::new("sh").arg("-c")
+                                             .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,pacman_sg_arg))
+                                             .output()?;
+        if excode.status.success() || excode_group.status.success() {
+            let pacman_args = if noconfirm {
+                format!("pacman -S --noconfirm --needed --overwrite '/var/*' {}", pkg)
+            } else {
+                format!("pacman -S --needed --overwrite '/var/*' {}", pkg)
+            };
+            let excode = Command::new("sh").arg("-c")
+                                            .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,pacman_args))
+                                            .status()?;
+            if !excode.success() {
+                return Err(Error::new(ErrorKind::Other,
+                                      format!("Failed to install {}.", pkg)));
+            }
+        } else if aur_check(snapshot) {
+            // Use paru if aur is enabled
+            let paru_args = if noconfirm {
+                format!("paru -S --noconfirm --needed --overwrite '/var/*' {}", pkg)
+            } else {
+                format!("paru -S --needed --overwrite '/var/*' {}", pkg)
+            };
+            let excode = Command::new("chroot")
+                .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                .args(["su", "aur", "-c"])
+                .arg(&paru_args)
+                .status()?;
+            if !excode.success() {
+                return Err(Error::new(ErrorKind::Other,
+                                      format!("Failed to install {}.", pkg)));
+            }
+        } else if !aur_check(snapshot) {
+            return Err(Error::new(ErrorKind::NotFound,
+                                  "Please enable AUR."));
+        }
+    }
+    Ok(())
+}
+
+// Install atomic-operation
 pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     prepare(snapshot)?;
-    //Live profile configurations
-    let cfile = format!("/.snapshots/rootfs/snapshot-chr{}/etc/ash/live-profile", snapshot);
+    //Profile configurations
+    let cfile = format!("/.snapshots/rootfs/snapshot-chr{}/etc/ash/profile", snapshot);
     let mut profconf = Ini::new();
     profconf.set_comment_symbols(&['#']);
     profconf.set_multiline(true);
@@ -510,8 +559,8 @@ pub fn tree_sync_helper(s_f: &str, s_t: &str, chr: &str) -> Result<(), Error>  {
 
 // Uninstall package(s) atomic-operation
 pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
-    // Live profile configurations
-    let cfile = format!("/.snapshots/rootfs/snapshot-chr{}/etc/ash/live-profile", snapshot);
+    // Profile configurations
+    let cfile = format!("/.snapshots/rootfs/snapshot-chr{}/etc/ash/profile", snapshot);
     let mut profconf = Ini::new();
     profconf.set_comment_symbols(&['#']);
     profconf.set_multiline(true);
@@ -539,6 +588,27 @@ pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: b
         } else if pkgs_list.contains(pkg) {
             profconf.remove_key("packages", &pkg);
             profconf.write(&cfile)?;
+        }
+    }
+    Ok(())
+}
+
+// Uninstall package(s) atomic-operation
+pub fn uninstall_package_helper_chroot(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
+    for pkg in pkgs {
+        let pacman_args = if noconfirm {
+            ["pacman", "--noconfirm", "-Rns"]
+        } else {
+            ["pacman", "--confirm", "-Rns"]
+        };
+
+        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
+                                           .args(pacman_args)
+                                           .arg(format!("{}", pkg)).status()?;
+
+        if !excode.success() {
+            return Err(Error::new(ErrorKind::Other,
+                                  format!("Failed to uninstall {}.", pkg)));
         }
     }
     Ok(())

@@ -516,6 +516,35 @@ fn main() {
                     Err(e) => eprintln!("{}", e),
                 }
             }
+            // Edit snapshot profile
+            Some(("snapshot-profile", snapshot_profile_matches)) => {
+                // Get snapshot value
+                let snapshot = if snapshot_profile_matches.contains_id("SNAPSHOT") {
+                    let snap = snapshot_profile_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Run snapshot_profile_edit
+                let run = snapshot_profile_edit(&snapshot);
+                match run {
+                    Ok(_) => {
+                        if post_transactions(&snapshot).is_ok() {
+                            println!("snapshot {} profile has been successfully updated.", &snapshot)
+                        } else {
+                            chr_delete(&snapshot).unwrap();
+                            eprintln!("Failed to update snapshot {} profile.", &snapshot)
+                        }
+                    },
+                    Err(e) => {
+                        chr_delete(&snapshot).unwrap();
+                        eprintln!("{}", e);
+                    },
+                }
+            }
             // Refresh
             Some(("refresh", refresh_matches)) => {
                 // Get snapshot value
@@ -540,7 +569,7 @@ fn main() {
                         // Reboot system
                         Command::new("reboot").status().unwrap();
                     },
-                    Err(e) => println!("{}", e),
+                    Err(e) => eprintln!("{}", e),
                 }
             }
             // Rollback

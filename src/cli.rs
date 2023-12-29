@@ -364,6 +364,17 @@ pub fn cli() -> Command {
                          .num_args(1..)
                          .required(false)
                          .help("description for the snapshot"),),)
+        // Edit live profile
+        .subcommand(Command::new("snapshot-profile")
+                    .alias("sp")
+                    .about("Edit snapshot profile")
+                    .arg(Arg::new("SNAPSHOT")
+                         .long("snapshot")
+                         .alias("snap")
+                         .short('s')
+                         .value_parser(clap::value_parser!(i32))
+                         .required(false)
+                         .help("snapshot number"),),)
         // Refresh
         .subcommand(Command::new("refresh")
                     .alias("ref")
