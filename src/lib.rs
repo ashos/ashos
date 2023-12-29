@@ -375,14 +375,18 @@ pub fn chroot(snapshot: &str, cmds: Vec<String>) -> Result<(), Error> {
                 if prepare(snapshot).is_ok() {
                     // Run command in chroot
                     if chroot_exec(&path, &cmd).is_ok() {
-                        // Make sure post_transactions exit properly
-                        match post_transactions(snapshot) {
-                            Ok(()) => {
-                            }
-                            Err(error) => {
-                                eprintln!("post_transactions error: {}", error);
-                                // Clean chroot mount directories if command failed
-                                chr_delete(snapshot)?;
+                        // Check for profile changes
+                        if check_profile(snapshot).is_ok() {
+                            // Make sure post_transactions exit properly
+                            match post_transactions(snapshot) {
+                                Ok(()) => {
+                                    // Do nothing
+                                }
+                                Err(error) => {
+                                    eprintln!("post_transactions error: {}", error);
+                                    // Clean chroot mount directories if command failed
+                                    chr_delete(snapshot)?;
+                                }
                             }
                         }
                     } else {
@@ -397,14 +401,19 @@ pub fn chroot(snapshot: &str, cmds: Vec<String>) -> Result<(), Error> {
         } else if prepare(snapshot).is_ok() {
             // Chroot
             if chroot_in(&path)?.code().is_some() {
-                // Make sure post_transactions exit properly
-                match post_transactions(snapshot) {
-                    Ok(()) => {
-                    }
-                    Err(error) => {
-                        eprintln!("post_transactions error: {}", error);
-                        // Clean chroot mount directories if command failed
-                        chr_delete(snapshot)?;
+                // Check for profile changes
+                if check_profile(snapshot).is_ok() {
+                    // Make sure post_transactions exit properly
+                    match post_transactions(snapshot) {
+                        Ok(()) => {
+                            // Do nothig
+                            }
+                        Err(error) => {
+                            eprintln!("post_transactions error: {}", error);
+                            // Clean chroot mount directories if command failed
+                            chr_delete(snapshot)?;
+
+                        }
                     }
                 }
             } else {
