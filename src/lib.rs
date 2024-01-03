@@ -302,6 +302,49 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
     if !pkgs_to_uninstall.is_empty() {
         uninstall_package_helper_chroot(snapshot, &pkgs_to_uninstall, true)?;
     }
+
+    // Check pacman database
+    let pkg_list = no_dep_pkg_list(snapshot, "chr");
+    for pkg in &pkg_list {
+        let mut pkgs: Vec<String> = Vec::new();
+        if profconf.sections().contains(&"packages".to_string()) {
+            for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+                // Remove package from profile if not installed
+                if !pkg_list.contains(pkg) {
+                    profconf.remove_key("packages", pkg);
+                }
+                pkgs.push(pkg.to_string());
+            }
+            profconf.write(&cfile)?;
+        }
+        // Add package to profile if installed
+        if !pkgs.contains(&pkg) {
+            pkgs.push(pkg.to_string());
+        }
+        for key in pkgs {
+            profconf.remove_key("packages", &key);
+            profconf.set("packages", &key, None);
+        }
+        profconf.write(&cfile)?;
+    }
+
+    // Check services
+    if profconf.sections().contains(&"enable-services".to_string()) {
+        for service in profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
+            if !is_service_enabled(snapshot, service) {
+                profconf.remove_key("enable-services", &service);
+            }
+        }
+        profconf.write(&cfile)?;
+    }
+    if profconf.sections().contains(&"disable-services".to_string()) {
+        for service in profconf.get_map().unwrap().get("disable-services").unwrap().keys() {
+            if is_service_enabled(snapshot, service) {
+                profconf.remove_key("disable-services", &service);
+            }
+        }
+        profconf.write(&cfile)?;
+    }
     Ok(())
 }
 
@@ -1721,8 +1764,12 @@ pub fn is_pkg_installed(snapshot: &str, pkg: &str) -> bool {
 }
 
 // Package list
-pub fn list(snapshot: &str, chr: &str) -> Vec<String> {
-    let list = pkg_list(snapshot, chr);
+pub fn list(snapshot: &str, chr: &str, exclude: bool) -> Vec<String> {
+    let list = if exclude {
+        no_dep_pkg_list(snapshot, chr)
+    } else {
+        pkg_list(snapshot, chr)
+    };
     list
 }
 

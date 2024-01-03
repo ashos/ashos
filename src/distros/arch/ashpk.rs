@@ -321,7 +321,6 @@ pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool
                                       format!("Failed to install {}.", pkg)));
             } else if !pkgs_list.contains(pkg) {
                 pkgs_list.push(pkg.to_string());
-                pkgs_list.sort();
                 for key in pkgs_list {
                     profconf.remove_key("packages", &key);
                     profconf.set("packages", &key, None);
@@ -405,10 +404,37 @@ pub fn install_package_helper_live(snapshot: &str, tmp: &str, pkgs: &Vec<String>
     Ok(())
 }
 
+// Check if service enabled
+pub fn is_service_enabled(snapshot: &str, service: &str) -> bool {
+    if Path::new("/var/lib/systemd/").try_exists().unwrap() {
+        let excode = Command::new("sh").arg("-c")
+                                       .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} systemctl is-enabled {}", snapshot,service))
+                                       .output().unwrap();
+        let stdout = String::from_utf8_lossy(&excode.stdout).trim().to_string();
+        if stdout == "enabled" {
+            return true;
+        } else {
+            return false;
+        }
+    } else {
+        // TODO add OpenRC
+        return false;
+    }
+}
+
 // Get list of packages installed in a snapshot
 pub fn pkg_list(snapshot: &str, chr: &str) -> Vec<String> {
     let excode = Command::new("sh").arg("-c")
                                    .arg(format!("chroot /.snapshots/rootfs/snapshot-{}{} pacman -Qq", chr,snapshot))
+                                   .output().unwrap();
+    let stdout = String::from_utf8_lossy(&excode.stdout).trim().to_string();
+    stdout.split('\n').map(|s| s.to_string()).collect()
+}
+
+// Get list of installed packages and exclude packages installed as dependencies
+pub fn no_dep_pkg_list(snapshot: &str, chr: &str) -> Vec<String> {
+    let excode = Command::new("sh").arg("-c")
+                                   .arg(format!("chroot /.snapshots/rootfs/snapshot-{}{} pacman -Qqe", chr,snapshot))
                                    .output().unwrap();
     let stdout = String::from_utf8_lossy(&excode.stdout).trim().to_string();
     stdout.split('\n').map(|s| s.to_string()).collect()

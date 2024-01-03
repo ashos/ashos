@@ -4,6 +4,7 @@ mod cli;
 use cli::*;
 use lib::*;
 use nix::unistd::Uid;
+use std::path::Path;
 use std::process::Command;
 // Directexplicitories
 // All snapshots share one /var
@@ -487,10 +488,18 @@ fn main() {
                 // chr value
                 let chr = "";
 
-                // Run list
-                let run = list(&snapshot, chr);
-                for pkg in run {
-                    println!("{}", pkg);
+                // Optional values
+                let exclude = list_matches.get_flag("exclude-dependency");
+
+                // Make sure snapshot exists
+                if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+                    eprintln!("Cannot list packages as snapshot {} doesn't exist.", snapshot);
+                } else {
+                    // Run list
+                    let run = list(&snapshot, chr, exclude);
+                    for pkg in run {
+                        println!("{}", pkg);
+                    }
                 }
             }
             // Live chroot
