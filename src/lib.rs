@@ -21,6 +21,7 @@ use tree::*;
 use walkdir::{DirEntry, WalkDir};
 
 cfg_if::cfg_if! {
+    //TODO make feature conflict
     if #[cfg(feature = "arch")] {
         use distros::arch::ashpk::*;
     }
@@ -216,9 +217,15 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
     old_profconf.set_comment_symbols(&['#']);
     old_profconf.set_multiline(true);
     old_profconf.load(&old_cfile).unwrap();
+    let mut old_system_pkgs: Vec<String> = Vec::new();
+    if old_profconf.sections().contains(&"system-packages".to_string()) {
+        for pkg in old_profconf.get_map().unwrap().get("system-packages").unwrap().keys() {
+            old_system_pkgs.push(pkg.to_string());
+        }
+    }
     let mut old_pkgs: Vec<String> = Vec::new();
-    if old_profconf.sections().contains(&"packages".to_string()) {
-        for pkg in old_profconf.get_map().unwrap().get("packages").unwrap().keys() {
+    if old_profconf.sections().contains(&"profile-packages".to_string()) {
+        for pkg in old_profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
             old_pkgs.push(pkg.to_string());
         }
     }
@@ -241,9 +248,15 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
     profconf.set_comment_symbols(&['#']);
     profconf.set_multiline(true);
     profconf.load(&cfile).unwrap();
+    let mut new_system_pkgs: Vec<String> = Vec::new();
+    if profconf.sections().contains(&"system-packages".to_string()) {
+        for pkg in profconf.get_map().unwrap().get("system-packages").unwrap().keys() {
+            new_system_pkgs.push(pkg.to_string());
+        }
+    }
     let mut new_pkgs: Vec<String> = Vec::new();
-    if profconf.sections().contains(&"packages".to_string()) {
-        for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+    if profconf.sections().contains(&"profile-packages".to_string()) {
+        for pkg in profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
             new_pkgs.push(pkg.to_string());
         }
     }
@@ -261,6 +274,22 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
     }
 
     // Apply changes
+    // Install new system package(s)
+    let mut system_pkgs_to_install: Vec<String> = Vec::new();
+    for pkg in &new_system_pkgs {
+        if !old_system_pkgs.contains(&pkg) {
+            system_pkgs_to_install.push(pkg.to_string());
+        }
+    }
+    if !system_pkgs_to_install.is_empty() && !is_system_locked() {
+        install_package_helper_chroot(snapshot, &system_pkgs_to_install, true)?;
+        pacman_holdpkg(snapshot, &profconf)?;
+    } else if !system_pkgs_to_install.is_empty() && is_system_locked() {
+        // Prevent install new system package(s)
+        return Err(Error::new(ErrorKind::Unsupported, format!("Install system package(s) is not allowed.")));
+    }
+
+    // Install new profile package(s)
     let mut pkgs_to_install: Vec<String> = Vec::new();
     for pkg in &new_pkgs {
         if !old_pkgs.contains(&pkg) {
@@ -270,6 +299,8 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
     if !pkgs_to_install.is_empty() {
         install_package_helper_chroot(snapshot, &pkgs_to_install, true)?;
     }
+
+    // Disable removed service(s)
     let mut services_to_disable: Vec<String> = Vec::new();
     for service in &old_enable {
         if !new_enable.contains(&service) {
@@ -282,8 +313,10 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
         }
     }
     if !services_to_disable.is_empty() {
-        service_disable(snapshot, &services_to_disable)?;
+        service_disable(snapshot, &services_to_disable, "chr")?;
     }
+
+    // Enable new service(s)
     let mut services_to_enable: Vec<String> = Vec::new();
     for service in new_enable {
         if !old_enable.contains(&service) {
@@ -291,8 +324,25 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
         }
     }
     if !services_to_enable.is_empty() {
-        service_enable(snapshot, &services_to_enable)?;
+        service_enable(snapshot, &services_to_enable, "chr")?;
     }
+
+    // Uninstall package(s) not in the new system-packages list
+    let mut system_pkgs_to_uninstall: Vec<String> = Vec::new();
+    for pkg in old_system_pkgs {
+        if !new_system_pkgs.contains(&pkg) {
+            system_pkgs_to_uninstall.push(pkg.to_string());
+        }
+    }
+    if !system_pkgs_to_uninstall.is_empty() && !is_system_locked() {
+        uninstall_package_helper_chroot(snapshot, &system_pkgs_to_uninstall, true)?;
+        pacman_holdpkg(snapshot, &profconf)?;
+    } else if !system_pkgs_to_uninstall.is_empty() && is_system_locked() {
+        // Prevent remove of system package from profile if not installed
+        return Err(Error::new(ErrorKind::Unsupported, format!("Remove system package(s) is not allowed.")));
+    }
+
+    // Uninstall package(s) not in the new profile-packages list
     let mut pkgs_to_uninstall: Vec<String> = Vec::new();
     for pkg in old_pkgs {
         if !new_pkgs.contains(&pkg) {
@@ -307,11 +357,23 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
     let pkg_list = no_dep_pkg_list(snapshot, "chr");
     for pkg in &pkg_list {
         let mut pkgs: Vec<String> = Vec::new();
-        if profconf.sections().contains(&"packages".to_string()) {
-            for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+        if profconf.sections().contains(&"system-packages".to_string()) {
+            for pkg in profconf.get_map().unwrap().get("system-packages").unwrap().keys() {
+                // Remove package from profile if not installed and lock feature is not enabled
+                if !pkg_list.contains(pkg) && !is_system_locked() {
+                    profconf.remove_key("system-packages", pkg);
+                } else if !pkg_list.contains(pkg) && is_system_locked() {
+                    // Prevent remove of system package from profile if not installed
+                    return Err(Error::new(ErrorKind::Unsupported, format!("Remove system package(s) is not allowed.")));
+                }
+            }
+            profconf.write(&cfile)?;
+        }
+        if profconf.sections().contains(&"profile-packages".to_string()) {
+            for pkg in profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
                 // Remove package from profile if not installed
                 if !pkg_list.contains(pkg) {
-                    profconf.remove_key("packages", pkg);
+                    profconf.remove_key("profile-packages", pkg);
                 }
                 pkgs.push(pkg.to_string());
             }
@@ -322,13 +384,14 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
             pkgs.push(pkg.to_string());
         }
         for key in pkgs {
-            profconf.remove_key("packages", &key);
-            profconf.set("packages", &key, None);
+            profconf.remove_key("profile-packages", &key);
+            profconf.set("profile-packages", &key, None);
         }
         profconf.write(&cfile)?;
     }
 
     // Check services
+    // Add service(s) enabled by systemctl
     if profconf.sections().contains(&"enable-services".to_string()) {
         for service in profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
             if !is_service_enabled(snapshot, service) {
@@ -337,6 +400,7 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
         }
         profconf.write(&cfile)?;
     }
+    // Remove service(s) disabled by systemctl
     if profconf.sections().contains(&"disable-services".to_string()) {
         for service in profconf.get_map().unwrap().get("disable-services").unwrap().keys() {
             if is_service_enabled(snapshot, service) {
@@ -345,6 +409,7 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
         }
         profconf.write(&cfile)?;
     }
+
     Ok(())
 }
 
@@ -718,7 +783,7 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
                 return Err(Error::new(ErrorKind::Unsupported, format!(
                     "Cannot delete booted snapshot.")));
             // Make sure snapshot is not deploy snapshot
-            } else if snapshot == &next_snapshot {
+            } else if snapshot == &next_snapshot { // REVIEW
                 return Err(Error::new(ErrorKind::Unsupported, format!(
                     "Cannot delete deployed snapshot.")));
 
@@ -1211,7 +1276,7 @@ fn get_grub() -> Option<String> {
     grub_dirs.get(0).cloned()
 }
 
-// Get deployed snapshot
+// Get deployed snapshot // REVIEW
 pub fn get_next_snapshot(secondary: bool) -> String {
     let tmp = get_tmp();
     let d = get_aux_tmp(tmp, secondary);
@@ -1497,9 +1562,9 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
         }
 
         // Read packages section in configuration file
-        if profconf.sections().contains(&"packages".to_string()) {
+        if profconf.sections().contains(&"profile-packages".to_string()) {
             let mut pkgs: Vec<String> = Vec::new();
-            for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+            for pkg in profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
                 pkgs.push(pkg.to_string());
             }
             // Install package(s)
@@ -1513,7 +1578,7 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
                 services.push(service.to_string());
             }
             // Disable service(s)
-            service_disable(snapshot, &services)?;
+            service_disable(snapshot, &services, "chr")?;
         }
 
         // Read enable services section in configuration file
@@ -1523,7 +1588,7 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
                 services.push(service.to_string());
             }
             // Enable service(s)
-            service_enable(snapshot, &services)?;
+            service_enable(snapshot, &services, "chr")?;
         }
 
         // Read commands section in configuration file
@@ -1554,7 +1619,9 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
     } else {
         println!("Updating the system before installing {} profile...", user_profile);
     }
+    // Mount tmp
     ash_mounts(&tmp, "")?;
+    // Upgrade
     if upgrade_helper_live(&tmp, noconfirm).is_ok() {
 
         // Profile configurations
@@ -1585,9 +1652,9 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
         }
 
         // Read packages section in configuration file
-        if profconf.sections().contains(&"packages".to_string()) {
+        if profconf.sections().contains(&"profile-packages".to_string()) {
             let mut pkgs: Vec<String> = Vec::new();
-            for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+            for pkg in profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
                 pkgs.push(pkg.to_string());
             }
             // Install package(s)
@@ -1601,7 +1668,7 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
                 services.push(service.to_string());
             }
             // Disable service(s)
-            service_disable(snapshot, &services)?;
+            service_disable(snapshot, &services, "chr")?;
         }
 
         // Read enable services section in configuration file
@@ -1611,7 +1678,7 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
                 services.push(service.to_string());
             }
             // Enable service(s)
-            service_enable(snapshot, &services)?;
+            service_enable(snapshot, &services, "chr")?;
         }
 
         // Read commands section in configuration file
@@ -1625,7 +1692,7 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
                               format!("System update failed.")));
     }
 
-    // Umounts tmp
+    // Umount tmp
     ash_umounts(&tmp, "").unwrap();
 
     Ok(())
@@ -1757,6 +1824,32 @@ fn is_mounted(path: &Path) -> bool {
 // Return if package installed in snapshot
 pub fn is_pkg_installed(snapshot: &str, pkg: &str) -> bool {
     if pkg_list(snapshot, "").contains(&pkg.to_string()) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+// Check if system packages is locked
+fn is_system_locked() -> bool {
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "lock")] {
+            return true;
+        } else {
+            return false;
+        }
+    }
+}
+
+// Check if package in "system-packages" list
+fn is_system_pkg(profconf: &Ini, pkg: String) -> bool {
+    let mut pkg_list: Vec<String> = Vec::new();
+    if profconf.sections().contains(&"system-packages".to_string()) {
+        for system_pkg in profconf.get_map().unwrap().get("system-packages").unwrap().keys() {
+            pkg_list.push(system_pkg.to_string());
+        }
+    }
+    if pkg_list.contains(&pkg) {
         return true;
     } else {
         return false;
@@ -2109,6 +2202,227 @@ pub fn print_tmp() -> String {
     }
 }
 
+// Rebuild snapshot
+pub fn rebuild(snapshot: &str, desc: &str) -> Result<i32, Error> {
+    let snap_num = find_new();
+    // Make sure snapshot does exist
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+        return Err(Error::new(ErrorKind::NotFound, format!("Cannot rebuild as snapshot {} doesn't exist.", snapshot)));
+
+    // Make sure snapshot is not in use by another ash process
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        return Err(Error::new(
+            ErrorKind::NotFound,
+            format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
+                    snapshot,snapshot)));
+
+    // Make sure snapshot is not base snapshot
+    } else if snapshot == "0" {
+        return Err(Error::new(ErrorKind::NotFound, "Changing base snapshot is not allowed."));
+
+    } else {
+        // Make snapshot mutable or immutable
+        let immutability: CreateSnapshotFlags = if check_mutability(snapshot) {
+            CreateSnapshotFlags::empty()
+        } else {
+            CreateSnapshotFlags::READ_ONLY
+        };
+
+        // prepare
+        rebuild_prep(snapshot)?;
+
+        // Create snapshot
+        create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
+                        format!("/.snapshots/rootfs/snapshot-chr{}", snap_num),
+                        immutability, None).unwrap();
+        create_snapshot(format!("/.snapshots/boot/boot-chr{}", snapshot),
+                        format!("/.snapshots/boot/boot-chr{}", snap_num),
+                        immutability, None).unwrap();
+        create_snapshot(format!("/.snapshots/etc/etc-chr{}", snapshot),
+                        format!("/.snapshots/etc/etc-chr{}", snap_num),
+                        immutability, None).unwrap();
+        // Keep package manager's cache after installing packages
+        // This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
+        cache_copy(snapshot, false)?;
+        create_snapshot(format!("/.snapshots/var/var-chr{}", snapshot),
+                        format!("/.snapshots/var/var-chr{}", snap_num),
+                        immutability, None).unwrap();
+
+        // Unmount in reverse order
+        ash_umounts(snapshot, "chr")?;
+
+        // Delete old snapshot chroot
+        chr_delete(snapshot)?;
+
+        // Create mutable or immutable snapshot
+        // Mutable
+        if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/usr/share/ash/mutable", snap_num)).try_exists().unwrap() {
+            create_snapshot(format!("/.snapshots/boot/boot-chr{}", snap_num),
+                            format!("/.snapshots/boot/boot-{}", snap_num),
+                            CreateSnapshotFlags::empty(), None).unwrap();
+            create_snapshot(format!("/.snapshots/etc/etc-chr{}", snap_num),
+                            format!("/.snapshots/etc/etc-{}", snap_num),
+                            CreateSnapshotFlags::empty(), None).unwrap();
+            create_snapshot(format!("/.snapshots/var/var-chr{}", snap_num),
+                            format!("/.snapshots/var/var-{}", snap_num),
+                            CreateSnapshotFlags::empty(), None).unwrap();
+            create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snap_num),
+                            format!("/.snapshots/rootfs/snapshot-{}", snap_num),
+                            CreateSnapshotFlags::empty(), None).unwrap();
+        } else {
+            // Immutable
+            create_snapshot(format!("/.snapshots/boot/boot-chr{}", snap_num),
+                            format!("/.snapshots/boot/boot-{}", snap_num),
+                            CreateSnapshotFlags::READ_ONLY, None).unwrap();
+            create_snapshot(format!("/.snapshots/etc/etc-chr{}", snap_num),
+                            format!("/.snapshots/etc/etc-{}", snap_num),
+                            CreateSnapshotFlags::READ_ONLY, None).unwrap();
+            create_snapshot(format!("/.snapshots/var/var-chr{}", snap_num),
+                            format!("/.snapshots/var/var-{}", snap_num),
+                            CreateSnapshotFlags::READ_ONLY, None).unwrap();
+            create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snap_num),
+                            format!("/.snapshots/rootfs/snapshot-{}", snap_num),
+                            CreateSnapshotFlags::READ_ONLY, None).unwrap();
+        }
+
+        // Special mutable directories
+        let options = snapshot_config_get(&format!("{}", snap_num));
+        let mutable_dirs: Vec<&str> = options.get("mutable_dirs")
+                                             .map(|dirs| {dirs.split(',').flat_map(|dir| {
+                                                 if let Some(index) = dir.find("::") {
+                                                     vec![&dir[..index], &dir[index + 2..]]
+                                                 } else {
+                                                     vec![dir]
+                                                 }
+                                             }).filter(|dir| !dir.trim().is_empty()).collect()})
+                                             .unwrap_or_else(|| Vec::new());
+        let mutable_dirs_shared: Vec<&str> = options.get("mutable_dirs_shared")
+                                                    .map(|dirs| {dirs.split(',').flat_map(|dir| {
+                                                        if let Some(index) = dir.find("::") {
+                                                            vec![&dir[..index], &dir[index + 2..]]
+                                                        } else {
+                                                            vec![dir]
+                                                        }
+                                                    }).filter(|dir| !dir.trim().is_empty()).collect()})
+                                                    .unwrap_or_else(|| Vec::new());
+
+        if !mutable_dirs.is_empty() {
+            for mount_path in mutable_dirs {
+                if !allow_dir_mut(mount_path) {
+                    return Err(Error::new(ErrorKind::InvalidInput,
+                                          format!("Please insert valid value for mutable_dirs in /.snapshots/etc/etc-{}/ash/ash.conf", snapshot)));
+                }
+                if is_mounted(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snap_num,mount_path))) {
+                    umount2(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snap_num,mount_path)),
+                            MntFlags::MNT_DETACH).unwrap();
+                }
+            }
+        }
+        if !mutable_dirs_shared.is_empty() {
+            for mount_path in mutable_dirs_shared {
+                if !allow_dir_mut(mount_path) {
+                    return Err(Error::new(ErrorKind::InvalidInput,
+                                          format!("Please insert valid value for mutable_dirs_shared in /.snapshots/etc/etc-{}/ash/ash.conf", snapshot)));
+                }
+                if is_mounted(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snap_num,mount_path))) {
+                    umount2(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/{}", snap_num,mount_path)),
+                            MntFlags::MNT_DETACH).unwrap();
+                }
+            }
+        }
+
+        // Clean chroot
+        chr_delete(&format!("{}", snap_num))?;
+
+        // Mark newly created snapshot as mutable
+        if immutability ==  CreateSnapshotFlags::empty() {
+            File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snap_num))?;
+        }
+
+        // Import tree file
+        let tree = fstree().unwrap();
+        // Add to root tree
+        append_base_tree(&tree, snap_num).unwrap();
+        // Save tree to fstree
+        write_tree(&tree)?;
+        // Write description for snapshot
+        if desc.is_empty() {
+            let description = format!("rebuild of {}.", snapshot);
+            write_desc(&snap_num.to_string(), &description, true)?;
+        } else {
+            write_desc(&snap_num.to_string(), &desc, true)?;
+        }
+    }
+    Ok(snap_num)
+}
+
+// Rebuild base snapshot
+pub fn rebuild_base() -> Result<(), Error> {
+    let snapshot = "0";
+    if rebuild_prep(snapshot).is_ok() {
+        post_transactions(snapshot)?;
+    }
+    Ok(())
+}
+
+// Prepare rebuild process
+pub fn rebuild_prep(snapshot: &str) -> Result<(), Error> {
+    //Profile configurations
+    let cfile = format!("/.snapshots/rootfs/snapshot-{}/etc/ash/profile", snapshot);
+    let mut profconf = Ini::new();
+    profconf.set_comment_symbols(&['#']);
+    profconf.set_multiline(true);
+    // Load profile
+    profconf.load(&cfile).unwrap();
+
+    // Remove packages
+    prepare(snapshot)?;
+    clean_chroot(snapshot)?;
+
+    // Reinstall base
+    pacstrap(snapshot)?;
+    system_config(snapshot, &profconf)?;
+
+    let mut pkgs_list: Vec<String> = Vec::new();
+    for pkg in profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
+        pkgs_list.push(pkg.to_string());
+        if pkgs_list.contains(&"pacman".to_string()) {
+            println!("pacman is in pkgs_list");
+        }
+    }
+
+    // Install packages from profile
+    install_package_helper_chroot(snapshot, &pkgs_list,true)?;
+
+    // Read disable services section in configuration file
+    if profconf.sections().contains(&"disable-services".to_string()) {
+        let mut services: Vec<String> = Vec::new();
+        for service in profconf.get_map().unwrap().get("disable-services").unwrap().keys() {
+            services.push(service.to_string());
+        }
+        // Disable service(s)
+        service_disable(snapshot, &services, "chr")?;
+    }
+
+    // Read enable services section in configuration file
+    if profconf.sections().contains(&"enable-services".to_string()) {
+        let mut services: Vec<String> = Vec::new();
+        for service in profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
+            services.push(service.to_string());
+        }
+        // Enable service(s)
+        service_enable(snapshot, &services, "chr")?;
+    }
+
+    // Read commands section in configuration file
+    if profconf.sections().contains(&"install-commands".to_string()) {
+        for cmd in profconf.get_map().unwrap().get("install-commands").unwrap().keys() {
+            chroot_exec(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), cmd)?;
+        }
+    }
+    Ok(())
+}
+
 // Refresh snapshot
 pub fn refresh(snapshot: &str) -> Result<(), Error> {
     // Make sure snapshot exists
@@ -2442,7 +2756,7 @@ pub fn snapshot_unlock(snapshot: &str) -> Result<(), Error> {
             delete_subvolume(&format!("/.snapshots/var/var-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
             delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
         } else {
-            eprintln!("{} is busy.", path.to_str().unwrap());
+            eprintln!("{} is busy, if you're certain it's not in use, try \"umount -l {}\".", path.to_str().unwrap(),path.to_str().unwrap());
         }
     }
     Ok(())
@@ -3254,9 +3568,9 @@ fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfir
         }
 
         // Read packages section in configuration file
-        if profconf.sections().contains(&"packages".to_string()) {
+        if profconf.sections().contains(&"profile-packages".to_string()) {
             let mut pkgs: Vec<String> = Vec::new();
-            for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+            for pkg in profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
                 pkgs.push(pkg.to_string());
             }
             // Install package(s)
@@ -3301,9 +3615,9 @@ fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noco
     }
 
     // Read packages section in configuration file
-    if profconf.sections().contains(&"packages".to_string()) {
+    if profconf.sections().contains(&"profile-packages".to_string()) {
         let mut pkgs: Vec<String> = Vec::new();
-        for pkg in profconf.get_map().unwrap().get("packages").unwrap().keys() {
+        for pkg in profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
             pkgs.push(pkg.to_string());
         }
         // Uninstall package(s)
@@ -3317,7 +3631,7 @@ fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noco
         }
     }
 
-    // Umounts tmp
+    // Umount tmp
     ash_umounts(&tmp, "").unwrap();
 
     Ok(())

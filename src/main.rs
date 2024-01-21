@@ -18,10 +18,12 @@ use std::process::Command;
 // /.snapshots/etc/etc-*             : individual /etc for each snapshot
 // /.snapshots/rootfs/snapshot-*     : snapshots
 // /.snapshots/tmp                   : temporary directory
+// /etc/ash/ash.conf                 : configuration file for ash
+// /etc/ash/profile                  : snapshot profile
 // /usr/sbin/ash                     : ash binary file location
 // /usr/share/ash                    : files that store current snapshot info
-// /usr/share/ash/db                 : package database
 // /use/share/ash/profiles           : default desktop environments profiles path
+// /use/share/ash/snap               : snapshot number
 // /var/lib/ash(/fstree)             : ash files, stores fstree, symlink to /.snapshots/ash/fstree
 
 fn main() {
@@ -51,7 +53,7 @@ fn main() {
             }
             // Base update
             Some(("base-update", base_update_matches)) => {
-                // Optional values
+                // Optional value
                 let noconfirm = base_update_matches.get_flag("noconfirm");
 
                 // Run upgrade(0)
@@ -488,7 +490,7 @@ fn main() {
                 // chr value
                 let chr = "";
 
-                // Optional values
+                // Optional value
                 let exclude = list_matches.get_flag("exclude-dependency");
 
                 // Make sure snapshot exists
@@ -550,6 +552,39 @@ fn main() {
                     },
                     Err(e) => {
                         chr_delete(&snapshot).unwrap();
+                        eprintln!("{}", e);
+                    },
+                }
+            }
+            // Rebuild
+            Some(("rebuild", rebuild_matches)) => {
+                // Get snapshot value
+                let snapshot = if rebuild_matches.contains_id("SNAPSHOT") {
+                    let snap = rebuild_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Get desc value
+                let desc = if rebuild_matches.contains_id("DESCRIPTION") {
+                    let desc = rebuild_matches.get_one::<String>("DESCRIPTION").map(|s| s.as_str()).unwrap().to_string();
+                    desc
+                } else {
+                    let desc = String::new();
+                    desc
+                };
+
+                // Run rebuild
+                let run = rebuild(&snapshot, &desc);
+                match run {
+                    Ok(snap_num) => {
+                        println!("Tree {} cloned from {}.", snap_num,snapshot);
+                    },
+                    Err(e) => {
+                        //chr_delete(&snapshot).unwrap();
                         eprintln!("{}", e);
                     },
                 }
@@ -732,7 +767,7 @@ fn main() {
                     user_profiles
                 };
 
-                // Optional values
+                // Optional value
                 let noconfirm = tremove_matches.get_flag("noconfirm");
 
                 // Run tree_remove
@@ -858,7 +893,7 @@ fn main() {
                     snap
                 };
 
-                // Optional values
+                // Optional value
                 let noconfirm = upgrade_matches.get_flag("noconfirm");
 
                 // Run upgrade

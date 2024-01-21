@@ -10,6 +10,7 @@ name = "lib"
 path = "src/lib.rs"
 
 [features]
+#TODO add export & lock feature
 default = ["arch"]
 arch = []
 debian = []
