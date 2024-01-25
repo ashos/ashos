@@ -17,6 +17,10 @@ pub fn cli() -> Command {
                          .value_parser(clap::value_parser!(i32))
                          .required(false)
                          .help("snapshot number"),),)
+        // Base rebuild
+        .subcommand(Command::new("base-rebuild")
+                    .aliases(["br", "rb"])
+                    .about("Rebuild the base snapshot"),)
         // Base update
         .subcommand(Command::new("base-update")
                     .aliases(["bu", "ub"])

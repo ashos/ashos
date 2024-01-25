@@ -51,6 +51,11 @@ fn main() {
                 // Run noninteractive_update
                 noninteractive_update(&snapshot).unwrap();
             }
+            // Base rebuild
+            Some(("base-rebuild", _matches)) => {
+                // Run rebuild_base
+                rebuild_base().unwrap();
+            }
             // Base update
             Some(("base-update", base_update_matches)) => {
                 // Optional value
@@ -75,7 +80,7 @@ fn main() {
                     snap
                 };
 
-                // Run update-boot
+                // Run update_boot
                 let run = update_boot(&snapshot, false);
                 match run {
                     Ok(_) => println!("Bootloader updated successfully."),
@@ -320,7 +325,7 @@ fn main() {
             }
             // etc update
             Some(("etc-update", _matches)) => {
-                // Run etc-update
+                // Run etc_update
                 let run = update_etc();
                 match run {
                     Ok(_) => println!("etc has been successfully updated."),
@@ -584,7 +589,7 @@ fn main() {
                         println!("Tree {} cloned from {}.", snap_num,snapshot);
                     },
                     Err(e) => {
-                        //chr_delete(&snapshot).unwrap();
+                        chr_delete(&snapshot).unwrap();
                         eprintln!("{}", e);
                     },
                 }

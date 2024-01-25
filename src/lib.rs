@@ -2756,7 +2756,12 @@ pub fn snapshot_unlock(snapshot: &str) -> Result<(), Error> {
             delete_subvolume(&format!("/.snapshots/var/var-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
             delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
         } else {
-            eprintln!("{} is busy, if you're certain it's not in use, try \"umount -l {}\".", path.to_str().unwrap(),path.to_str().unwrap());
+            umount2(Path::new(path),
+                    MntFlags::MNT_DETACH)?;
+            delete_subvolume(&format!("/.snapshots/boot/boot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(&format!("/.snapshots/etc/etc-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(&format!("/.snapshots/var/var-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
         }
     }
     Ok(())
