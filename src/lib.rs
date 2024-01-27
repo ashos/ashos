@@ -283,7 +283,7 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
     }
     if !system_pkgs_to_install.is_empty() && !is_system_locked() {
         install_package_helper_chroot(snapshot, &system_pkgs_to_install, true)?;
-        pacman_holdpkg(snapshot, &profconf)?;
+        holdpkg(snapshot, &profconf)?;
     } else if !system_pkgs_to_install.is_empty() && is_system_locked() {
         // Prevent install new system package(s)
         return Err(Error::new(ErrorKind::Unsupported, format!("Install system package(s) is not allowed.")));
@@ -330,13 +330,13 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
     // Uninstall package(s) not in the new system-packages list
     let mut system_pkgs_to_uninstall: Vec<String> = Vec::new();
     for pkg in old_system_pkgs {
-        if !new_system_pkgs.contains(&pkg) {
+        if !new_system_pkgs.contains(&pkg) && !new_pkgs.contains(&pkg) {
             system_pkgs_to_uninstall.push(pkg.to_string());
         }
     }
     if !system_pkgs_to_uninstall.is_empty() && !is_system_locked() {
         uninstall_package_helper_chroot(snapshot, &system_pkgs_to_uninstall, true)?;
-        pacman_holdpkg(snapshot, &profconf)?;
+        holdpkg(snapshot, &profconf)?;
     } else if !system_pkgs_to_uninstall.is_empty() && is_system_locked() {
         // Prevent remove of system package from profile if not installed
         return Err(Error::new(ErrorKind::Unsupported, format!("Remove system package(s) is not allowed.")));
@@ -345,12 +345,19 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
     // Uninstall package(s) not in the new profile-packages list
     let mut pkgs_to_uninstall: Vec<String> = Vec::new();
     for pkg in old_pkgs {
-        if !new_pkgs.contains(&pkg) {
+        if !new_pkgs.contains(&pkg) && !new_system_pkgs.contains(&pkg) {
             pkgs_to_uninstall.push(pkg.to_string());
         }
     }
     if !pkgs_to_uninstall.is_empty() {
         uninstall_package_helper_chroot(snapshot, &pkgs_to_uninstall, true)?;
+    }
+    // Prevent duplication
+    for pkg in new_system_pkgs {
+        if new_pkgs.contains(&pkg) {
+            profconf.remove_key("profile-packages", &pkg);
+            profconf.write(&cfile)?;
+        }
     }
 
     // Check pacman database
@@ -2383,43 +2390,6 @@ pub fn rebuild_prep(snapshot: &str) -> Result<(), Error> {
     pacstrap(snapshot)?;
     system_config(snapshot, &profconf)?;
 
-    let mut pkgs_list: Vec<String> = Vec::new();
-    for pkg in profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
-        pkgs_list.push(pkg.to_string());
-        if pkgs_list.contains(&"pacman".to_string()) {
-            println!("pacman is in pkgs_list");
-        }
-    }
-
-    // Install packages from profile
-    install_package_helper_chroot(snapshot, &pkgs_list,true)?;
-
-    // Read disable services section in configuration file
-    if profconf.sections().contains(&"disable-services".to_string()) {
-        let mut services: Vec<String> = Vec::new();
-        for service in profconf.get_map().unwrap().get("disable-services").unwrap().keys() {
-            services.push(service.to_string());
-        }
-        // Disable service(s)
-        service_disable(snapshot, &services, "chr")?;
-    }
-
-    // Read enable services section in configuration file
-    if profconf.sections().contains(&"enable-services".to_string()) {
-        let mut services: Vec<String> = Vec::new();
-        for service in profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
-            services.push(service.to_string());
-        }
-        // Enable service(s)
-        service_enable(snapshot, &services, "chr")?;
-    }
-
-    // Read commands section in configuration file
-    if profconf.sections().contains(&"install-commands".to_string()) {
-        for cmd in profconf.get_map().unwrap().get("install-commands").unwrap().keys() {
-            chroot_exec(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), cmd)?;
-        }
-    }
     Ok(())
 }
 

@@ -1,4 +1,4 @@
-use crate::{check_mutability, chr_delete, get_current_snapshot, get_tmp,
+use crate::{check_mutability, chr_delete, chroot_exec, get_current_snapshot, get_tmp,
             immutability_disable, immutability_enable, post_transactions,
             prepare, remove_dir_content, snapshot_config_get, sync_time,
             is_system_pkg, is_system_locked};
@@ -122,7 +122,7 @@ pub fn cache_copy(snapshot: &str, prepare: bool) -> Result<(), Error> {
     Ok(())
 }
 
-// Uninstall all packages in snapshot except base
+// Uninstall all packages in snapshot
 pub fn clean_chroot(snapshot: &str) -> Result<(), Error> {
     let excode = Command::new("sh").arg("-c")
                                    .arg(format!("printf 'y\ny' | chroot /.snapshots/rootfs/snapshot-chr{} su aur -c 'paru -Rsn $(pacman -Qq)'",
@@ -448,8 +448,8 @@ pub fn no_dep_pkg_list(snapshot: &str, chr: &str) -> Vec<String> {
     stdout.split('\n').map(|s| s.to_string()).collect()
 }
 
-// Reconfigure Pacman
-pub fn pacman_holdpkg(snapshot:&str, profconf: &Ini) -> Result<(), Error> {
+// Prevent system packages from being automatically removed
+pub fn holdpkg(snapshot:&str, profconf: &Ini) -> Result<(), Error> {
     // Open the file
     let pacman_conf_path = format!("/.snapshots/rootfs/snapshot-chr{}/etc/pacman.conf", snapshot);
     let pfile = File::open(&pacman_conf_path)?;
@@ -670,8 +670,49 @@ pub fn system_config(snapshot: &str, profconf: &Ini) -> Result<(), Error> {
         }
     }
 
+    if profconf.sections().contains(&"profile-packages".to_string()) {
+        let mut pkgs_list: Vec<String> = Vec::new();
+        for pkg in profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
+            pkgs_list.push(pkg.to_string());
+        }
+        if !pkgs_list.is_empty() {
+            install_package_helper_chroot(snapshot, &pkgs_list,true)?;
+        }
+    }
+
+    // Read disable services section in configuration file
+    if profconf.sections().contains(&"disable-services".to_string()) {
+        let mut services: Vec<String> = Vec::new();
+        for service in profconf.get_map().unwrap().get("disable-services").unwrap().keys() {
+            services.push(service.to_string());
+        }
+        // Disable service(s)
+        if !services.is_empty() {
+            service_disable(snapshot, &services, "chr")?;
+        }
+    }
+
+    // Read enable services section in configuration file
+    if profconf.sections().contains(&"enable-services".to_string()) {
+        let mut services: Vec<String> = Vec::new();
+        for service in profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
+            services.push(service.to_string());
+        }
+        // Enable service(s)
+        if !services.is_empty() {
+            service_enable(snapshot, &services, "chr")?;
+        }
+    }
+
+    // Read commands section in configuration file
+    if profconf.sections().contains(&"install-commands".to_string()) {
+        for cmd in profconf.get_map().unwrap().get("install-commands").unwrap().keys() {
+            chroot_exec(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), cmd)?;
+        }
+    }
+
     // Set HoldPkg in pacman.conf
-    pacman_holdpkg(snapshot, profconf)?;
+    holdpkg(snapshot, profconf)?;
 
     // Restore system configuration
     if profconf.sections().contains(&"system-configuration".to_string()) {

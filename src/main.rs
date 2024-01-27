@@ -325,7 +325,7 @@ fn main() {
             }
             // etc update
             Some(("etc-update", _matches)) => {
-                // Run etc_update
+                // Run update_etc
                 let run = update_etc();
                 match run {
                     Ok(_) => println!("etc has been successfully updated."),
@@ -533,10 +533,10 @@ fn main() {
                 }
             }
             // Edit snapshot profile
-            Some(("snapshot-profile", snapshot_profile_matches)) => {
+            Some(("edit-profile", edit_profile_matches)) => {
                 // Get snapshot value
-                let snapshot = if snapshot_profile_matches.contains_id("SNAPSHOT") {
-                    let snap = snapshot_profile_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                let snapshot = if edit_profile_matches.contains_id("SNAPSHOT") {
+                    let snap = edit_profile_matches.get_one::<i32>("SNAPSHOT").unwrap();
                     let snap_to_string = format!("{}", snap);
                     snap_to_string
                 } else {
