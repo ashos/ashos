@@ -352,13 +352,6 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
     if !pkgs_to_uninstall.is_empty() {
         uninstall_package_helper_chroot(snapshot, &pkgs_to_uninstall, true)?;
     }
-    // Prevent duplication
-    for pkg in new_system_pkgs {
-        if new_pkgs.contains(&pkg) {
-            profconf.remove_key("profile-packages", &pkg);
-            profconf.write(&cfile)?;
-        }
-    }
 
     // Check pacman database
     let pkg_list = no_dep_pkg_list(snapshot, "chr");
@@ -415,6 +408,14 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
             }
         }
         profconf.write(&cfile)?;
+    }
+
+    // Prevent duplication
+    for pkg in new_system_pkgs {
+        if new_pkgs.contains(&pkg) {
+            profconf.remove_key("profile-packages", &pkg);
+            profconf.write(&cfile)?;
+        }
     }
 
     Ok(())
