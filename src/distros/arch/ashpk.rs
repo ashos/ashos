@@ -123,7 +123,14 @@ pub fn cache_copy(snapshot: &str, prepare: bool) -> Result<(), Error> {
 }
 
 // Uninstall all packages in snapshot
-pub fn clean_chroot(snapshot: &str) -> Result<(), Error> {
+pub fn clean_chroot(snapshot: &str, profconf: &Ini) -> Result<(), Error> {
+    // Read commands section in configuration file
+    if profconf.sections().contains(&"uninstall-commands".to_string()) {
+        for cmd in profconf.get_map().unwrap().get("uninstall-commands").unwrap().keys() {
+            chroot_exec(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), cmd)?;
+        }
+    }
+
     let excode = Command::new("sh").arg("-c")
                                    .arg(format!("printf 'y\ny' | chroot /.snapshots/rootfs/snapshot-chr{} su aur -c 'paru -Rsn $(pacman -Qq)'",
                                                 snapshot)).status()?;
@@ -475,13 +482,7 @@ pub fn holdpkg(snapshot:&str, profconf: &Ini) -> Result<(), Error> {
             system_pkgs.push(pkg.to_string());
         }
     }
-    // Make sure pacman and glibc are in HoldPkg
-    if !system_pkgs.contains(&"pacman".to_string()) {
-        system_pkgs.push("pacman".to_string());
-    }
-    if !system_pkgs.contains(&"glibc".to_string()) {
-            system_pkgs.push("glibc".to_string());
-    }
+
     if !system_pkgs.is_empty() {
         let pkgs = system_pkgs.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(" ");
         let new_hold_pkgs = format!("HoldPkg = {}", pkgs);
@@ -497,6 +498,7 @@ pub fn holdpkg(snapshot:&str, profconf: &Ini) -> Result<(), Error> {
 
 // Reinstall base packages in snapshot
 pub fn pacstrap(snapshot: &str) -> Result<(), Error> {
+    // tmp database
     let tmp_db = TempDir::new_in("/.snapshots/tmp/")?;
 
     let excode = Command::new("sh")
@@ -516,6 +518,12 @@ pub fn pacstrap(snapshot: &str) -> Result<(), Error> {
         return Err(Error::new(ErrorKind::Other,
                               format!("Failed to install paru package in snapshot {} chroot.", snapshot)));
     }
+
+    // Copy pacman database from tmp
+    remove_dir_content(&format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/pacman", snapshot))?;
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg(format!("{}/.", tmp_db.path().to_str().unwrap()))
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/var/lib/pacman", snapshot)).status()?;
     Ok(())
 }
 
@@ -711,13 +719,11 @@ pub fn system_config(snapshot: &str, profconf: &Ini) -> Result<(), Error> {
         }
     }
 
-    // Set HoldPkg in pacman.conf
-    holdpkg(snapshot, profconf)?;
-
     // Restore system configuration
     if profconf.sections().contains(&"system-configuration".to_string()) {
         let mut system_conf: Vec<String> = Vec::new();
         for path in profconf.get_map().unwrap().get("system-configuration").unwrap().keys() {
+            // Check if a file or directory exists
             if !metadata(path).is_ok() {
                 system_conf.push(path.to_string());
             }

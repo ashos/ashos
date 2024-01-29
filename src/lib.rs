@@ -283,7 +283,6 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
     }
     if !system_pkgs_to_install.is_empty() && !is_system_locked() {
         install_package_helper_chroot(snapshot, &system_pkgs_to_install, true)?;
-        holdpkg(snapshot, &profconf)?;
     } else if !system_pkgs_to_install.is_empty() && is_system_locked() {
         // Prevent install new system package(s)
         return Err(Error::new(ErrorKind::Unsupported, format!("Install system package(s) is not allowed.")));
@@ -336,7 +335,6 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
     }
     if !system_pkgs_to_uninstall.is_empty() && !is_system_locked() {
         uninstall_package_helper_chroot(snapshot, &system_pkgs_to_uninstall, true)?;
-        holdpkg(snapshot, &profconf)?;
     } else if !system_pkgs_to_uninstall.is_empty() && is_system_locked() {
         // Prevent remove of system package from profile if not installed
         return Err(Error::new(ErrorKind::Unsupported, format!("Remove system package(s) is not allowed.")));
@@ -417,6 +415,9 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
             profconf.write(&cfile)?;
         }
     }
+
+    // Set HoldPkg in pacman.conf
+    holdpkg(snapshot, &profconf)?;
 
     Ok(())
 }
@@ -2369,6 +2370,8 @@ pub fn rebuild_base() -> Result<(), Error> {
     let snapshot = "0";
     if rebuild_prep(snapshot).is_ok() {
         post_transactions(snapshot)?;
+    } else {
+        chr_delete(snapshot)?;
     }
     Ok(())
 }
@@ -2385,7 +2388,7 @@ pub fn rebuild_prep(snapshot: &str) -> Result<(), Error> {
 
     // Remove packages
     prepare(snapshot)?;
-    clean_chroot(snapshot)?;
+    clean_chroot(snapshot,  &profconf)?;
 
     // Reinstall base
     pacstrap(snapshot)?;
@@ -3543,6 +3546,13 @@ fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfir
             profconf.load(user_profile).unwrap();
         }
 
+        // Read commands section in configuration file
+        if profconf.sections().contains(&"uninstall-commands".to_string()) {
+            for cmd in profconf.get_map().unwrap().get("uninstall-commands").unwrap().keys() {
+                chroot_exec(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), cmd)?;
+            }
+        }
+
         // Read packages section in configuration file
         if profconf.sections().contains(&"profile-packages".to_string()) {
             let mut pkgs: Vec<String> = Vec::new();
@@ -3553,12 +3563,6 @@ fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfir
             uninstall_package_helper(snapshot, &pkgs, noconfirm)?;
         }
 
-        // Read commands section in configuration file
-        if profconf.sections().contains(&"uninstall-commands".to_string()) {
-            for cmd in profconf.get_map().unwrap().get("uninstall-commands").unwrap().keys() {
-                chroot_exec(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), cmd)?;
-            }
-        }
     }
     Ok(())
 }
