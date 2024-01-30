@@ -456,7 +456,7 @@ pub fn no_dep_pkg_list(snapshot: &str, chr: &str) -> Vec<String> {
 }
 
 // Prevent system packages from being automatically removed
-pub fn holdpkg(snapshot:&str, profconf: &Ini) -> Result<(), Error> {
+pub fn lockpkg(snapshot:&str, profconf: &Ini) -> Result<(), Error> {
     // Open the file
     let pacman_conf_path = format!("/.snapshots/rootfs/snapshot-chr{}/etc/pacman.conf", snapshot);
     let pfile = File::open(&pacman_conf_path)?;

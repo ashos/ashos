@@ -416,8 +416,8 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
         }
     }
 
-    // Set HoldPkg in pacman.conf
-    holdpkg(snapshot, &profconf)?;
+    // Block automatic removal of system packages
+    lockpkg(snapshot, &profconf)?;
 
     Ok(())
 }
