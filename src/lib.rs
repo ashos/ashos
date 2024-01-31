@@ -65,7 +65,7 @@ pub fn ash_mounts(i: &str, chr: &str) -> nix::Result<()> {
           Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /run
     mount(Some("/run"), format!("{}/run", snapshot_path).as_str(),
-          Some("tmpfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>)?;
+          Some("tmpfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /sys
     mount(Some("/sys"), format!("{}/sys", snapshot_path).as_str(),
           Some("sysfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
