@@ -10,10 +10,11 @@ name = "lib"
 path = "src/lib.rs"
 
 [features]
-#TODO add export & lock feature
+#TODO add import & lock feature
 default = ["arch"]
 arch = []
 debian = []
+import = []
 
 [dependencies]
 cfg-if = "1.0.0"

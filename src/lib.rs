@@ -1197,6 +1197,19 @@ pub fn diff(snapshot1: &str, snapshot2: &str) {
     }
 }
 
+// Send snapshot to export directory
+pub fn export(snapshot: &str, dest: &str) -> Result<(), Error> {
+    // Get current time
+    let time = Local::now().naive_local();
+    let formatted = time.format("%Y%m%d-%H%M%S").to_string();
+
+    // Send btrfs to destination
+    Command::new("sh").arg("-c")
+                      .arg(format!("sudo btrfs send /.snapshots/rootfs/snapshot-{} | pv -Wpterb > {}/snapshot-{}.{}",
+                                   snapshot,dest,snapshot,formatted)).status()?;
+    Ok(())
+}
+
 // Find new unused snapshot dir
 pub fn find_new() -> i32 {
     let mut i = 0;

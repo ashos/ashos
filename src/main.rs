@@ -6,6 +6,8 @@ use lib::*;
 use nix::unistd::Uid;
 use std::path::Path;
 use std::process::Command;
+use users::get_user_by_name;
+use users::os::unix::UserExt;
 // Directexplicitories
 // All snapshots share one /var
 // Global boot is always at @boot
@@ -323,6 +325,35 @@ fn main() {
                 // Run snapshot_config_edit
                 snapshot_config_edit(&snapshot).unwrap();
             }
+            // Edit snapshot profile
+            Some(("edit-profile", edit_profile_matches)) => {
+                // Get snapshot value
+                let snapshot = if edit_profile_matches.contains_id("SNAPSHOT") {
+                    let snap = edit_profile_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Run snapshot_profile_edit
+                let run = snapshot_profile_edit(&snapshot);
+                match run {
+                    Ok(_) => {
+                        if post_transactions(&snapshot).is_ok() {
+                            println!("snapshot {} profile has been successfully updated.", &snapshot)
+                        } else {
+                            chr_delete(&snapshot).unwrap();
+                            eprintln!("Failed to update snapshot {} profile.", &snapshot)
+                        }
+                    },
+                    Err(e) => {
+                        chr_delete(&snapshot).unwrap();
+                        eprintln!("{}", e);
+                    },
+                }
+            }
             // etc update
             Some(("etc-update", _matches)) => {
                 // Run update_etc
@@ -331,6 +362,41 @@ fn main() {
                     Ok(_) => println!("etc has been successfully updated."),
                     Err(e) => eprintln!("{}", e),
                 }
+            }
+            // Export snapshot
+            Some(("export", export_matches)) => {
+                // Get home value
+                let username = std::env::var_os("SUDO_USER").unwrap();
+                let user = get_user_by_name(&username).unwrap();
+                let home_dir = user.home_dir();
+                let home = home_dir.to_str().unwrap();
+
+                // Get snapshot value
+                let snapshot = if export_matches.contains_id("SNAPSHOT") {
+                    let snap = export_matches.get_one::<i32>("SNAPSHOT").unwrap();
+                    let snap_to_string = format!("{}", snap);
+                    snap_to_string
+                } else {
+                    let snap = get_current_snapshot();
+                    snap
+                };
+
+                // Get dest value
+                let dest = if export_matches.contains_id("DESTINATION") {
+                    let dest = export_matches.get_one::<String>("DESTINATION").map(|s| s.as_str()).unwrap().to_string();
+                    dest
+                } else {
+                    let dest = format!("{}/.cache/ash/export", home);
+                    dest
+                };
+
+                // Run export
+                if !Path::new(&format!("{}/.cache/ash/export", home)).try_exists().unwrap() {
+                    Command::new("mkdir").arg("-p")
+                                         .arg(format!("{}/.cache/ash/export", home))
+                                         .status().unwrap();
+                }
+                export(&snapshot, &dest).unwrap();
             }
             // Fix db commands
             Some(("fixdb", fixdb_matches)) => {
@@ -530,35 +596,6 @@ fn main() {
                 match run {
                     Ok(snap_num) => println!("New tree {} created.", snap_num),
                     Err(e) => eprintln!("{}", e),
-                }
-            }
-            // Edit snapshot profile
-            Some(("edit-profile", edit_profile_matches)) => {
-                // Get snapshot value
-                let snapshot = if edit_profile_matches.contains_id("SNAPSHOT") {
-                    let snap = edit_profile_matches.get_one::<i32>("SNAPSHOT").unwrap();
-                    let snap_to_string = format!("{}", snap);
-                    snap_to_string
-                } else {
-                    let snap = get_current_snapshot();
-                    snap
-                };
-
-                // Run snapshot_profile_edit
-                let run = snapshot_profile_edit(&snapshot);
-                match run {
-                    Ok(_) => {
-                        if post_transactions(&snapshot).is_ok() {
-                            println!("snapshot {} profile has been successfully updated.", &snapshot)
-                        } else {
-                            chr_delete(&snapshot).unwrap();
-                            eprintln!("Failed to update snapshot {} profile.", &snapshot)
-                        }
-                    },
-                    Err(e) => {
-                        chr_delete(&snapshot).unwrap();
-                        eprintln!("{}", e);
-                    },
                 }
             }
             // Rebuild
