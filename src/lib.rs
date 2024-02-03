@@ -157,24 +157,6 @@ pub fn ash_version() -> Result<String, Error> {
     Ok(version)
 }
 
-//#[cfg(feature = "import")]
-// Copy system configurations to new base snapshot
-pub fn base_snapshot_config() -> Result<(), Error> {
-    //Copy [fstab, time ,localization, network configuration, users and groups]
-    let files = vec!["/etc/fstab", "/etc/localtime", "/etc/adjtime", "/etc/locale.gen", "/etc/locale.conf",
-                     "/etc/vconsole.conf", "/etc/hostname", "/etc/shadow", "/etc/passwd", "/etc/gshadow",
-                     "/etc/group", "/etc/sudoers"];
-    for file in files {
-        if Path::new(&format!("/.snapshots/rootfs/snapshot-0{}", file)).is_file() {
-            Command::new("cp").args(["-r", "--reflink=auto"])
-                              .arg(format!("/.snapshots/rootfs/snapshot-0{}", file))
-                              .arg(format!("/.snapshots/rootfs/snapshot-chr0{}", file)).status()?;
-        }
-    }
-
-    Ok(())
-}
-
 // Add node to branch
 pub fn branch_create(snapshot: &str, desc: &str) -> Result<i32, Error> {
     // Find the next available snapshot number
@@ -1571,9 +1553,13 @@ pub fn import_base(path: &str, tmp_dir: &TempDir) -> Result<String, Error> {
         // Clean tmp
         delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
                          DeleteSubvolumeFlags::empty()).unwrap();
+        remove_dir_content("/.snapshots/rootfs/snapshot-chr0/var/cache/pacman/pkg")?;
 
-        // Copy system configurations
-        base_snapshot_config()?;
+        // Copy fstab
+        Command::new("cp").args(["-r", "--reflink=auto"])
+                          .arg("/.snapshots/rootfs/snapshot-0/etc/fstab")
+                          .arg("/.snapshots/rootfs/snapshot-chr0/etc/fstab")
+                          .status()?;
 
         // Mount chroot
         ash_mounts("0", "chr")?;

@@ -418,8 +418,8 @@ fn main() {
                 };
 
                 // Get dest value
-                let dest = if export_matches.contains_id("DESTINATION") {
-                    let dest = export_matches.get_one::<String>("DESTINATION").map(|s| s.as_str()).unwrap().to_string();
+                let dest = if export_matches.contains_id("OUTPUT") {
+                    let dest = export_matches.get_one::<String>("OUTPUT").map(|s| s.as_str()).unwrap().to_string();
                     dest
                 } else {
                     let dest = format!("{}/.cache/ash/export", home);
