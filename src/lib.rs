@@ -1500,6 +1500,172 @@ pub fn immutability_enable(snapshot: &str) -> Result<(), Error> {
 }
 
 //#[cfg(feature = "import")]
+// Import snapshot
+pub fn import(snapshot: i32, path: &str, desc: &str, tmp_dir: &TempDir) -> Result<(), Error> {
+    // Make sure snapshot is not in use by another ash process
+    if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
+        return Err(Error::new
+                   (ErrorKind::NotFound,
+                    format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
+                            snapshot,snapshot)));
+
+    // Make sure snapshot does exist
+    } else if !Path::new(&format!("{}", path)).is_file() {
+        return Err(Error::new(ErrorKind::NotFound, format!("The snapshot {} doesn't exist.", path)));
+
+    } else {
+        // AtomicBool flag to track if the process was interrupted
+        let interrupted = Arc::new(AtomicBool::new(false));
+
+        // Clone the Arc for use in the signal handler closure
+        let interrupted_clone = Arc::clone(&interrupted);
+
+        // Register the Ctrl+C signal handler
+        ctrlc::set_handler(move || {
+            // Set the interrupted flag to true if the signal is received
+            interrupted_clone.store(true, Ordering::SeqCst);
+        }).expect("Error setting Ctrl+C handler");
+
+        // Receive snapshor
+        Command::new("sh").arg("-c")
+                          .arg(format!("btrfs receive -f {} {}", path,tmp_dir.path().to_str().unwrap()))
+                          .status()?;
+
+        // Get snapshot name
+        let export_snapshot = get_import_snapshot_name(&format!("{}", tmp_dir.path().to_str().unwrap())).unwrap();
+
+        // Prepare snapshot
+        create_snapshot(format!("{}/{}", tmp_dir.path().to_str().unwrap(), export_snapshot),
+                        format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
+                        CreateSnapshotFlags::empty(), None).unwrap();
+
+        // Delete the folder if the process was interrupted
+        if interrupted.load(Ordering::SeqCst) {
+            // Clean tmp
+            if Path::new(&format!("{}/{}", tmp_dir.path().to_str().unwrap(), export_snapshot)).try_exists().unwrap() {
+                delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(), export_snapshot),
+                                 DeleteSubvolumeFlags::empty()).unwrap();
+                std::process::exit(1);
+            }
+        }
+
+        // Clean tmp
+        delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(), export_snapshot),
+                         DeleteSubvolumeFlags::empty()).unwrap();
+
+        // Copy fstab
+        Command::new("cp").args(["-r", "--reflink=auto"])
+                          .arg("/.snapshots/rootfs/snapshot-0/etc/fstab")
+                          .arg(&format!("/.snapshots/rootfs/snapshot-chr{}/etc/fstab", snapshot))
+                          .status()?;
+
+        // Mount chroot
+        ash_mounts(&format!("{}", snapshot), "chr")?;
+
+        // Special mutable directories
+        let options = snapshot_config_get("0");
+        let mutable_dirs: Vec<&str> = options.get("mutable_dirs")
+                                             .map(|dirs| {dirs.split(',').flat_map(|dir| {
+                                                 if let Some(index) = dir.find("::") {
+                                                     vec![&dir[..index], &dir[index + 2..]]
+                                                 } else {
+                                                     vec![dir]
+                                                 }
+                                             }).filter(|dir| !dir.trim().is_empty()).collect()})
+                                             .unwrap_or_else(|| Vec::new());
+        let mutable_dirs_shared: Vec<&str> = options.get("mutable_dirs_shared")
+                                                    .map(|dirs| {dirs.split(',').flat_map(|dir| {
+                                                        if let Some(index) = dir.find("::") {
+                                                            vec![&dir[..index], &dir[index + 2..]]
+                                                        } else {
+                                                            vec![dir]
+                                                        }
+                                                    }).filter(|dir| !dir.trim().is_empty()).collect()})
+                                                    .unwrap_or_else(|| Vec::new());
+        if !mutable_dirs.is_empty() {
+            // Clean old mutable_dirs
+            if Path::new(&format!("/.snapshots/mutable_dirs/snapshot-{}", snapshot)).try_exists()? {
+                remove_dir_content(&format!("/.snapshots/mutable_dirs/snapshot-{}", snapshot))?;
+            }
+            for mount_path in mutable_dirs {
+                if allow_dir_mut(mount_path) {
+                    // Create mouth_path directory in snapshot
+                    DirBuilder::new().recursive(true)
+                                     .create(format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path))?;
+                    // Create mouth_path directory in snapshot-chr
+                    DirBuilder::new().recursive(true)
+                                     .create(format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))?;
+                    // Use mount_path
+                    mount(Some(format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path).as_str()),
+                          format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path).as_str(),
+                          Some("btrfs"), MsFlags::MS_BIND , None::<&str>)?;
+                }
+            }
+        }
+        if !mutable_dirs_shared.is_empty() {
+            // Clean old mutable_dirs_shared
+            if Path::new("/.snapshots/mutable_dirs/").try_exists()? {
+                remove_dir_content("/.snapshots/mutable_dirs/")?;
+            }
+            for mount_path in mutable_dirs_shared {
+                if allow_dir_mut(mount_path) {
+                    // Create mouth_path directory in snapshot
+                    DirBuilder::new().recursive(true)
+                                     .create(format!("/.snapshots/mutable_dirs/{}", mount_path))?;
+                    // Create mouth_path directory in snapshot-chr
+                    DirBuilder::new().recursive(true)
+                                     .create(format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))?;
+                    // Use mount_path
+                    mount(Some(format!("/.snapshots/mutable_dirs/{}", mount_path).as_str()),
+                          format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path).as_str(),
+                          Some("btrfs"), MsFlags::MS_BIND , None::<&str>)?;
+                }
+            }
+        }
+
+        // File operations for snapshot-chr
+        create_snapshot("/.snapshots/boot/boot-0",
+                        format!("/.snapshots/boot/boot-chr{}", snapshot),
+                        CreateSnapshotFlags::empty(), None).unwrap();
+        create_snapshot("/.snapshots/etc/etc-0",
+                        format!("/.snapshots/etc/etc-chr{}", snapshot),
+                        CreateSnapshotFlags::empty(), None).unwrap();
+        create_snapshot("/.snapshots/var/var-0",
+                        format!("/.snapshots/var/var-chr{}", snapshot),
+                        CreateSnapshotFlags::empty(), None).unwrap();
+
+        // Copy ash related configurations
+        if Path::new("/etc/systemd").try_exists()? {
+            // Machine-id is a Systemd thing
+            copy("/etc/machine-id", format!("/.snapshots/rootfs/snapshot-chr{}/etc/machine-id", snapshot))?;
+        }
+        DirBuilder::new().recursive(true)
+                         .create(format!("/.snapshots/rootfs/snapshot-chr{}/.snapshots/ash", snapshot))?;
+        copy("/.snapshots/ash/fstree", format!("/.snapshots/rootfs/snapshot-chr{}/.snapshots/ash/fstree", snapshot))?;
+
+        // Copy from chroot directory back to read only snapshot directory
+        if post_transactions(&format!("{}", snapshot)).is_err() {
+            chr_delete(&format!("{}", snapshot))?;
+        }
+
+        // Import tree file
+        let tree = fstree().unwrap();
+        // Add to root tree
+        append_base_tree(&tree, snapshot).unwrap();
+        // Save tree to fstree
+        write_tree(&tree)?;
+        // Write description for snapshot
+        if desc.is_empty() {
+            let description = format!("imported snapshot");
+            write_desc(&snapshot.to_string(), &description, true)?;
+        } else {
+            write_desc(&snapshot.to_string(), &desc, true)?;
+        }
+    }
+    Ok(())
+}
+
+//#[cfg(feature = "import")]
 // Import base snapshot
 pub fn import_base(path: &str, tmp_dir: &TempDir) -> Result<String, Error> {
     let msg = "This process will change your base snapshot. Are you certain that you wish to proceed?";
@@ -1537,7 +1703,7 @@ pub fn import_base(path: &str, tmp_dir: &TempDir) -> Result<String, Error> {
 
         // Prepare snapshot
         create_snapshot(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
-                        format!("/.snapshots/rootfs/snapshot-chr0"),
+                        "/.snapshots/rootfs/snapshot-chr0",
                         CreateSnapshotFlags::empty(), None).unwrap();
 
         // Delete the folder if the process was interrupted
@@ -2080,7 +2246,7 @@ pub fn noninteractive_update(snapshot: &str) -> Result<(), Error> {
     auto_upgrade(snapshot)
 }
 
-// Post transaction function, copy from chroot dirs back to read only snapshot dir
+// Post transaction function, copy from chroot directories back to read only snapshot directories
 pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
     //File operations in snapshot-chr
     remove_dir_content(&format!("/.snapshots/boot/boot-chr{}", snapshot))?;
@@ -2107,14 +2273,17 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
                       .output()?;
 
     // Delete old snapshot
-    delete_subvolume(Path::new(&format!("/.snapshots/boot/boot-{}", snapshot)),
-                     DeleteSubvolumeFlags::empty()).unwrap();
-    delete_subvolume(Path::new(&format!("/.snapshots/etc/etc-{}", snapshot)),
-                     DeleteSubvolumeFlags::empty()).unwrap();
-    delete_subvolume(Path::new(&format!("/.snapshots/var/var-{}", snapshot)),
-                     DeleteSubvolumeFlags::empty()).unwrap();
-    delete_subvolume(Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)),
-                     DeleteSubvolumeFlags::empty()).unwrap();
+    let path_vec = vec!["boot","etc", "var"];
+    for path in path_vec {
+        if Path::new(&format!("/.snapshots/{}/{}-{}", path,path,snapshot)).try_exists()? {
+            delete_subvolume(Path::new(&format!("/.snapshots/{}/{}-{}", path,path,snapshot)),
+                             DeleteSubvolumeFlags::empty()).unwrap();
+        }
+    }
+    if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
+        delete_subvolume(Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)),
+                         DeleteSubvolumeFlags::empty()).unwrap();
+    }
 
     // Create mutable or immutable snapshot
     // Mutable

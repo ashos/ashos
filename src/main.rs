@@ -59,11 +59,11 @@ fn main() {
             // Base import
             //#[cfg(feature = "import")]
             Some(("base-import", base_import_matches)) => {
-                //Get tmp_dir value
-                let tmp_dir = TempDir::new_in("/.snapshots/tmp").unwrap();
-
                 // Get user_profile value
                 let path: String = base_import_matches.get_many::<String>("SNAPSHOT_PATH").unwrap().map(|s| format!("{}", s)).collect();
+
+                // Get tmp_dir value
+                let tmp_dir = TempDir::new_in("/.snapshots/tmp").unwrap();
 
                 // Run import_base
                 let run = import_base(&path, &tmp_dir);
@@ -532,6 +532,45 @@ fn main() {
                 match run {
                     Ok(_) => println!("Snapshot {} successfully made immutable.", snapshot),
                     Err(e) => eprintln!("{}", e),
+                }
+            }
+            // Import snapshot
+            //#[cfg(feature = "import")]
+            Some(("import", import_matches)) => {
+                // Get snapshot value
+                let snapshot = find_new();
+
+                // Get desc value
+                let desc = if import_matches.contains_id("DESCRIPTION") {
+                    let desc = import_matches.get_one::<String>("DESCRIPTION").map(|s| s.as_str()).unwrap().to_string();
+                    desc
+                } else {
+                    let desc = String::new();
+                    desc
+                };
+
+                // Get user_profile value
+                let path: String = import_matches.get_many::<String>("SNAPSHOT_PATH").unwrap().map(|s| format!("{}", s)).collect();
+
+                // Get tmp_dir value
+                let tmp_dir = TempDir::new_in("/.snapshots/tmp").unwrap();
+
+                // Run import_base
+                let run = import(snapshot, &path, &desc, &tmp_dir);
+                match run {
+                    Ok(_) => {
+                            println!("Snapshot {} has been successfully imported.", snapshot);
+                    },
+                    Err(e) => {
+                        // Clean tmp
+                        if Path::new(&format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot)).try_exists().unwrap() {
+                            delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
+                                             DeleteSubvolumeFlags::empty()).unwrap();
+                        }
+                        // Clean chroot mount directories
+                        chr_delete(&format!("{}", snapshot)).unwrap();
+                        eprintln!("{}", e);
+                    },
                 }
             }
             // Install command
