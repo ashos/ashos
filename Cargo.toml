@@ -9,12 +9,13 @@ edition = "2021"
 name = "lib"
 path = "src/lib.rs"
 
-[features]
+[features] #REVIEW
 #TODO add import & lock feature
 default = ["arch"]
 arch = []
 debian = []
 import = []
+lock = []
 
 [dependencies]
 cfg-if = "1.0.0"
@@ -23,6 +24,7 @@ clap = "4.1.8"
 configparser = { version = "3.0.2", features = ["indexmap"] }
 cpython = "0.7"
 csv = "1.2.2"
+ctrlc = "3.4.2"
 curl = "0.4.44"
 libbtrfsutil = "0.5.2"
 nix = "0.26.2"

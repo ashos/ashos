@@ -6,16 +6,20 @@ use crate::detect_distro as detect;
 
 use chrono::{NaiveDateTime, Local};
 use configparser::ini::Ini;
+use ctrlc;
 use curl::easy::{Easy, HttpVersion, List, SslVersion};
 use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, delete_subvolume, DeleteSubvolumeFlags, set_subvolume_read_only};
 use nix::mount::{mount, MntFlags, MsFlags, umount2};
 use partition_identity::{PartitionID, PartitionSource};
 use proc_mounts::MountIter;
+use rustix::path::Arg;
 use std::collections::HashMap;
 use std::fs::{copy, DirBuilder, File, OpenOptions, read_dir, read_to_string};
 use std::io::{BufRead, BufReader, Error, ErrorKind, Read, stdin, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tempfile::TempDir;
 use tree::*;
 use walkdir::{DirEntry, WalkDir};
@@ -153,13 +157,31 @@ pub fn ash_version() -> Result<String, Error> {
     Ok(version)
 }
 
+//#[cfg(feature = "import")]
+// Copy system configurations to new base snapshot
+pub fn base_snapshot_config() -> Result<(), Error> {
+    //Copy [fstab, time ,localization, network configuration, users and groups]
+    let files = vec!["/etc/fstab", "/etc/localtime", "/etc/adjtime", "/etc/locale.gen", "/etc/locale.conf",
+                     "/etc/vconsole.conf", "/etc/hostname", "/etc/shadow", "/etc/passwd", "/etc/gshadow",
+                     "/etc/group", "/etc/sudoers"];
+    for file in files {
+        if Path::new(&format!("/.snapshots/rootfs/snapshot-0{}", file)).is_file() {
+            Command::new("cp").args(["-r", "--reflink=auto"])
+                              .arg(format!("/.snapshots/rootfs/snapshot-0{}", file))
+                              .arg(format!("/.snapshots/rootfs/snapshot-chr0{}", file)).status()?;
+        }
+    }
+
+    Ok(())
+}
+
 // Add node to branch
 pub fn branch_create(snapshot: &str, desc: &str) -> Result<i32, Error> {
     // Find the next available snapshot number
     let i = find_new();
 
     // Make sure snapshot exists
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot branch as snapshot {} doesn't exist.", snapshot)));
 
     } else {
@@ -446,20 +468,21 @@ pub fn check_update() -> Result<(), Error> {
 
 // Clean chroot mount directories for a snapshot
 pub fn chr_delete(snapshot: &str) -> Result<(), Error> {
-    // Path to boot mount directory
-    let boot_path = format!("/.snapshots/boot/boot-chr{}", snapshot);
-    // Path to etc mount directory
-    let etc_path = format!("/.snapshots/etc/etc-chr{}", snapshot);
-    // Path to var mount directory
-    let var_path = format!("/.snapshots/var/var-chr{}", snapshot);
+    // Path to mount directories
+    let chr_path = vec!["boot", "etc", "var"];
+    for path in chr_path {
+        if Path::new(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot)).try_exists()? {
+            // Delete boot,etc and var subvolumes
+            delete_subvolume(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot),
+                             DeleteSubvolumeFlags::empty()).unwrap();
+        }
+    }
+
     // Path to snapshot mount directory
     let snapshot_path = format!("/.snapshots/rootfs/snapshot-chr{}", snapshot);
 
-    // Delete boot,etc and snapshot subvolumes
+    // Delete snapshot subvolume
     if Path::new(&snapshot_path).try_exists()? {
-        delete_subvolume(&boot_path, DeleteSubvolumeFlags::empty()).unwrap();
-        delete_subvolume(&etc_path, DeleteSubvolumeFlags::empty()).unwrap();
-        delete_subvolume(&var_path, DeleteSubvolumeFlags::empty()).unwrap();
         delete_subvolume(&snapshot_path, DeleteSubvolumeFlags::empty()).unwrap();
     }
     Ok(())
@@ -579,7 +602,7 @@ pub fn clone_as_tree(snapshot: &str, desc: &str) -> Result<i32, Error> {
     let i = find_new();
 
     // Make sure snapshot does exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", snapshot)));
 
     } else {
@@ -632,7 +655,7 @@ pub fn clone_branch(snapshot: &str) -> Result<i32, Error> {
     let i = find_new();
 
     // Make sure snapshot does exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", snapshot)));
 
     } else {
@@ -678,7 +701,7 @@ pub fn clone_branch(snapshot: &str) -> Result<i32, Error> {
 // Recursively clone an entire tree
 pub fn clone_recursive(snapshot: &str) -> Result<(), Error> {
     // Make sure snapshot does exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", snapshot)));
 
     } else {
@@ -709,11 +732,11 @@ pub fn clone_under(snapshot: &str, branch: &str) -> Result<i32, Error> {
     let i = find_new();
 
     // Make sure snapshot does exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", snapshot)));
 
         // Make sure branch does exist
-        } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", branch)).try_exists().unwrap() {
+        } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", branch)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot clone as snapshot {} doesn't exist.", branch)));
 
     } else {
@@ -781,7 +804,7 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
             return Err(Error::new(ErrorKind::Unsupported, format!("Changing base snapshot is not allowed.")));
 
         // Make sure snapshot does exist
-        } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+        } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
             return Err(Error::new(ErrorKind::NotFound, format!(
                 "Cannot delete as snapshot {} doesn't exist.", snapshot)));
         }
@@ -810,10 +833,10 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
             let tree = fstree().unwrap();
             let children = return_children(&tree, &snapshot);
             let desc_path = format!("/.snapshots/ash/snapshots/{}-desc", snapshot);
-            if Path::new(&desc_path).try_exists().unwrap() {
+            if Path::new(&desc_path).is_file() {
                 std::fs::remove_file(desc_path)?;
             }
-            if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+            if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
                 delete_subvolume(format!("/.snapshots/boot/boot-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
                 delete_subvolume(format!("/.snapshots/etc/etc-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
                 delete_subvolume(format!("/.snapshots/var/var-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
@@ -821,7 +844,7 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
             }
 
             // Make sure temporary chroot directories are deleted as well
-            if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+            if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
                 delete_subvolume(format!("/.snapshots/boot/boot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
                 delete_subvolume(format!("/.snapshots/etc/etc-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
                 delete_subvolume(format!("/.snapshots/var/var-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
@@ -831,16 +854,16 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
             for child in children {
                 // This deletes the node itself along with its children
                 let desc_path = format!("/.snapshots/ash/snapshots/{}-desc", child);
-                if Path::new(&desc_path).try_exists().unwrap() {
+                if Path::new(&desc_path).is_file() {
                     std::fs::remove_file(desc_path)?;
                 }
-                if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", child)).try_exists().unwrap() {
+                if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", child)).try_exists()? {
                     delete_subvolume(&format!("/.snapshots/boot/boot-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                     delete_subvolume(format!("/.snapshots/etc/etc-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                     delete_subvolume(format!("/.snapshots/var/var-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                     delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                 }
-                if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", child)).try_exists().unwrap() {
+                if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", child)).try_exists()? {
                     delete_subvolume(format!("/.snapshots/boot/boot-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                     delete_subvolume(format!("/.snapshots/etc/etc-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
                     delete_subvolume(format!("/.snapshots/var/var-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
@@ -877,7 +900,7 @@ pub fn delete_old_grub_files(grub: &str) -> Result<(), Error> {
 // Deploy snapshot
 pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<(), Error> {
     // Make sure snapshot exists
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot deploy as snapshot {} doesn't exist.", snapshot)));
 
     } else {
@@ -1045,7 +1068,7 @@ fn deploy_recovery() -> Result<(), Error> {
     let tmp = get_recovery_aux_tmp(&tmp);
 
     // Clean tmp
-    if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", tmp)).try_exists().unwrap() {
+    if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", tmp)).try_exists()? {
         delete_subvolume(format!("/.snapshots/boot/boot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
         delete_subvolume(format!("/.snapshots/etc/etc-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
         delete_subvolume(format!("/.snapshots/var/var-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
@@ -1205,8 +1228,9 @@ pub fn export(snapshot: &str, dest: &str) -> Result<(), Error> {
 
     // Send btrfs to destination
     Command::new("sh").arg("-c")
-                      .arg(format!("sudo btrfs send /.snapshots/rootfs/snapshot-{} | pv -Wpterb > {}/snapshot-{}.{}",
+                      .arg(format!("sudo btrfs send /.snapshots/rootfs/snapshot-{} | zstd -o {}/snapshot-{}.{}.zst",
                                    snapshot,dest,snapshot,formatted)).status()?;
+
     Ok(())
 }
 
@@ -1298,13 +1322,26 @@ fn get_grub() -> Option<String> {
     grub_dirs.get(0).cloned()
 }
 
+// Get snapshot name in tmp
+fn get_import_snapshot_name(path: &str) -> Option<String> {
+    for entry in WalkDir::new(path).max_depth(1) {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if path.is_dir() && path.to_str().unwrap().contains("snapshot-") {
+            let snapshot = path.file_name().unwrap().to_str().unwrap().to_string();
+            return Some(snapshot);
+        }
+    }
+    None
+}
+
 // Get deployed snapshot // REVIEW
 pub fn get_next_snapshot(secondary: bool) -> String {
     let tmp = get_tmp();
     let d = get_aux_tmp(tmp, secondary);
 
     // Make sure next snapshot exists
-    if Path::new(&format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", d)).try_exists().unwrap() {
+    if Path::new(&format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", d)).is_file() {
         let mut file = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", d)).unwrap();
         let mut contents = String::new();
         let csnapshot = file.read_to_string(&mut contents).unwrap();
@@ -1339,7 +1376,7 @@ fn get_recovery_aux_tmp(tmp: &str) -> String {
 
 // Get recovery tmp state
 fn get_recovery_tmp() -> String {
-    if Path::new("/.snapshots/rootfs/snapshot-0/usr/share/ash/rec-tmp").try_exists().unwrap() {
+    if Path::new("/.snapshots/rootfs/snapshot-0/usr/share/ash/rec-tmp").is_file() {
         let mut file = File::open("/.snapshots/rootfs/snapshot-0/usr/share/ash/rec-tmp").unwrap();
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
@@ -1382,11 +1419,11 @@ pub fn get_tmp() -> String {
 // Make a snapshot vulnerable to be modified even further (snapshot should be deployed as mutable)
 pub fn hollow(snapshot: &str) -> Result<(), Error> {
     // Make sure snapshot exists
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot make hollow as snapshot {} doesn't exist.", snapshot)));
 
         // Make sure snapshot is not in use by another ash process
-        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         return Err(
             Error::new(
                 ErrorKind::Unsupported,
@@ -1423,7 +1460,7 @@ pub fn immutability_disable(snapshot: &str) -> Result<(), Error> {
     // If not base snapshot
     if snapshot != "0" {
         // Make sure snapshot exists
-        if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+        if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
             return Err(Error::new(ErrorKind::NotFound, format!("Snapshot {} doesn't exist.", snapshot)));
 
         } else {
@@ -1452,7 +1489,7 @@ pub fn immutability_enable(snapshot: &str) -> Result<(), Error> {
     // If not base snapshot
     if snapshot != "0" {
         // Make sure snapshot exists
-        if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+        if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
             return Err(Error::new(ErrorKind::NotFound, format!("Snapshot {} doesn't exist.", snapshot)));
 
         } else {
@@ -1480,15 +1517,164 @@ pub fn immutability_enable(snapshot: &str) -> Result<(), Error> {
     Ok(())
 }
 
+//#[cfg(feature = "import")]
+// Import base snapshot
+pub fn import_base(path: &str, tmp_dir: &TempDir) -> Result<String, Error> {
+    let msg = "This process will change your base snapshot. Are you certain that you wish to proceed?";
+
+    // Make sure snapshot is not in use by another ash process
+    if Path::new("/.snapshots/rootfs/snapshot-chr0").try_exists()? {
+        return Err(Error::new
+                   (ErrorKind::NotFound,
+                    "Snapshot 0 appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s 0'."));
+
+    // Make sure snapshot does exist
+    } else if !Path::new(&format!("{}", path)).is_file() {
+        return Err(Error::new(ErrorKind::NotFound, format!("The snapshot {} doesn't exist.", path)));
+
+    } else if yes_no(msg) {
+        // AtomicBool flag to track if the process was interrupted
+        let interrupted = Arc::new(AtomicBool::new(false));
+
+        // Clone the Arc for use in the signal handler closure
+        let interrupted_clone = Arc::clone(&interrupted);
+
+        // Register the Ctrl+C signal handler
+        ctrlc::set_handler(move || {
+            // Set the interrupted flag to true if the signal is received
+            interrupted_clone.store(true, Ordering::SeqCst);
+        }).expect("Error setting Ctrl+C handler");
+
+        // Receive snapshor
+        Command::new("sh").arg("-c")
+                          .arg(format!("btrfs receive -f {} {}", path,tmp_dir.path().to_str().unwrap()))
+                          .status()?;
+
+        // Get snapshot name
+        let snapshot = get_import_snapshot_name(&format!("{}", tmp_dir.path().to_str().unwrap())).unwrap();
+
+        // Prepare snapshot
+        create_snapshot(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
+                        format!("/.snapshots/rootfs/snapshot-chr0"),
+                        CreateSnapshotFlags::empty(), None).unwrap();
+
+        // Delete the folder if the process was interrupted
+        if interrupted.load(Ordering::SeqCst) {
+            // Clean tmp
+            if Path::new(&format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot)).try_exists().unwrap() {
+                delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
+                                 DeleteSubvolumeFlags::empty()).unwrap();
+                std::process::exit(1);
+            }
+        }
+
+        // Clean tmp
+        delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
+                         DeleteSubvolumeFlags::empty()).unwrap();
+
+        // Copy system configurations
+        base_snapshot_config()?;
+
+        // Mount chroot
+        ash_mounts("0", "chr")?;
+
+        // Special mutable directories
+        let options = snapshot_config_get("0");
+        let mutable_dirs: Vec<&str> = options.get("mutable_dirs")
+                                             .map(|dirs| {dirs.split(',').flat_map(|dir| {
+                                                 if let Some(index) = dir.find("::") {
+                                                     vec![&dir[..index], &dir[index + 2..]]
+                                                 } else {
+                                                     vec![dir]
+                                                 }
+                                             }).filter(|dir| !dir.trim().is_empty()).collect()})
+                                             .unwrap_or_else(|| Vec::new());
+        let mutable_dirs_shared: Vec<&str> = options.get("mutable_dirs_shared")
+                                                    .map(|dirs| {dirs.split(',').flat_map(|dir| {
+                                                        if let Some(index) = dir.find("::") {
+                                                            vec![&dir[..index], &dir[index + 2..]]
+                                                        } else {
+                                                            vec![dir]
+                                                        }
+                                                    }).filter(|dir| !dir.trim().is_empty()).collect()})
+                                                    .unwrap_or_else(|| Vec::new());
+        if !mutable_dirs.is_empty() {
+            // Clean old mutable_dirs
+            if Path::new("/.snapshots/mutable_dirs/snapshot-0").try_exists()? {
+                remove_dir_content("/.snapshots/mutable_dirs/snapshot-0")?;
+            }
+            for mount_path in mutable_dirs {
+                if allow_dir_mut(mount_path) {
+                    // Create mouth_path directory in snapshot
+                    DirBuilder::new().recursive(true)
+                                     .create(format!("/.snapshots/mutable_dirs/snapshot-0/{}", mount_path))?;
+                    // Create mouth_path directory in snapshot-chr
+                    DirBuilder::new().recursive(true)
+                                     .create(format!("/.snapshots/rootfs/snapshot-chr0/{}", mount_path))?;
+                    // Use mount_path
+                    mount(Some(format!("/.snapshots/mutable_dirs/snapshot-0/{}", mount_path).as_str()),
+                          format!("/.snapshots/rootfs/snapshot-chr0/{}", mount_path).as_str(),
+                          Some("btrfs"), MsFlags::MS_BIND , None::<&str>)?;
+                }
+            }
+        }
+        if !mutable_dirs_shared.is_empty() {
+            // Clean old mutable_dirs_shared
+            if Path::new("/.snapshots/mutable_dirs/").try_exists()? {
+                remove_dir_content("/.snapshots/mutable_dirs/")?;
+            }
+            for mount_path in mutable_dirs_shared {
+                if allow_dir_mut(mount_path) {
+                    // Create mouth_path directory in snapshot
+                    DirBuilder::new().recursive(true)
+                                     .create(format!("/.snapshots/mutable_dirs/{}", mount_path))?;
+                    // Create mouth_path directory in snapshot-chr
+                    DirBuilder::new().recursive(true)
+                                     .create(format!("/.snapshots/rootfs/snapshot-chr0/{}", mount_path))?;
+                    // Use mount_path
+                    mount(Some(format!("/.snapshots/mutable_dirs/{}", mount_path).as_str()),
+                          format!("/.snapshots/rootfs/snapshot-chr0/{}", mount_path).as_str(),
+                          Some("btrfs"), MsFlags::MS_BIND , None::<&str>)?;
+                }
+            }
+        }
+
+        // File operations for snapshot-chr
+        create_snapshot("/.snapshots/boot/boot-0",
+                        "/.snapshots/boot/boot-chr0",
+                        CreateSnapshotFlags::empty(), None).unwrap();
+        create_snapshot("/.snapshots/etc/etc-0",
+                        "/.snapshots/etc/etc-chr0",
+                        CreateSnapshotFlags::empty(), None).unwrap();
+        create_snapshot("/.snapshots/var/var-0",
+                        "/.snapshots/var/var-chr0",
+                        CreateSnapshotFlags::empty(), None).unwrap();
+
+        // Copy ash related configurations
+        if Path::new("/etc/systemd").try_exists()? {
+            // Machine-id is a Systemd thing
+            copy("/etc/machine-id", "/.snapshots/rootfs/snapshot-chr0/etc/machine-id")?;
+        }
+        DirBuilder::new().recursive(true)
+                         .create("/.snapshots/rootfs/snapshot-chr0/.snapshots/ash")?;
+        copy("/.snapshots/ash/fstree", "/.snapshots/rootfs/snapshot-chr0/.snapshots/ash/fstree")?;
+
+        Ok(snapshot)
+    } else {
+        return Err(Error::new(ErrorKind::Interrupted,
+                              "Aborted."));
+    }
+}
+
 // Install packages
 pub fn install(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     // Make sure snapshot exists
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Cannot install as snapshot {} doesn't exist.", snapshot)));
 
         // Make sure snapshot is not in use by another ash process
-        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         return Err(
             Error::new(ErrorKind::Unsupported,
                        format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
@@ -1535,12 +1721,12 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
     let cfile = format!("/usr/share/ash/profiles/{}/{}", profile,dist_name);
 
     // Make sure snapshot exists
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Cannot install as snapshot {} doesn't exist.", snapshot)));
 
         // Make sure snapshot is not in use by another ash process
-        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         return Err(
             Error::new(ErrorKind::Unsupported,
                        format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
@@ -1562,7 +1748,7 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
         profconf.set_comment_symbols(&['#']);
         profconf.set_multiline(true);
         // Load profile if exist
-        if Path::new(&cfile).try_exists().unwrap() && !force && user_profile.is_empty() {
+        if Path::new(&cfile).is_file() && !force && user_profile.is_empty() {
             profconf.load(&cfile).unwrap();
         } else if force {
             println!("Installing AshOS profiles...");
@@ -1570,7 +1756,7 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
             profconf.load(&cfile).unwrap();
         } else if !user_profile.is_empty() {
             profconf.load(user_profile).unwrap();
-        } else if !Path::new(&cfile).try_exists().unwrap() && !force {
+        } else if !Path::new(&cfile).is_file() && !force {
             return Err(Error::new(ErrorKind::NotFound,
                                   format!("Please install ash-profiles package.")));
         }
@@ -1652,7 +1838,7 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
         profconf.set_multiline(true);
 
         // Load profile if exist
-        if Path::new(&cfile).try_exists().unwrap() && !force && user_profile.is_empty() {
+        if Path::new(&cfile).is_file() && !force && user_profile.is_empty() {
             profconf.load(&cfile).unwrap();
         } else if force {
             println!("Installing AshOS profiles...");
@@ -1660,7 +1846,7 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
             profconf.load(&cfile).unwrap();
         } else if !user_profile.is_empty() {
             profconf.load(user_profile).unwrap();
-        } else if !Path::new(&cfile).try_exists().unwrap() && !force {
+        } else if !Path::new(&cfile).is_file() && !force {
             return Err(Error::new(ErrorKind::NotFound,
                                   format!("Please install ash-profiles package.")));
         }
@@ -1946,7 +2132,7 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
 
     // Create mutable or immutable snapshot
     // Mutable
-    if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/usr/share/ash/mutable", snapshot)).try_exists().unwrap() {
+    if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/usr/share/ash/mutable", snapshot)).try_exists()? {
         create_snapshot(format!("/.snapshots/boot/boot-chr{}", snapshot),
                         format!("/.snapshots/boot/boot-{}", snapshot),
                         CreateSnapshotFlags::empty(), None).unwrap();
@@ -2109,7 +2295,7 @@ pub fn prepare(snapshot: &str) -> Result<(), Error> {
 
     if !mutable_dirs.is_empty() {
         // Clean old mutable_dirs
-        if Path::new("/.snapshots/mutable_dirs/snapshot-{}").try_exists().unwrap() {
+        if Path::new("/.snapshots/mutable_dirs/snapshot-{}").try_exists()? {
             remove_dir_content("/.snapshots/mutable_dirs/snapshot-{}")?;
         }
         for mount_path in mutable_dirs {
@@ -2129,7 +2315,7 @@ pub fn prepare(snapshot: &str) -> Result<(), Error> {
     }
     if !mutable_dirs_shared.is_empty() {
         // Clean old mutable_dirs_shared
-        if Path::new("/.snapshots/mutable_dirs/").try_exists().unwrap() {
+        if Path::new("/.snapshots/mutable_dirs/").try_exists()? {
             remove_dir_content("/.snapshots/mutable_dirs/")?;
         }
         for mount_path in mutable_dirs_shared {
@@ -2172,7 +2358,7 @@ pub fn prepare(snapshot: &str) -> Result<(), Error> {
                       .output()?;
 
     // Copy ash related configurations
-    if Path::new("/etc/systemd").try_exists().unwrap() {
+    if Path::new("/etc/systemd").try_exists()? {
         // Machine-id is a Systemd thing
         copy("/etc/machine-id", format!("{}/etc/machine-id", snapshot_chr))?;
     }
@@ -2228,11 +2414,11 @@ pub fn print_tmp() -> String {
 pub fn rebuild(snapshot: &str, desc: &str) -> Result<i32, Error> {
     let snap_num = find_new();
     // Make sure snapshot does exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot rebuild as snapshot {} doesn't exist.", snapshot)));
 
     // Make sure snapshot is not in use by another ash process
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         return Err(Error::new(
             ErrorKind::NotFound,
             format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
@@ -2278,7 +2464,7 @@ pub fn rebuild(snapshot: &str, desc: &str) -> Result<i32, Error> {
 
         // Create mutable or immutable snapshot
         // Mutable
-        if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/usr/share/ash/mutable", snap_num)).try_exists().unwrap() {
+        if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/usr/share/ash/mutable", snap_num)).try_exists()? {
             create_snapshot(format!("/.snapshots/boot/boot-chr{}", snap_num),
                             format!("/.snapshots/boot/boot-{}", snap_num),
                             CreateSnapshotFlags::empty(), None).unwrap();
@@ -2380,11 +2566,18 @@ pub fn rebuild(snapshot: &str, desc: &str) -> Result<i32, Error> {
 
 // Rebuild base snapshot
 pub fn rebuild_base() -> Result<(), Error> {
-    let snapshot = "0";
-    if rebuild_prep(snapshot).is_ok() {
-        post_transactions(snapshot)?;
+    // Make sure snapshot is not in use by another ash process
+    if Path::new("/.snapshots/rootfs/snapshot-chr0").try_exists()? {
+        return Err(Error::new(
+            ErrorKind::NotFound,
+            "Snapshot 0 appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s 0'."));
     } else {
-        chr_delete(snapshot)?;
+        let snapshot = "0";
+        if rebuild_prep(snapshot).is_ok() {
+            post_transactions(snapshot)?;
+        } else {
+            chr_delete(snapshot)?;
+        }
     }
     Ok(())
 }
@@ -2413,11 +2606,11 @@ pub fn rebuild_prep(snapshot: &str) -> Result<(), Error> {
 // Refresh snapshot
 pub fn refresh(snapshot: &str) -> Result<(), Error> {
     // Make sure snapshot exists
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         eprintln!("Cannot refresh as snapshot {} doesn't exist.", snapshot);
 
         // Make sure snapshot is not in use by another ash process
-        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
                   snapshot,snapshot);
 
@@ -2497,7 +2690,7 @@ pub fn reset() -> Result<(), Error> {
             post_transactions("0")?;
             for snapshot in snapshots {
                 // Delete snapshot if exist
-                if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap()
+                if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()?
                 && snapshot.to_string() != current_snapshot && snapshot.to_string() != "0" {
                     delete_node(&vec![snapshot.to_string()], true, true)?;
                 }
@@ -2559,9 +2752,9 @@ pub fn snapshot_base_new(desc: &str) -> Result<i32, Error> {
 // Edit per-snapshot configuration
 pub fn snapshot_config_edit(snapshot: &str) -> Result<(), Error> {
     // Make sure snapshot exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         eprintln!("Cannot chroot as snapshot {} doesn't exist.", snapshot);
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         // Make sure snapshot is not in use by another ash process
         eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.", snapshot,snapshot)
 
@@ -2630,7 +2823,7 @@ pub fn snapshot_config_edit(snapshot: &str) -> Result<(), Error> {
 pub fn snapshot_config_get(snapshot: &str) -> HashMap<String, String> {
     let mut options = HashMap::new();
 
-    if !Path::new(&format!("/.snapshots/etc/etc-{}/ash/ash.conf", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/etc/etc-{}/ash/ash.conf", snapshot)).is_file() {
         // Defaults here
         options.insert(String::from("aur"), String::from("False"));
         options.insert(String::from("mutable_dirs"), String::new());
@@ -2657,9 +2850,9 @@ pub fn snapshot_config_get(snapshot: &str) -> HashMap<String, String> {
 // Edit per-snapshot profile
 pub fn snapshot_profile_edit(snapshot: &str) -> Result<(), Error> {
     // Make sure snapshot exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         eprintln!("Cannot chroot as snapshot {} doesn't exist.", snapshot);
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         // Make sure snapshot is not in use by another ash process
         eprintln!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.", snapshot,snapshot)
 
@@ -2735,19 +2928,25 @@ pub fn snapshot_profile_edit(snapshot: &str) -> Result<(), Error> {
 pub fn snapshot_unlock(snapshot: &str) -> Result<(), Error> {
     let print_path = format!("/.snapshots/rootfs/snapshot-chr{}", snapshot);
     let path = Path::new(&print_path);
-    if path.try_exists().unwrap() {
+    if path.try_exists()? {
         // Make sure snapshot is not mounted
         if !is_mounted(path) {
-            delete_subvolume(&format!("/.snapshots/boot/boot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(&format!("/.snapshots/etc/etc-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(&format!("/.snapshots/var/var-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+            let path_vec = vec!["boot", "etc", "var"];
+            for path in path_vec {
+                if Path::new(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot)).try_exists()? {
+                    delete_subvolume(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+                }
+            }
             delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
         } else {
             umount2(Path::new(path),
                     MntFlags::MNT_DETACH)?;
-            delete_subvolume(&format!("/.snapshots/boot/boot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(&format!("/.snapshots/etc/etc-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
-            delete_subvolume(&format!("/.snapshots/var/var-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+            let path_vec = vec!["boot", "etc", "var"];
+            for path in path_vec {
+                if Path::new(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot)).try_exists()? {
+                    delete_subvolume(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+                }
+            }
             delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
         }
     }
@@ -2862,7 +3061,7 @@ fn switch_recovery_tmp() -> Result<(), Error> {
     // Read the contents of the file into a string
     let grub_cfg = format!("{}/{}/grub.cfg", boot_location, grub);
     let src_file_path = format!("/.snapshots/rootfs/snapshot-{}/boot/{}/grub.cfg", source_dep,grub);
-    let sfile = if Path::new(&src_file_path).try_exists().unwrap() {
+    let sfile = if Path::new(&src_file_path).is_file() {
         File::open(&src_file_path)?
     } else {
         File::open(format!("/.snapshots/rootfs/snapshot-{}/boot/{}/grub.cfg", target_dep,grub))?
@@ -3029,7 +3228,7 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
             file.write_all(format!("\n\n{}", &gconf).as_bytes())?;
 
             // Add recovery mode
-            if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", rec_tmp)).try_exists().unwrap() {
+            if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", rec_tmp)).is_file() {
                 // Remove END of 41_custom
                 let mut contents = String::new();
                 let mut sfile = File::open(&grub_path)?;
@@ -3168,7 +3367,7 @@ pub fn tmp_delete(secondary: bool) -> Result<(), Error> {
     let tmp = get_aux_tmp(tmp, secondary);
 
     // Clean tmp
-    if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", tmp)).try_exists().unwrap() {
+    if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", tmp)).try_exists()? {
         delete_subvolume(&format!("/.snapshots/boot/boot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
         delete_subvolume(&format!("/.snapshots/etc/etc-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
         delete_subvolume(&format!("/.snapshots/var/var-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
@@ -3181,7 +3380,7 @@ pub fn tmp_delete(secondary: bool) -> Result<(), Error> {
 pub fn tree_install(treename: &str, pkgs: &Vec<String>, profiles: &Vec<String>, force: bool
                     ,user_profiles: &Vec<String>, noconfirm: bool, secondary: bool) -> Result<(), Error> {
     // Make sure treename exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists()? {
         eprintln!("Cannot remove as tree {} doesn't exist.", treename);
 
     } else {
@@ -3257,7 +3456,7 @@ pub fn tree_install(treename: &str, pkgs: &Vec<String>, profiles: &Vec<String>, 
 // Recursively remove package in tree
 pub fn tree_remove(treename: &str, pkgs: &Vec<String>, profiles: &Vec<String>, user_profiles: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     // Make sure treename exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists()? {
         eprintln!("Cannot remove as tree {} doesn't exist.", treename);
 
     } else {
@@ -3333,11 +3532,11 @@ pub fn tree_remove(treename: &str, pkgs: &Vec<String>, profiles: &Vec<String>, u
 // Recursively run a command in tree
 pub fn tree_run(treename: &str, cmd: &str) -> Result<(), Error> {
     // Make sure treename exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists()? {
                 return Err(Error::new(ErrorKind::NotFound,
                               format!("Cannot update as tree {} doesn't exist.", treename)));
 
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", treename)).try_exists().unwrap() {
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", treename)).try_exists()? {
         return Err(Error::new(ErrorKind::Other,
                               format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
                                       treename,treename)));
@@ -3354,7 +3553,7 @@ pub fn tree_run(treename: &str, cmd: &str) -> Result<(), Error> {
         for branch in order {
             if branch != treename {
                 println!("{}, {}", treename,branch);
-                if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", branch)).try_exists().unwrap() {
+                if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", branch)).try_exists()? {
                     return Err(Error::new(ErrorKind::Other,
                                           format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
                                                   branch,branch)));
@@ -3378,12 +3577,12 @@ pub fn tree_show() {
 
 // Sync tree and all its snapshots
 pub fn tree_sync(treename: &str, force_offline: bool, live: bool) -> Result<(), Error> {
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Cannot sync as tree {} doesn't exist.", treename)));
 
     // Make sure snapshot is not in use by another ash process
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", treename)).try_exists().unwrap() {
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", treename)).try_exists()? {
         return Err(Error::new(ErrorKind::Other,
                               format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
                                       treename,treename)));
@@ -3403,7 +3602,7 @@ pub fn tree_sync(treename: &str, force_offline: bool, live: bool) -> Result<(), 
         for branch in order {
             if branch != treename {
                 println!("{}, {}", treename,branch);
-                if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", branch)).try_exists().unwrap() {
+                if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", branch)).try_exists()? {
                     return Err(Error::new(ErrorKind::Other,
                                           format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
                                                   branch,branch)));
@@ -3428,12 +3627,12 @@ pub fn tree_sync(treename: &str, force_offline: bool, live: bool) -> Result<(), 
 // Recursively run an update in tree
 pub fn tree_upgrade(treename: &str) -> Result<(), Error> {
     // Make sure treename exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", treename)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Cannot update as tree {} doesn't exist.", treename)));
 
         // Make sure snapshot is not in use by another ash process
-        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", treename)).try_exists().unwrap() {
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", treename)).try_exists()? {
         return Err(
             Error::new(ErrorKind::Unsupported,
                        format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
@@ -3456,7 +3655,7 @@ pub fn tree_upgrade(treename: &str) -> Result<(), Error> {
             if branch != treename {
                 println!("{}, {}", treename,branch);
                 // Make sure snapshot is not in use by another ash process
-                if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", branch)).try_exists().unwrap() {
+                if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", branch)).try_exists()? {
                     return Err(
                         Error::new(ErrorKind::Unsupported,
                                    format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
@@ -3476,12 +3675,12 @@ pub fn tree_upgrade(treename: &str) -> Result<(), Error> {
 // Uninstall package(s)
 pub fn uninstall(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     // Make sure snapshot exists
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Cannot remove as snapshot {} doesn't exist.", snapshot)));
 
         // Make sure snapshot is not in use by another ash process
-        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         return Err(
             Error::new(ErrorKind::Unsupported,
                        format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
@@ -3528,12 +3727,12 @@ fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfir
     let cfile = format!("/usr/share/ash/profiles/{}/{}", profile,dist_name);
 
     // Make sure snapshot exists
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Cannot uninstall as snapshot {} doesn't exist.", snapshot)));
 
         // Make sure snapshot is not in use by another ash process
-        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         return Err(
             Error::new(ErrorKind::Unsupported,
                        format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
@@ -3553,7 +3752,7 @@ fn uninstall_profile(snapshot: &str, profile: &str, user_profile: &str, noconfir
         profconf.set_comment_symbols(&['#']);
         profconf.set_multiline(true);
         // Load profile if exist
-        if Path::new(&cfile).try_exists().unwrap() && user_profile.is_empty() {
+        if Path::new(&cfile).is_file() && user_profile.is_empty() {
             profconf.load(&cfile).unwrap();
         } else if !user_profile.is_empty() {
             profconf.load(user_profile).unwrap();
@@ -3601,7 +3800,7 @@ fn uninstall_profile_live(snapshot: &str,profile: &str, user_profile: &str, noco
     profconf.set_multiline(true);
 
     // Load profile if exist
-    if Path::new(&cfile).try_exists().unwrap() && user_profile.is_empty() {
+    if Path::new(&cfile).is_file() && user_profile.is_empty() {
         profconf.load(&cfile).unwrap();
     } else if !user_profile.is_empty() {
         profconf.load(user_profile).unwrap();
@@ -3724,10 +3923,10 @@ pub fn update_boot(snapshot: &str, secondary: bool) -> Result<(), Error> {
     let grub = get_grub().unwrap();
 
     // Make sure snapshot does exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot update boot as snapshot {} doesn't exist.", snapshot)));
 
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         // Make sure snapshot is not in use by another ash process
         return Err(
             Error::new(
@@ -3747,7 +3946,7 @@ pub fn update_boot(snapshot: &str, secondary: bool) -> Result<(), Error> {
         prepare(snapshot)?;
 
         // Remove grub configurations older than 30 days
-        if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/boot/{}/BAK/", snapshot,grub)).try_exists().unwrap() && snapshot != "0" {
+        if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/boot/{}/BAK/", snapshot,grub)).try_exists()? && snapshot != "0" {
             delete_old_grub_files(&format!("/.snapshots/rootfs/snapshot-chr{}/boot/{}", snapshot,grub).as_str())?;
         }
 
@@ -3809,11 +4008,11 @@ pub fn update_etc() -> Result<(), Error> {
 // Upgrade snapshot
 pub fn upgrade(snapshot:  &str, baseup: bool, noconfirm: bool) -> Result<(), Error> {
     // Make sure snapshot exists
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Cannot upgrade as snapshot {} doesn't exist.", snapshot)));
 
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         // Make sure snapshot is not in use by another ash process
         return Err(
             Error::new(ErrorKind::Unsupported,

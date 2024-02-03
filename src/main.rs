@@ -3,9 +3,11 @@ mod cli;
 
 use cli::*;
 use lib::*;
+use libbtrfsutil::{delete_subvolume, DeleteSubvolumeFlags};
 use nix::unistd::Uid;
 use std::path::Path;
 use std::process::Command;
+use tempfile::TempDir;
 use users::get_user_by_name;
 use users::os::unix::UserExt;
 // Directexplicitories
@@ -22,6 +24,7 @@ use users::os::unix::UserExt;
 // /.snapshots/tmp                   : temporary directory
 // /etc/ash/ash.conf                 : configuration file for ash
 // /etc/ash/profile                  : snapshot profile
+// /home/$USER/.cache/ash/export     : default export path
 // /usr/sbin/ash                     : ash binary file location
 // /usr/share/ash                    : files that store current snapshot info
 // /use/share/ash/profiles           : default desktop environments profiles path
@@ -52,6 +55,39 @@ fn main() {
 
                 // Run noninteractive_update
                 noninteractive_update(&snapshot).unwrap();
+            }
+            // Base import
+            //#[cfg(feature = "import")]
+            Some(("base-import", base_import_matches)) => {
+                //Get tmp_dir value
+                let tmp_dir = TempDir::new_in("/.snapshots/tmp").unwrap();
+
+                // Get user_profile value
+                let path: String = base_import_matches.get_many::<String>("SNAPSHOT_PATH").unwrap().map(|s| format!("{}", s)).collect();
+
+                // Run import_base
+                let run = import_base(&path, &tmp_dir);
+                match run {
+                    Ok(_) => {
+                        if post_transactions("0").is_ok() {
+                            println!("New base snapshot has been successfully imported.")
+                        } else {
+                            // Clean chroot mount directories
+                            chr_delete("0").unwrap();
+                            eprintln!("Failed to import new base snapshot.")
+                        }
+                    },
+                    Err(snapshot) => {
+                        // Clean tmp
+                        if Path::new(&format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot)).try_exists().unwrap() {
+                            delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
+                                             DeleteSubvolumeFlags::empty()).unwrap();
+                        }
+                        // Clean chroot mount directories
+                        chr_delete("0").unwrap();
+                        eprintln!("{}", snapshot);
+                    },
+                }
             }
             // Base rebuild
             Some(("base-rebuild", _matches)) => {

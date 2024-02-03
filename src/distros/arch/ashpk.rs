@@ -31,7 +31,7 @@ pub fn aur_check(snapshot: &str) -> bool {
 // Noninteractive update
 pub fn auto_upgrade(snapshot: &str) -> Result<(), Error> {
     // Make sure snapshot exists
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         eprintln!("Cannot upgrade as snapshot {} doesn't exist.", snapshot);
 
     } else {
@@ -144,12 +144,12 @@ pub fn clean_chroot(snapshot: &str, profconf: &Ini) -> Result<(), Error> {
 // Fix signature invalid error
 pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
     // Make sure snapshot does exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists().unwrap() && !snapshot.is_empty() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? && !snapshot.is_empty() {
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Cannot fix package man database as snapshot {} doesn't exist.", snapshot)));
 
         // Make sure snapshot is not in use
-        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         return Err(
             Error::new(ErrorKind::Unsupported,
                        format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
@@ -193,13 +193,13 @@ pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
         let home = home_dir.to_str().unwrap();
         if run_chroot {
             let etc_gnupg = format!("/.snapshots/rootfs/snapshot-chr{}/etc/pacman.d/gnupg", snapshot);
-            if Path::new(&etc_gnupg).try_exists().unwrap() && read_dir(&etc_gnupg)?.count() > 0 {
+            if Path::new(&etc_gnupg).try_exists()? && read_dir(&etc_gnupg)?.count() > 0 {
                 cmds.push(format!("rm -rf /etc/pacman.d/gnupg"));
             }
-            if Path::new(&format!("{}/.gnupg", home)).try_exists().unwrap() && read_dir(&format!("{}/.gnupg", home))?.count() > 0 {
+            if Path::new(&format!("{}/.gnupg", home)).try_exists()? && read_dir(&format!("{}/.gnupg", home))?.count() > 0 {
                 cmds.push(format!("rm -rf {}/.gnupg", home));
             }
-            if Path::new("/var/lib/pacman/sync").try_exists().unwrap() && read_dir("/var/lib/pacman/sync")?.count() > 0 {
+            if Path::new("/var/lib/pacman/sync").try_exists()? && read_dir("/var/lib/pacman/sync")?.count() > 0 {
                 cmds.push(format!("rm -r /var/lib/pacman/sync/*"));
             }
             cmds.push(format!("pacman -Syy"));
@@ -208,13 +208,13 @@ pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
             cmds.push(format!("pacman-key --populate archlinux"));
             cmds.push(format!("pacman -Syvv --noconfirm archlinux-keyring"));
         } else {
-            if Path::new("/etc/pacman.d/gnupg").try_exists().unwrap() && read_dir("/etc/pacman.d/gnupg")?.count() > 0 {
+            if Path::new("/etc/pacman.d/gnupg").try_exists()? && read_dir("/etc/pacman.d/gnupg")?.count() > 0 {
                 cmds.push(format!("rm -rf /etc/pacman.d/gnupg"));
             }
-            if Path::new(&format!("{}/.gnupg", home)).try_exists().unwrap() && read_dir(&format!("{}/.gnupg", home))?.count() > 0 {
+            if Path::new(&format!("{}/.gnupg", home)).try_exists()? && read_dir(&format!("{}/.gnupg", home))?.count() > 0 {
                 cmds.push(format!("rm -rf {}/.gnupg", home));
             }
-            if Path::new("/var/lib/pacman/sync").try_exists().unwrap() && read_dir("/var/lib/pacman/sync")?.count() > 0 {
+            if Path::new("/var/lib/pacman/sync").try_exists()? && read_dir("/var/lib/pacman/sync")?.count() > 0 {
                 cmds.push(format!("rm -r /var/lib/pacman/sync/*"));
             }
             cmds.push(format!("sudo -u {} gpg --refresh-keys", username.to_str().unwrap()));
@@ -566,7 +566,7 @@ pub fn refresh_helper(snapshot: &str) -> Result<(), Error> {
 pub fn service_enable(snapshot: &str, services: &Vec<String>, chr: &str) -> Result<(), Error> {
     for service in services {
         // Systemd
-        if Path::new("/var/lib/systemd/").try_exists().unwrap() {
+        if Path::new("/var/lib/systemd/").try_exists()? {
             let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}{}", chr,snapshot))
                                                .arg("systemctl")
                                                .arg("enable")
@@ -584,7 +584,7 @@ pub fn service_enable(snapshot: &str, services: &Vec<String>, chr: &str) -> Resu
 pub fn service_disable(snapshot: &str, services: &Vec<String>, chr: &str) -> Result<(), Error> {
     for service in services {
         // Systemd
-        if Path::new("/var/lib/systemd/").try_exists().unwrap() {
+        if Path::new("/var/lib/systemd/").try_exists()? {
             let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}{}", chr,snapshot))
                                                .arg("systemctl")
                                                .arg("disable")
@@ -601,12 +601,12 @@ pub fn service_disable(snapshot: &str, services: &Vec<String>, chr: &str) -> Res
 // Show diff of packages between 2 snapshots
 pub fn snapshot_diff(snapshot1: &str, snapshot2: &str) -> Result<(), Error> {
     // Make sure snapshot one does exist
-    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot1)).try_exists().unwrap() {
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot1)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Snapshot {} not found.", snapshot1)));
 
         // Make sure snapshot two does exist
-        } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot2)).try_exists().unwrap() {
+        } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot2)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound,
                               format!("Snapshot {} not found.", snapshot2)));
 
@@ -648,9 +648,11 @@ pub fn system_config(snapshot: &str, profconf: &Ini) -> Result<(), Error> {
                      "/etc/vconsole.conf", "/etc/hostname", "/etc/shadow", "/etc/passwd", "/etc/gshadow",
                      "/etc/group", "/etc/sudoers", "/boot/grub/grub.cfg", "/etc/pacman.conf"];
     for file in files {
-        Command::new("cp").args(["-r", "--reflink=auto"])
-                          .arg(format!("/.snapshots/rootfs/snapshot-{}{}", snapshot,file))
-                          .arg(format!("/.snapshots/rootfs/snapshot-chr{}{}", snapshot,file)).status()?;
+        if Path::new(&format!("/.snapshots/rootfs/snapshot-{}{}", snapshot,file)).is_file() {
+            Command::new("cp").args(["-r", "--reflink=auto"])
+                              .arg(format!("/.snapshots/rootfs/snapshot-{}{}", snapshot,file))
+                              .arg(format!("/.snapshots/rootfs/snapshot-chr{}{}", snapshot,file)).status()?;
+        }
     }
 
     // Copy pacman.d directory

@@ -17,6 +17,17 @@ pub fn cli() -> Command {
                          .value_parser(clap::value_parser!(i32))
                          .required(false)
                          .help("snapshot number"),),)
+        // Base import
+        .subcommand(Command::new("base-import")
+                    .aliases(["bi", "ib"])
+                    .about("Import base snapshot")
+                    .arg(Arg::new("SNAPSHOT_PATH")
+                         .long("spath")
+                         .alias("path")
+                         .short('p')
+                         .value_parser(clap::value_parser!(String))
+                         .required(true)
+                         .help("Import base snapshot"),),)
         // Base rebuild
         .subcommand(Command::new("base-rebuild")
                     .aliases(["br", "rb"])
