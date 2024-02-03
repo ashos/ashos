@@ -122,6 +122,12 @@ pub fn cache_copy(snapshot: &str, prepare: bool) -> Result<(), Error> {
     Ok(())
 }
 
+// Clean pacman cache
+pub fn clean_cache(snapshot: &str) -> Result<(), Error> {
+    remove_dir_content(&format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg", snapshot))?;
+    Ok(())
+}
+
 // Uninstall all packages in snapshot
 pub fn clean_chroot(snapshot: &str, profconf: &Ini) -> Result<(), Error> {
     // Read commands section in configuration file

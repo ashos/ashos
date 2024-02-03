@@ -1553,7 +1553,7 @@ pub fn import_base(path: &str, tmp_dir: &TempDir) -> Result<String, Error> {
         // Clean tmp
         delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
                          DeleteSubvolumeFlags::empty()).unwrap();
-        remove_dir_content("/.snapshots/rootfs/snapshot-chr0/var/cache/pacman/pkg")?;
+        clean_cache("0")?;
 
         // Copy fstab
         Command::new("cp").args(["-r", "--reflink=auto"])
@@ -2098,7 +2098,7 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
     cache_copy(snapshot, false)?;
     // Clean cache for base snapshot
     if snapshot == "0" {
-        remove_dir_content(&format!("/.snapshots/rootfs/snapshot-chr{}/var/cache/pacman/pkg", snapshot))?;
+        clean_cache(snapshot)?;
     }
     remove_dir_content(&format!("/.snapshots/var/var-chr{}", snapshot))?;
     Command::new("cp").args(["-r", "--reflink=auto"])
