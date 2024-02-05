@@ -84,7 +84,7 @@ fn main() {
                                              DeleteSubvolumeFlags::empty()).unwrap();
                         }
                         // Clean chroot mount directories
-                        chr_delete("0").unwrap();
+                        //chr_delete("0").unwrap();
                         eprintln!("{}", snapshot);
                     },
                 }

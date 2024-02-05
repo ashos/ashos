@@ -1563,7 +1563,7 @@ pub fn import(snapshot: i32, path: &str, desc: &str, tmp_dir: &TempDir) -> Resul
         ash_mounts(&format!("{}", snapshot), "chr")?;
 
         // Special mutable directories
-        let options = snapshot_config_get("0");
+        let options = snapshot_config_get(&format!("{}", snapshot));
         let mutable_dirs: Vec<&str> = options.get("mutable_dirs")
                                              .map(|dirs| {dirs.split(',').flat_map(|dir| {
                                                  if let Some(index) = dir.find("::") {
@@ -4117,7 +4117,7 @@ pub fn update_boot(snapshot: &str, secondary: bool) -> Result<(), Error> {
 
         // Run update commands in chroot
         let distro_name = detect::distro_name(snapshot);
-        let mkconfig = format!("grub-mkconfig {} -o /boot/{}/grub.cfg", part,grub);
+        let mkconfig = format!("/usr/sbin/grub-mkconfig {} -o /boot/{}/grub.cfg", part,grub);
         let sed_snap = format!("sed -i 's|snapshot-chr{}|snapshot-{}|g' /boot/{}/grub.cfg", snapshot,tmp,grub);
         let sed_distro = format!("sed -i '0,\\|{}| s||{} snapshot {}|' /boot/{}/grub.cfg",
                                  distro_name,distro_name,snapshot,grub);
