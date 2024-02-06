@@ -3,19 +3,17 @@ mod cli;
 
 use cli::*;
 use lib::*;
-use libbtrfsutil::{delete_subvolume, DeleteSubvolumeFlags};
 use nix::unistd::Uid;
 use std::path::Path;
 use std::process::Command;
-use tempfile::TempDir;
-use users::get_user_by_name;
-use users::os::unix::UserExt;
+
 // Directexplicitories
 // All snapshots share one /var
 // Global boot is always at @boot
 // *-chr                             : temporary directories used to chroot into snapshot or copy snapshots around
 // *-deploy and *-deploy-aux         : temporary directories used to boot deployed snapshot
 // *-deploy[-aux]-secondary          : temporary directories used to boot secondary deployed snapshot
+// /.snapshots/ash/export            : default export path
 // /.snapshots/ash/part              : root partition uuid
 // /.snapshots/ash/snapshots/*-desc  : descriptions
 // /.snapshots/boot/boot-*           : individual /boot for each snapshot
@@ -24,7 +22,6 @@ use users::os::unix::UserExt;
 // /.snapshots/tmp                   : temporary directory
 // /etc/ash/ash.conf                 : configuration file for ash
 // /etc/ash/profile                  : snapshot profile
-// /home/$USER/.cache/ash/export     : default export path
 // /usr/sbin/ash                     : ash binary file location
 // /usr/share/ash                    : files that store current snapshot info
 // /use/share/ash/profiles           : default desktop environments profiles path
@@ -57,36 +54,39 @@ fn main() {
                 noninteractive_update(&snapshot).unwrap();
             }
             // Base import
-            //#[cfg(feature = "import")]
             Some(("base-import", base_import_matches)) => {
                 // Get user_profile value
                 let path: String = base_import_matches.get_many::<String>("SNAPSHOT_PATH").unwrap().map(|s| format!("{}", s)).collect();
 
                 // Get tmp_dir value
-                let tmp_dir = TempDir::new_in("/.snapshots/tmp").unwrap();
+                let tmp_dir = tempfile::TempDir::new_in("/.snapshots/tmp").unwrap();
 
                 // Run import_base
                 let run = import_base(&path, &tmp_dir);
-                match run {
-                    Ok(_) => {
-                        if post_transactions("0").is_ok() {
-                            println!("New base snapshot has been successfully imported.")
-                        } else {
+                if cfg!(feature = "import") {
+                    match run {
+                        Ok(_) => {
+                            if post_transactions("0").is_ok() {
+                                println!("New base snapshot has been successfully imported.")
+                            } else {
+                                // Clean chroot mount directories
+                                chr_delete("0").unwrap();
+                                eprintln!("Failed to import new base snapshot.")
+                            }
+                        },
+                        Err(snapshot) => {
+                            // Clean tmp
+                            if Path::new(&format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot)).try_exists().unwrap() {
+                                libbtrfsutil::delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
+                                                               libbtrfsutil::DeleteSubvolumeFlags::empty()).unwrap();
+                            }
                             // Clean chroot mount directories
                             chr_delete("0").unwrap();
-                            eprintln!("Failed to import new base snapshot.")
-                        }
-                    },
-                    Err(snapshot) => {
-                        // Clean tmp
-                        if Path::new(&format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot)).try_exists().unwrap() {
-                            delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
-                                             DeleteSubvolumeFlags::empty()).unwrap();
-                        }
-                        // Clean chroot mount directories
-                        //chr_delete("0").unwrap();
-                        eprintln!("{}", snapshot);
-                    },
+                            eprintln!("{}", snapshot);
+                        },
+                    }
+                } else {
+                    eprintln!("base-import command is not supported.");
                 }
             }
             // Base rebuild
@@ -401,12 +401,6 @@ fn main() {
             }
             // Export snapshot
             Some(("export", export_matches)) => {
-                // Get home value
-                let username = std::env::var_os("SUDO_USER").unwrap();
-                let user = get_user_by_name(&username).unwrap();
-                let home_dir = user.home_dir();
-                let home = home_dir.to_str().unwrap();
-
                 // Get snapshot value
                 let snapshot = if export_matches.contains_id("SNAPSHOT") {
                     let snap = export_matches.get_one::<i32>("SNAPSHOT").unwrap();
@@ -422,14 +416,14 @@ fn main() {
                     let dest = export_matches.get_one::<String>("OUTPUT").map(|s| s.as_str()).unwrap().to_string();
                     dest
                 } else {
-                    let dest = format!("{}/.cache/ash/export", home);
+                    let dest = String::from("/.snapshots/ash/export");
                     dest
                 };
 
                 // Run export
-                if !Path::new(&format!("{}/.cache/ash/export", home)).try_exists().unwrap() {
+                if !Path::new("/.snapshots/ash/export").try_exists().unwrap() {
                     Command::new("mkdir").arg("-p")
-                                         .arg(format!("{}/.cache/ash/export", home))
+                                         .arg("/.snapshots/ash/export")
                                          .status().unwrap();
                 }
                 export(&snapshot, &dest).unwrap();
@@ -535,7 +529,6 @@ fn main() {
                 }
             }
             // Import snapshot
-            //#[cfg(feature = "import")]
             Some(("import", import_matches)) => {
                 // Get snapshot value
                 let snapshot = find_new();
@@ -553,24 +546,28 @@ fn main() {
                 let path: String = import_matches.get_many::<String>("SNAPSHOT_PATH").unwrap().map(|s| format!("{}", s)).collect();
 
                 // Get tmp_dir value
-                let tmp_dir = TempDir::new_in("/.snapshots/tmp").unwrap();
+                let tmp_dir = tempfile::TempDir::new_in("/.snapshots/tmp").unwrap();
 
                 // Run import_base
-                let run = import(snapshot, &path, &desc, &tmp_dir);
-                match run {
-                    Ok(_) => {
+                if cfg!(feature = "import") {
+                    let run = import(snapshot, &path, &desc, &tmp_dir);
+                    match run {
+                        Ok(_) => {
                             println!("Snapshot {} has been successfully imported.", snapshot);
-                    },
-                    Err(e) => {
-                        // Clean tmp
-                        if Path::new(&format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot)).try_exists().unwrap() {
-                            delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
-                                             DeleteSubvolumeFlags::empty()).unwrap();
-                        }
-                        // Clean chroot mount directories
-                        chr_delete(&format!("{}", snapshot)).unwrap();
-                        eprintln!("{}", e);
-                    },
+                        },
+                        Err(e) => {
+                            // Clean tmp
+                            if Path::new(&format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot)).try_exists().unwrap() {
+                                libbtrfsutil::delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
+                                                               libbtrfsutil::DeleteSubvolumeFlags::empty()).unwrap();
+                            }
+                            // Clean chroot mount directories
+                            chr_delete(&format!("{}", snapshot)).unwrap();
+                            eprintln!("{}", e);
+                        },
+                    }
+                } else {
+                    eprintln!("import command is not supported.");
                 }
             }
             // Install command

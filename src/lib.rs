@@ -1,5 +1,5 @@
 mod detect_distro;
-mod distros;
+mod ashpk;
 mod tree;
 
 use crate::detect_distro as detect;
@@ -24,10 +24,15 @@ use tempfile::TempDir;
 use tree::*;
 use walkdir::{DirEntry, WalkDir};
 
+// Select package manager
 cfg_if::cfg_if! {
-    //TODO make feature conflict
-    if #[cfg(feature = "arch")] {
-        use distros::arch::ashpk::*;
+    if #[cfg(feature = "apt")] {
+        use ashpk::apt::ashpk::*;
+    } else if #[cfg(feature = "dnf")] {
+        use ashpk::dnf::ashpk::*;
+    } else if #[cfg(feature = "pacman")] {
+        // Default
+        use ashpk::pacman::ashpk::*;
     }
 }
 
@@ -1499,7 +1504,6 @@ pub fn immutability_enable(snapshot: &str) -> Result<(), Error> {
     Ok(())
 }
 
-//#[cfg(feature = "import")]
 // Import snapshot
 pub fn import(snapshot: i32, path: &str, desc: &str, tmp_dir: &TempDir) -> Result<(), Error> {
     // Make sure snapshot is not in use by another ash process
@@ -1665,7 +1669,6 @@ pub fn import(snapshot: i32, path: &str, desc: &str, tmp_dir: &TempDir) -> Resul
     Ok(())
 }
 
-//#[cfg(feature = "import")]
 // Import base snapshot
 pub fn import_base(path: &str, tmp_dir: &TempDir) -> Result<String, Error> {
     let msg = "This process will change your base snapshot. Are you certain that you wish to proceed?";
@@ -2192,12 +2195,10 @@ pub fn is_pkg_installed(snapshot: &str, pkg: &str) -> bool {
 
 // Check if system packages is locked
 fn is_system_locked() -> bool {
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "lock")] {
-            return true;
-        } else {
-            return false;
-        }
+    if cfg!(feature = "lock") {
+        return true;
+    } else {
+        return false;
     }
 }
 
