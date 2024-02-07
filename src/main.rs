@@ -4,6 +4,8 @@ mod cli;
 use cli::*;
 use lib::*;
 use nix::unistd::Uid;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
@@ -302,7 +304,18 @@ fn main() {
                 // Run deploy
                 let run = deploy(&snapshot, secondary, false);
                 match run {
-                    Ok(_) => println!("Snapshot {} deployed to '/'.", snapshot),
+                    Ok(target_dep) => {
+                        // Save deployed snapshots tmp
+                        let source_dep = get_tmp();
+                        let mut deploy_tmp = OpenOptions::new().truncate(true)
+                                                               .create(true)
+                                                               .read(true)
+                                                               .write(true)
+                                                               .open("/.snapshots/ash/deploy-tmp").unwrap();
+                        let tmp = format!("{}\n{}", source_dep,target_dep);
+                        deploy_tmp.write_all(tmp.as_bytes()).unwrap();
+                        println!("Snapshot {} deployed to '/'.", snapshot);
+                    },
                     Err(e) => eprintln!("{}", e),
                 }
             }

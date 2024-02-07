@@ -781,7 +781,7 @@ fn comment_after_hash(line: &mut String) -> &str {
 pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(), Error> {
     // Get some values
     let current_snapshot = get_current_snapshot();
-    let next_snapshot = get_next_snapshot(false);
+    let next_snapshot = get_next_snapshot();
     let mut run = false;
 
     // Iterating over snapshots
@@ -802,7 +802,7 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
                 return Err(Error::new(ErrorKind::Unsupported, format!(
                     "Cannot delete booted snapshot.")));
             // Make sure snapshot is not deploy snapshot
-            } else if snapshot == &next_snapshot { // REVIEW
+            } else if snapshot == &next_snapshot {
                 return Err(Error::new(ErrorKind::Unsupported, format!(
                     "Cannot delete deployed snapshot.")));
 
@@ -885,7 +885,7 @@ pub fn delete_old_grub_files(grub: &str) -> Result<(), Error> {
 }
 
 // Deploy snapshot
-pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<(), Error> {
+pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<String, Error> {
     // Make sure snapshot exists
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot deploy as snapshot {} doesn't exist.", snapshot)));
@@ -1013,14 +1013,14 @@ pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<(), Error>
                                               .write(true)
                                               .open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", tmp))?;
         snap_file.write_all(snap_num.as_bytes())?;
-        switch_tmp(secondary, reset)?;
+        let target_dep = switch_tmp(secondary, reset)?;
 
         // Set default volume
         Command::new("btrfs").args(["sub", "set-default"])
                              .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
                              .output()?;
+        Ok(target_dep)
     }
-    Ok(())
 }
 
 // Deploy recovery snapshot
@@ -1322,17 +1322,26 @@ fn get_import_snapshot_name(path: &str) -> Option<String> {
     None
 }
 
-// Get deployed snapshot // REVIEW
-pub fn get_next_snapshot(secondary: bool) -> String {
+// Get deployed snapshot
+pub fn get_next_snapshot() -> String {
     let tmp = get_tmp();
-    let d = get_aux_tmp(tmp, secondary);
+    let file = File::open("/.snapshots/ash/deploy-tmp").unwrap();
+    let mut d = String::new();
+    let reader = BufReader::new(file);
+    for line in reader.lines() {
+        let line = line.unwrap();
+        if line != tmp {
+            d.push_str(&line);
+            break;
+        }
+    }
 
     // Make sure next snapshot exists
     if Path::new(&format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", d)).is_file() {
         let mut file = File::open(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/snap", d)).unwrap();
         let mut contents = String::new();
-        let csnapshot = file.read_to_string(&mut contents).unwrap();
-        return csnapshot.to_string().trim().to_string();
+        file.read_to_string(&mut contents).unwrap();
+        return contents.to_string().trim().to_string();
     } else {
         // Return empty string in case no snapshot is deploye
         return "".to_string()
@@ -3308,7 +3317,7 @@ fn switch_recovery_tmp() -> Result<(), Error> {
 }
 
 // Switch between /tmp deployments
-pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
+pub fn switch_tmp(secondary: bool, reset: bool) -> Result<String, Error> {
     let grub = get_grub().unwrap();
     let part = get_part();
     let rec_tmp = get_recovery_tmp();
@@ -3418,7 +3427,7 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<(), Error> {
     umount2(Path::new(&format!("{}", tmp_boot.path().as_os_str().to_str().unwrap())),
             MntFlags::MNT_DETACH)?;
 
-    Ok(())
+    Ok(target_dep)
 }
 
 // No comment
