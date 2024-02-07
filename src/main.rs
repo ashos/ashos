@@ -65,7 +65,7 @@ fn main() {
 
                 // Run import_base
                 let run = import_base(&path, &tmp_dir);
-                if cfg!(feature = "import") {
+                if cfg!(feature = "base-import") {
                     match run {
                         Ok(_) => {
                             if post_transactions("0").is_ok() {

@@ -1656,6 +1656,12 @@ pub fn import(snapshot: i32, path: &str, desc: &str, tmp_dir: &TempDir) -> Resul
                          .create(format!("/.snapshots/rootfs/snapshot-chr{}/.snapshots/ash", snapshot))?;
         copy("/.snapshots/ash/fstree", format!("/.snapshots/rootfs/snapshot-chr{}/.snapshots/ash/fstree", snapshot))?;
 
+        // Check if ash exists
+        if !Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/usr/sbin/ash", snapshot)).try_exists()? {
+            return Err(Error::new(ErrorKind::NotFound,
+                                  "/usr/sbin/ash doesn't exist."));
+        }
+
         // Copy from chroot directory back to read only snapshot directory
         if post_transactions(&format!("{}", snapshot)).is_err() {
             chr_delete(&format!("{}", snapshot))?;
@@ -1822,6 +1828,12 @@ pub fn import_base(path: &str, tmp_dir: &TempDir) -> Result<String, Error> {
         DirBuilder::new().recursive(true)
                          .create("/.snapshots/rootfs/snapshot-chr0/.snapshots/ash")?;
         copy("/.snapshots/ash/fstree", "/.snapshots/rootfs/snapshot-chr0/.snapshots/ash/fstree")?;
+
+        // Check if ash exists
+        if !Path::new("/.snapshots/rootfs/snapshot-chr0/usr/sbin/ash").try_exists()? {
+            return Err(Error::new(ErrorKind::NotFound,
+                                  "/usr/sbin/ash doesn't exist."));
+        }
 
         Ok(snapshot)
     } else {
