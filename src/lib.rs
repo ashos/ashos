@@ -1,5 +1,5 @@
-mod detect_distro;
 mod ashpk;
+mod detect_distro;
 mod tree;
 
 use crate::detect_distro as detect;
@@ -1209,6 +1209,96 @@ pub fn diff(snapshot1: &str, snapshot2: &str) {
     }
 }
 
+// Switch between distros //REVIEW
+pub fn efi_boot_order() -> Result<(), Error>{
+    /*loop {
+        let map_tmp_output = Command::new("cat")
+            .arg("/boot/efi/EFI/map.txt")
+            .arg("|")
+            .arg("awk 'BEGIN { FS = \"'==='\" } ; { print $1 }'")
+            .output();
+
+        let map_tmp = match map_tmp_output {
+            Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_string(),
+            Err(error) => {
+                println!("Failed to read map.txt: {}", error);
+                continue;
+            }
+        };
+
+        println!("Type the name of a distribution to switch to: (type 'list' to list them, 'q' to quit)");
+        let mut next_distro = String::new();
+        stdin().read_line(&mut next_distro)?;
+
+        next_distro = next_distro.trim().to_string();
+
+        if next_distro == "q" {
+            break;
+        } else if next_distro == "list" {
+            println!("{}", map_tmp);
+        } else if map_tmp.contains(&next_distro) {
+            if let Ok(file) = std::fs::File::open("/boot/efi/EFI/map.txt") {
+                let mut reader = csv::ReaderBuilder::new()
+                    .delimiter(b',')
+                    .quoting(false)
+                    .from_reader(file);
+
+                let mut found = false;
+
+                for row in reader.records() {
+                    let record = row.unwrap();
+                    let distro = record.get(0).unwrap();
+
+                    if distro == next_distro {
+                        let boot_order_output = Command::new("efibootmgr")
+                            .arg("|")
+                            .arg("grep BootOrder")
+                            .arg("|")
+                            .arg("awk '{print $2}'")
+                            .output();
+
+                        let boot_order = match boot_order_output {
+                            Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                            Err(error) => {
+                                eprintln!("Failed to get boot order: {}", error);
+                                continue;
+                            }
+                        };
+
+                        let temp = boot_order.replace(&format!("{},", record.get(1).unwrap()), "");
+                        let new_boot_order = format!("{},{}", record.get(1).unwrap(), temp);
+
+                        let efibootmgr_output = Command::new("efibootmgr")
+                            .arg("--bootorder")
+                            .arg(&new_boot_order)
+                            .output();
+
+                        if let Err(error) = efibootmgr_output {
+                            eprintln!("Failed to switch distros: {}", error);
+                        } else {
+                            println!("Done! Please reboot whenever you would like to switch to {}", next_distro);
+                        }
+
+                        found = true;
+                        break;
+                    }
+                }
+
+                if found {
+                    break;
+                }
+            } else {
+                eprintln!("Failed to open map.txt");
+                continue;
+            }
+        } else {
+            eprintln!("Invalid distribution!");
+        }
+    }*/
+    println!("This feature is currently under construction.");
+    Ok(())
+}
+
 // Send snapshot to export directory
 pub fn export(snapshot: &str, dest: &str) -> Result<(), Error> {
     // Get current time
@@ -1541,7 +1631,8 @@ pub fn import(snapshot: i32, path: &str, desc: &str, tmp_dir: &TempDir) -> Resul
             interrupted_clone.store(true, Ordering::SeqCst);
         }).expect("Error setting Ctrl+C handler");
 
-        // Receive snapshor
+        // Receive snapshot
+        println!("Receiving a snapshot, please wait...");
         Command::new("sh").arg("-c")
                           .arg(format!("btrfs receive -f {} {}", path,tmp_dir.path().to_str().unwrap()))
                           .status()?;
@@ -1713,7 +1804,8 @@ pub fn import_base(path: &str, tmp_dir: &TempDir) -> Result<String, Error> {
             interrupted_clone.store(true, Ordering::SeqCst);
         }).expect("Error setting Ctrl+C handler");
 
-        // Receive snapshor
+        // Receive snapshot
+        println!("Receiving a snapshot, please wait...");
         Command::new("sh").arg("-c")
                           .arg(format!("btrfs receive -f {} {}", path,tmp_dir.path().to_str().unwrap()))
                           .status()?;
@@ -3132,96 +3224,6 @@ pub fn snapshot_unlock(snapshot: &str) -> Result<(), Error> {
     Ok(())
 }
 
-// Switch between distros //REVIEW
-pub fn efi_boot_order() -> Result<(), Error>{
-    /*loop {
-        let map_tmp_output = Command::new("cat")
-            .arg("/boot/efi/EFI/map.txt")
-            .arg("|")
-            .arg("awk 'BEGIN { FS = \"'==='\" } ; { print $1 }'")
-            .output();
-
-        let map_tmp = match map_tmp_output {
-            Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_string(),
-            Err(error) => {
-                println!("Failed to read map.txt: {}", error);
-                continue;
-            }
-        };
-
-        println!("Type the name of a distribution to switch to: (type 'list' to list them, 'q' to quit)");
-        let mut next_distro = String::new();
-        stdin().read_line(&mut next_distro)?;
-
-        next_distro = next_distro.trim().to_string();
-
-        if next_distro == "q" {
-            break;
-        } else if next_distro == "list" {
-            println!("{}", map_tmp);
-        } else if map_tmp.contains(&next_distro) {
-            if let Ok(file) = std::fs::File::open("/boot/efi/EFI/map.txt") {
-                let mut reader = csv::ReaderBuilder::new()
-                    .delimiter(b',')
-                    .quoting(false)
-                    .from_reader(file);
-
-                let mut found = false;
-
-                for row in reader.records() {
-                    let record = row.unwrap();
-                    let distro = record.get(0).unwrap();
-
-                    if distro == next_distro {
-                        let boot_order_output = Command::new("efibootmgr")
-                            .arg("|")
-                            .arg("grep BootOrder")
-                            .arg("|")
-                            .arg("awk '{print $2}'")
-                            .output();
-
-                        let boot_order = match boot_order_output {
-                            Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_string(),
-                            Err(error) => {
-                                eprintln!("Failed to get boot order: {}", error);
-                                continue;
-                            }
-                        };
-
-                        let temp = boot_order.replace(&format!("{},", record.get(1).unwrap()), "");
-                        let new_boot_order = format!("{},{}", record.get(1).unwrap(), temp);
-
-                        let efibootmgr_output = Command::new("efibootmgr")
-                            .arg("--bootorder")
-                            .arg(&new_boot_order)
-                            .output();
-
-                        if let Err(error) = efibootmgr_output {
-                            eprintln!("Failed to switch distros: {}", error);
-                        } else {
-                            println!("Done! Please reboot whenever you would like to switch to {}", next_distro);
-                        }
-
-                        found = true;
-                        break;
-                    }
-                }
-
-                if found {
-                    break;
-                }
-            } else {
-                eprintln!("Failed to open map.txt");
-                continue;
-            }
-        } else {
-            eprintln!("Invalid distribution!");
-        }
-    }*/
-    println!("This feature is currently under construction.");
-    Ok(())
-}
-
 // Switch between /recovery-tmp deployments
 fn switch_recovery_tmp() -> Result<(), Error> {
     let grub = get_grub().unwrap();
@@ -4057,7 +4059,7 @@ pub fn uninstall_triage(snapshot: &str, live: bool, pkgs: Vec<String>, profile: 
                 Err(e) => {
                     eprintln!("{}",e);
                     chr_delete(snapshot)?;
-                    eprintln!("uninstall failed and changes discarded!");
+                    eprintln!("Uninstall failed and changes discarded!");
                 },
             }
         }
@@ -4240,7 +4242,7 @@ pub fn which_snapshot_has(pkgs: Vec<String>) {
             }
         }
         if !snapshot.is_empty() {
-            println!("package {} installed in {snapshot:?}.", pkg);
+            println!("Package(s) {} installed in {snapshot:?}.", pkg);
         }
     }
 }
