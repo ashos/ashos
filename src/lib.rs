@@ -27,12 +27,12 @@ use walkdir::{DirEntry, WalkDir};
 // Select package manager
 cfg_if::cfg_if! {
     if #[cfg(feature = "apt")] {
-        use ashpk::apt::ashpk::*;
+        use ashpk::apt::*;
     } else if #[cfg(feature = "dnf")] {
-        use ashpk::dnf::ashpk::*;
+        use ashpk::dnf::*;
     } else if #[cfg(feature = "pacman")] {
         // Default
-        use ashpk::pacman::ashpk::*;
+        use ashpk::pacman::*;
     }
 }
 
@@ -2032,6 +2032,7 @@ fn install_profile(snapshot: &str, profile: &str, force: bool, secondary: bool,
         }
 
         // Read presets section in configuration file
+        #[cfg(feature = "pacman")]
         if profconf.sections().contains(&"presets".to_string()) {
             if !aur_check(snapshot) {
                 return Err(Error::new(ErrorKind::Unsupported,
@@ -2122,6 +2123,7 @@ fn install_profile_live(snapshot: &str,profile: &str, force: bool, user_profile:
         }
 
         // Read presets section in configuration file
+        #[cfg(feature = "pacman")]
         if profconf.sections().contains(&"presets".to_string()) {
             if !aur_check(snapshot) {
                 return Err(Error::new(ErrorKind::Unsupported,
@@ -2868,7 +2870,7 @@ pub fn rebuild_prep(snapshot: &str) -> Result<(), Error> {
     clean_chroot(snapshot,  &profconf)?;
 
     // Reinstall base
-    pacstrap(snapshot)?;
+    bootstrap(snapshot)?;
     system_config(snapshot, &profconf)?;
 
     Ok(())
@@ -3096,6 +3098,7 @@ pub fn snapshot_config_get(snapshot: &str) -> HashMap<String, String> {
 
     if !Path::new(&format!("/.snapshots/etc/etc-{}/ash/ash.conf", snapshot)).is_file() {
         // Defaults here
+        #[cfg(feature = "pacman")]
         options.insert(String::from("aur"), String::from("False"));
         options.insert(String::from("mutable_dirs"), String::new());
         options.insert(String::from("mutable_dirs_shared"), String::new());

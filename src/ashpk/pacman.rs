@@ -506,7 +506,7 @@ pub fn no_dep_pkg_list(snapshot: &str, chr: &str) -> Vec<String> {
 }
 
 // Reinstall base packages in snapshot
-pub fn pacstrap(snapshot: &str) -> Result<(), Error> {
+pub fn bootstrap(snapshot: &str) -> Result<(), Error> {
     // tmp database
     let tmp_db = TempDir::new_in("/.snapshots/tmp/")?;
 
