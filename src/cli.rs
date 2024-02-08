@@ -27,7 +27,7 @@ pub fn cli() -> Command {
                          .short('p')
                          .value_parser(clap::value_parser!(String))
                          .required(true)
-                         .help("Import base snapshot"),),)
+                         .help("path to base snapshot"),),)
         // Base rebuild
         .subcommand(Command::new("base-rebuild")
                     .aliases(["br", "rb"])
@@ -45,7 +45,7 @@ pub fn cli() -> Command {
         // Boot update command
         .subcommand(Command::new("boot")
                     .alias("boot-update")
-                    .about("update boot of a snapshot")
+                    .about("Update boot of a snapshot")
                     .arg(Arg::new("SNAPSHOT")
                          .long("snapshot")
                          .alias("snap")
@@ -63,7 +63,7 @@ pub fn cli() -> Command {
                          .short('s')
                          .value_parser(clap::value_parser!(i32))
                          .required(false)
-                         .help("Snapshot number"),)
+                         .help("snapshot number"),)
                     .arg(Arg::new("DESCRIPTION")
                          .long("description")
                          .alias("desc")
@@ -117,7 +117,7 @@ pub fn cli() -> Command {
         // Clone recursively
         .subcommand(Command::new("clone-tree")
                     .alias("ct")
-                    .about("clone a whole tree recursively")
+                    .about("Clone a whole tree recursively")
                     .arg(Arg::new("SNAPSHOT")
                          .long("snapshot")
                          .alias("snap")
@@ -184,7 +184,7 @@ pub fn cli() -> Command {
                          .short('S')
                          .required(false)
                          .action(ArgAction::SetTrue)
-                         .help("Deploy into secondary snapshot slot"),)
+                         .help("deploy into secondary snapshot slot"),)
                     .arg(Arg::new("SNAPSHOT")
                          .long("snapshot")
                          .alias("snap")
@@ -229,10 +229,6 @@ pub fn cli() -> Command {
                          .value_parser(clap::value_parser!(i32))
                          .required(true)
                          .help("target snapshot"),),)
-        // Switch distros
-        .subcommand(Command::new("efi-update")
-                    .aliases(["efiup", "update-efi"])
-                    .about("Switch to another distribution"))
         // Edit Ash configuration
         .subcommand(Command::new("edit")
                     .alias("edit-conf")
@@ -254,10 +250,14 @@ pub fn cli() -> Command {
                          .value_parser(clap::value_parser!(i32))
                          .required(false)
                          .help("snapshot number"),),)
+        // Switch distros
+        .subcommand(Command::new("efi-update")
+                    .aliases(["efiup", "update-efi"])
+                    .about("Switch to another distribution"))
         // etc update
         .subcommand(Command::new("etc-update")
                     .alias("etc")
-                    .about("update /etc"))
+                    .about("Update /etc"))
         // Export snapshot
         .subcommand(Command::new("export")
                     .alias("exp")
@@ -279,7 +279,7 @@ pub fn cli() -> Command {
         // Fix db commands
         .subcommand(Command::new("fixdb")
                     .alias("fix")
-                    .about("fix package database of a snapshot")
+                    .about("Fix package database of a snapshot")
                     .arg(Arg::new("SNAPSHOT")
                          .long("snapshot")
                          .alias("snap")
@@ -332,7 +332,7 @@ pub fn cli() -> Command {
                          .short('p')
                          .value_parser(clap::value_parser!(String))
                          .required(true)
-                         .help("Import snapshot"),)
+                         .help("path to snapshot"),)
                     .arg(Arg::new("SNAPSHOT")
                          .long("snapshot")
                          .alias("snap")
@@ -350,7 +350,7 @@ pub fn cli() -> Command {
         // Install command
         .subcommand(Command::new("install")
                     .alias("in")
-                    .about("install package(s) inside a snapshot")
+                    .about("Install package(s) inside a snapshot")
                     .arg(Arg::new("live")
                          .long("live")
                          .short('l')
@@ -443,7 +443,7 @@ pub fn cli() -> Command {
         // Rebuild
         .subcommand(Command::new("rebuild")
                     .alias("reb")
-                    .about("Create a new snapshot using another snapshot as the base.")
+                    .about("Create a new snapshot using another snapshot as the base")
                     .arg(Arg::new("SNAPSHOT")
                          .long("snapshot")
                          .alias("snap")
