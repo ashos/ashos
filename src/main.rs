@@ -9,17 +9,20 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
-// Directexplicitories
-// All snapshots share one /var
+// Directories
 // Global boot is always at @boot
 // *-chr                             : temporary directories used to chroot into snapshot or copy snapshots around
 // *-deploy and *-deploy-aux         : temporary directories used to boot deployed snapshot
 // *-deploy[-aux]-secondary          : temporary directories used to boot secondary deployed snapshot
+// *-recovery-deploy[-aux]           : temporary directories used to boot deployed recovery snapshot
+// /.snapshots/ash/deploy-tmp        : deployed snapshots temporary boot directories
 // /.snapshots/ash/export            : default export path
 // /.snapshots/ash/part              : root partition uuid
-// /.snapshots/ash/snapshots/*-desc  : descriptions
+// /.snapshots/ash/snapshots/*-desc  : snapshots descriptions
+// /.snapshots/ash/upstate           : state of last system update
 // /.snapshots/boot/boot-*           : individual /boot for each snapshot
 // /.snapshots/etc/etc-*             : individual /etc for each snapshot
+// /.snapshots/var/var-*             : individual /var for each snapshot
 // /.snapshots/rootfs/snapshot-*     : snapshots
 // /.snapshots/tmp                   : temporary directory
 // /etc/ash/ash.conf                 : configuration file for ash
@@ -27,6 +30,7 @@ use std::process::Command;
 // /usr/sbin/ash                     : ash binary file location
 // /usr/share/ash                    : files that store current snapshot info
 // /use/share/ash/profiles           : default desktop environments profiles path
+// /use/share/ash/rec-tmp            : name of temporary directory used to boot recovery snapshot
 // /use/share/ash/snap               : snapshot number
 // /var/lib/ash(/fstree)             : ash files, stores fstree, symlink to /.snapshots/ash/fstree
 
@@ -350,15 +354,6 @@ fn main() {
                 // Run diff
                 diff(&snapshot1, &snapshot2);
             }
-            // Switch distros
-            Some(("efi-update", _matches)) => { //REVIEW
-                // Run efi_boot_order
-                if is_efi() {
-                    efi_boot_order().unwrap();
-                } else {
-                   eprintln!("efi-update command is not supported.");
-                }
-            }
             // Edit Ash configuration
             Some(("edit", edit_matches)) => {
                 // Get snapshot value
@@ -401,6 +396,15 @@ fn main() {
                         chr_delete(&snapshot).unwrap();
                         eprintln!("{}", e);
                     },
+                }
+            }
+            // Switch distros
+            Some(("efi-update", _matches)) => { //REVIEW
+                // Run efi_boot_order
+                if is_efi() {
+                    efi_boot_order().unwrap();
+                } else {
+                   eprintln!("efi-update command is not supported.");
                 }
             }
             // etc update
@@ -561,7 +565,7 @@ fn main() {
                 // Get tmp_dir value
                 let tmp_dir = tempfile::TempDir::new_in("/.snapshots/tmp").unwrap();
 
-                // Run import_base
+                // Run import
                 if cfg!(feature = "import") {
                     let run = import(snapshot, &path, &desc, &tmp_dir);
                     match run {
@@ -1045,7 +1049,7 @@ fn main() {
             }
             // Which deployment is active
             Some(("whichtmp", _matches)) => {
-                // Run get_tmp
+                // Run print_tmp
                 println!("{}", print_tmp());
             }
            _=> unreachable!(), // If all subcommands called, anything else is unreachable

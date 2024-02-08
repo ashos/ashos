@@ -4,6 +4,7 @@ use std::io::Error;
 
 include!("src/cli.rs");
 
+// Build shell completions
 fn main() -> Result<(), Error> {
     let out_dir = match std::env::var_os("OUT_DIR") {
         None => return Ok(()),

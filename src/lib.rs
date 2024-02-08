@@ -5,7 +5,7 @@ mod tree;
 use crate::detect_distro as detect;
 
 use chrono::{NaiveDateTime, Local};
-use configparser::ini::Ini;
+use configparser::ini::{Ini, WriteOptions};
 use ctrlc;
 use curl::easy::{Easy, HttpVersion, List, SslVersion};
 use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, delete_subvolume, DeleteSubvolumeFlags, set_subvolume_read_only};
@@ -220,6 +220,8 @@ pub fn check_mutability(snapshot: &str) -> bool {
 
 // Check if snapshot profile was changed
 fn check_profile(snapshot: &str) -> Result<(), Error> {
+    let mut write_options = WriteOptions::default();
+    write_options.blank_lines_between_sections = 1;
     // Get values before edit
     let old_cfile = format!("/.snapshots/rootfs/snapshot-{}/etc/ash/profile", snapshot);
     let mut old_profconf = Ini::new();
@@ -374,7 +376,7 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
                     return Err(Error::new(ErrorKind::Unsupported, format!("Remove system package(s) is not allowed.")));
                 }
             }
-            profconf.write(&cfile)?;
+            profconf.pretty_write(&cfile, &write_options)?;
         }
         if profconf.sections().contains(&"profile-packages".to_string()) {
             for pkg in profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
@@ -384,7 +386,7 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
                 }
                 pkgs.push(pkg.to_string());
             }
-            profconf.write(&cfile)?;
+            profconf.pretty_write(&cfile, &write_options)?;
         }
         // Add package to profile if installed
         if !pkgs.contains(&pkg) {
@@ -394,7 +396,7 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
             profconf.remove_key("profile-packages", &key);
             profconf.set("profile-packages", &key, None);
         }
-        profconf.write(&cfile)?;
+        profconf.pretty_write(&cfile, &write_options)?;
     }
 
     // Check services
@@ -405,7 +407,7 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
                 profconf.remove_key("enable-services", &service);
             }
         }
-        profconf.write(&cfile)?;
+        profconf.pretty_write(&cfile, &write_options)?;
     }
     // Remove service(s) disabled by systemctl
     if profconf.sections().contains(&"disable-services".to_string()) {
@@ -414,14 +416,14 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
                 profconf.remove_key("disable-services", &service);
             }
         }
-        profconf.write(&cfile)?;
+        profconf.pretty_write(&cfile, &write_options)?;
     }
 
     // Prevent duplication
     for pkg in new_system_pkgs {
         if new_pkgs.contains(&pkg) {
             profconf.remove_key("profile-packages", &pkg);
-            profconf.write(&cfile)?;
+            profconf.pretty_write(&cfile, &write_options)?;
         }
     }
 

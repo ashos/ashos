@@ -3,7 +3,7 @@ use crate::{check_mutability, chr_delete, chroot_exec, get_current_snapshot, get
             prepare, remove_dir_content, snapshot_config_get, sync_time,
             is_system_pkg, is_system_locked};
 
-use configparser::ini::Ini;
+use configparser::ini::{Ini, WriteOptions};
 use rustix::path::Arg;
 use std::fs::{DirBuilder, File, metadata, OpenOptions, read_dir};
 use std::io::{BufRead, BufReader, Error, ErrorKind, Read, Write};
@@ -271,6 +271,8 @@ pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool
     let mut profconf = Ini::new();
     profconf.set_comment_symbols(&['#']);
     profconf.set_multiline(true);
+    let mut write_options = WriteOptions::default();
+    write_options.blank_lines_between_sections = 1;
     // Load profile
     profconf.load(&cfile).unwrap();
 
@@ -307,7 +309,7 @@ pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool
                     profconf.remove_key("profile-packages", &key);
                     profconf.set("profile-packages", &key, None);
                 }
-                profconf.write(&cfile)?;
+                profconf.pretty_write(&cfile, &write_options)?;
             }
         } else if aur_check(snapshot) {
             // Use paru if aur is enabled
@@ -332,7 +334,7 @@ pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool
                     profconf.remove_key("profile-packages", &key);
                     profconf.set("profile-packages", &key, None);
                 }
-                profconf.write(&cfile)?;
+                profconf.pretty_write(&cfile, &write_options)?;
             }
         } else if !aur_check(snapshot) {
             return Err(Error::new(ErrorKind::NotFound,
@@ -794,6 +796,8 @@ pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: b
     let mut profconf = Ini::new();
     profconf.set_comment_symbols(&['#']);
     profconf.set_multiline(true);
+    let mut write_options = WriteOptions::default();
+    write_options.blank_lines_between_sections = 1;
     // Load profile
     profconf.load(&cfile).unwrap();
 
@@ -818,10 +822,10 @@ pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: b
                                   format!("Failed to uninstall {}.", pkg)));
             } else if pkgs_list.contains(pkg) {
                 profconf.remove_key("profile-packages", &pkg);
-                profconf.write(&cfile)?;
+                profconf.pretty_write(&cfile, &write_options)?;
             } else if is_system_pkg(&profconf, pkg.to_string()) {
                 profconf.remove_key("system-packages", &pkg);
-                profconf.write(&cfile)?;
+                profconf.pretty_write(&cfile, &write_options)?;
             }
         } else if is_system_locked() && is_system_pkg(&profconf, pkg.to_string()){
             return Err(Error::new(ErrorKind::Unsupported,
