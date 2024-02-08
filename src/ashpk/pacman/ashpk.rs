@@ -1,7 +1,6 @@
 use crate::{check_mutability, chr_delete, chroot_exec, get_current_snapshot, get_tmp,
-            immutability_disable, immutability_enable, post_transactions,
-            prepare, remove_dir_content, snapshot_config_get, sync_time,
-            is_system_pkg, is_system_locked};
+            immutability_disable, immutability_enable, is_system_pkg, is_system_locked,
+            post_transactions, prepare, remove_dir_content, snapshot_config_get, sync_time};
 
 use configparser::ini::{Ini, WriteOptions};
 use rustix::path::Arg;
@@ -456,15 +455,6 @@ pub fn is_service_enabled(snapshot: &str, service: &str) -> bool {
     }
 }
 
-// Get list of installed packages and exclude packages installed as dependencies
-pub fn no_dep_pkg_list(snapshot: &str, chr: &str) -> Vec<String> {
-    let excode = Command::new("sh").arg("-c")
-                                   .arg(format!("chroot /.snapshots/rootfs/snapshot-{}{} pacman -Qqe", chr,snapshot))
-                                   .output().unwrap();
-    let stdout = String::from_utf8_lossy(&excode.stdout).trim().to_string();
-    stdout.split('\n').map(|s| s.to_string()).collect()
-}
-
 // Prevent system packages from being automatically removed
 pub fn lockpkg(snapshot:&str, profconf: &Ini) -> Result<(), Error> {
     // Open the file
@@ -504,6 +494,15 @@ pub fn lockpkg(snapshot:&str, profconf: &Ini) -> Result<(), Error> {
         nfile.write_all(modified_pacman_contents.as_bytes())?;
     }
     Ok(())
+}
+
+// Get list of installed packages and exclude packages installed as dependencies
+pub fn no_dep_pkg_list(snapshot: &str, chr: &str) -> Vec<String> {
+    let excode = Command::new("sh").arg("-c")
+                                   .arg(format!("chroot /.snapshots/rootfs/snapshot-{}{} pacman -Qqe", chr,snapshot))
+                                   .output().unwrap();
+    let stdout = String::from_utf8_lossy(&excode.stdout).trim().to_string();
+    stdout.split('\n').map(|s| s.to_string()).collect()
 }
 
 // Reinstall base packages in snapshot
@@ -572,24 +571,6 @@ pub fn refresh_helper(snapshot: &str) -> Result<(), Error> {
    Ok(())
 }
 
-// Enable service(s) (Systemd, OpenRC, etc.)
-pub fn service_enable(snapshot: &str, services: &Vec<String>, chr: &str) -> Result<(), Error> {
-    for service in services {
-        // Systemd
-        if Path::new("/var/lib/systemd/").try_exists()? {
-            let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}{}", chr,snapshot))
-                                               .arg("systemctl")
-                                               .arg("enable")
-                                               .arg(&service).status()?;
-            if !excode.success() {
-                return Err(Error::new(ErrorKind::Other,
-                                      format!("Failed to enable {}.", service)));
-            }
-        } //TODO add OspenRC
-    }
-    Ok(())
-}
-
 // Disable service(s) (Systemd, OpenRC, etc.)
 pub fn service_disable(snapshot: &str, services: &Vec<String>, chr: &str) -> Result<(), Error> {
     for service in services {
@@ -604,6 +585,24 @@ pub fn service_disable(snapshot: &str, services: &Vec<String>, chr: &str) -> Res
                                       format!("Failed to disable {}.", service)));
             }
         } //TODO add OpenRC
+    }
+    Ok(())
+}
+
+// Enable service(s) (Systemd, OpenRC, etc.)
+pub fn service_enable(snapshot: &str, services: &Vec<String>, chr: &str) -> Result<(), Error> {
+    for service in services {
+        // Systemd
+        if Path::new("/var/lib/systemd/").try_exists()? {
+            let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}{}", chr,snapshot))
+                                               .arg("systemctl")
+                                               .arg("enable")
+                                               .arg(&service).status()?;
+            if !excode.success() {
+                return Err(Error::new(ErrorKind::Other,
+                                      format!("Failed to enable {}.", service)));
+            }
+        } //TODO add OspenRC
     }
     Ok(())
 }
