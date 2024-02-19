@@ -26,6 +26,9 @@ use walkdir::{DirEntry, WalkDir};
 
 // Select package manager
 cfg_if::cfg_if! {
+    //if #[cfg(feature = "apk")] {
+        //use ashpk::apk::*; // TODO
+    // } else
     if #[cfg(feature = "apt")] {
         use ashpk::apt::*;
     } else if #[cfg(feature = "dnf")] {
@@ -33,6 +36,12 @@ cfg_if::cfg_if! {
     } else if #[cfg(feature = "pacman")] {
         // Default
         use ashpk::pacman::*;
+    //} else if #[cfg(feature = "pkgtool")] { // TODO
+        //use ashpk::pkgtool::*;
+    //} else if #[cfg(feature = "portage")] { // TODO
+        //use ashpk::portage::*;
+    //} else if #[cfg(feature = "xbps")] { // TODO
+        //use ashpk::xbps::*;
     }
 }
 
@@ -223,7 +232,7 @@ fn check_profile(snapshot: &str) -> Result<(), Error> {
     let mut write_options = WriteOptions::default();
     write_options.blank_lines_between_sections = 1;
     // Get values before edit
-    let old_cfile = format!("/.snapshots/rootfs/snapshot-{}/etc/ash/profile", snapshot);
+    let old_cfile = format!("/.snapshots/etc/etc-{}/ash/profile", snapshot);
     let mut old_profconf = Ini::new();
     old_profconf.set_comment_symbols(&['#']);
     old_profconf.set_multiline(true);
@@ -2858,7 +2867,7 @@ pub fn rebuild_base() -> Result<(), Error> {
 // Prepare rebuild process
 pub fn rebuild_prep(snapshot: &str) -> Result<(), Error> {
     //Profile configurations
-    let cfile = format!("/.snapshots/rootfs/snapshot-{}/etc/ash/profile", snapshot);
+    let cfile = format!("/.snapshots/etc/etc-{}/ash/profile", snapshot);
     let mut profconf = Ini::new();
     profconf.set_comment_symbols(&['#']);
     profconf.set_multiline(true);
@@ -3253,16 +3262,20 @@ fn switch_recovery_tmp() -> Result<(), Error> {
     let reader = BufReader::new(sfile);
     let mut gconf = String::new();
     let mut in_10_linux = false;
+    let mut menu = false;
     for line in reader.lines() {
         let line = line?;
         if line.contains("BEGIN /etc/grub.d/10_linux") {
             in_10_linux = true;
         } else if in_10_linux {
-            if line.contains("}") {
+            if line.contains("menuentry") {
+                menu = true;
+            }
+            if line.contains("}") && menu {
                 gconf.push_str(&line);
                 gconf.push_str("\n### END /etc/grub.d/41_custom ###");
                 break;
-            } else {
+            } else if menu {
                 gconf.push_str(&format!("\n{}",&line));
             }
         }
@@ -3382,16 +3395,20 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<String, Error> {
             let reader = BufReader::new(sfile);
             let mut gconf = String::new();
             let mut in_10_linux = false;
+            let mut menu = false;
             for line in reader.lines() {
                 let line = line?;
                 if line.contains("BEGIN /etc/grub.d/10_linux") {
                     in_10_linux = true;
                 } else if in_10_linux {
-                    if line.contains("}") {
+                    if line.contains("menuentry") {
+                        menu = true;
+                    }
+                    if line.contains("}") && menu {
                         gconf.push_str(&line);
                         gconf.push_str("\n### END /etc/grub.d/41_custom ###");
                         break;
-                    } else {
+                    } else if menu {
                         gconf.push_str(&format!("\n{}",&line));
                     }
                 }
