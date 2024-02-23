@@ -1,6 +1,6 @@
 use crate::{check_mutability, chr_delete, chroot_exec, get_current_snapshot, get_tmp,
             immutability_disable, immutability_enable, is_system_pkg, is_system_locked,
-            post_transactions, prepare, remove_dir_content, snapshot_config_get, sync_time};
+            post_transactions, prepare, remove_dir_content, sync_time};
 
 use configparser::ini::{Ini, WriteOptions};
 use rustix::path::Arg;
@@ -25,9 +25,16 @@ pub fn auto_upgrade(snapshot: &str) -> Result<(), Error> {
         prepare(snapshot)?;
 
         // Use apt
-        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                           .args(["apt-get", "update", "-y"]).status()?;
-        if excode.success() {
+        let apt_update = "apt-get update";
+        let apt_upgrade = "apt-get upgrade";
+        let update = Command::new("sh").arg("-c")
+                                       .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,apt_update))
+                                       .status()?;
+
+        let upgrade = Command::new("sh").arg("-c")
+                                       .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,apt_upgrade))
+                                       .status()?;
+        if update.success() && upgrade.success() {
             post_transactions(snapshot)?;
             let mut file = OpenOptions::new().write(true)
                                              .create(true)
@@ -52,6 +59,11 @@ pub fn auto_upgrade(snapshot: &str) -> Result<(), Error> {
         }
     }
     Ok(())
+}
+
+// Reinstall base packages in snapshot //REVIEW
+pub fn bootstrap(snapshot: &str) -> Result<(), Error> {
+   Ok(())
 }
 
 // Copy cache of downloaded packages to shared
@@ -79,27 +91,7 @@ pub fn clean_cache(snapshot: &str) -> Result<(), Error> {
     Ok(())
 }
 
-// Uninstall all packages in snapshot
-pub fn clean_chroot(snapshot: &str, profconf: &Ini) -> Result<(), Error> {
-    // Read commands section in configuration file
-    if profconf.sections().contains(&"uninstall-commands".to_string()) {
-        for cmd in profconf.get_map().unwrap().get("uninstall-commands").unwrap().keys() {
-            chroot_exec(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), cmd)?;
-        }
-    }
-    let print_arg = "'{print $1}'";
-    let excode = Command::new("chroot")
-        .arg(format!("/.snapshots/rootfs/snapshot-chr{} apt-get remove --purge $(dpkg --get-selections | awk {}) --allow-remove-essential -y",
-                     snapshot,print_arg)).status()?;
-
-    if !excode.success() {
-        return Err(Error::new(ErrorKind::Other,
-                              format!("Failed remove packages from snapshot {} chroot.", snapshot)));
-    }
-    Ok(())
-}
-
-// Fix signature invalid error
+// Fix signature invalid error //REVIEW
 pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
     // Make sure snapshot does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? && !snapshot.is_empty() {
@@ -215,20 +207,21 @@ pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool
 
     for pkg in pkgs {
         let mut pkgs_list: Vec<String> = Vec::new();
-        for pkg in profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
-            pkgs_list.push(pkg.to_string());
+        if profconf.sections().contains(&"profile-packages".to_string()) {
+            for pkg in profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
+                pkgs_list.push(pkg.to_string());
+            }
         }
         // Nocomfirm flag
         let install_args = if noconfirm {
-            format!("apt-get install {} -y", pkg)
+            format!("apt-get install --no-install-recommends {} -y", pkg)
         } else {
-            format!("apt-get install {}", pkg)
+            format!("apt-get install --no-install-recommends {}", pkg)
         };
         // Install packages using apt
-        let excode = Command::new("chroot")
-            .arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-            .arg(&install_args)
-            .status()?;
+        let excode = Command::new("sh").arg("-c")
+                                       .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,&install_args))
+                                       .status()?;
         if !excode.success() {
             return Err(Error::new(ErrorKind::Other,
                                   format!("Failed to install {}.", pkg)));
@@ -250,9 +243,9 @@ pub fn install_package_helper(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool
 pub fn install_package_helper_chroot(snapshot:&str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     for pkg in pkgs {
         let install_args = if noconfirm {
-            format!("apt-get install {} -y", pkg)
+            format!("apt-get install --no-install-recommends {} -y", pkg)
         } else {
-            format!("apt-get install {}", pkg)
+            format!("apt-get install --no-install-recommends {}", pkg)
         };
 
         let excode = Command::new("sh").arg("-c")
@@ -267,12 +260,12 @@ pub fn install_package_helper_chroot(snapshot:&str, pkgs: &Vec<String>, noconfir
 }
 
 // Install atomic-operation in live snapshot
-pub fn install_package_helper_live(snapshot: &str, tmp: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
+pub fn install_package_helper_live(_snapshot: &str, tmp: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     for pkg in pkgs {
         let install_args = if noconfirm {
-            format!("apt-get install {} -y", pkg)
+            format!("apt-get install --no-install-recommends {} -y", pkg)
         } else {
-            format!("apt-get install {}", pkg)
+            format!("apt-get install --no-install-recommends {}", pkg)
         };
 
         let excode = Command::new("sh")
@@ -301,31 +294,64 @@ pub fn is_service_enabled(snapshot: &str, service: &str) -> bool {
             return false;
         }
     } else {
-        // TODO add OpenRC
+        // TODO add more init system
         return false;
     }
 }
 
 // Prevent system packages from being automatically removed
 pub fn lockpkg(snapshot:&str, profconf: &Ini) -> Result<(), Error> {
+    let mut system_pkgs: Vec<String> = Vec::new();
+    if profconf.sections().contains(&"system-packages".to_string()) {
+        for pkg in profconf.get_map().unwrap().get("system-packages").unwrap().keys() {
+            system_pkgs.push(pkg.to_string());
+        }
+    }
+
+    let mut lockpkg = String::new();
+    if !system_pkgs.is_empty() {
+        for pkg in system_pkgs {
+            let rule = format!("Package: {}\n Pin: release *\n Pin-Priority: 1001\n", pkg);
+            lockpkg.push_str(&rule);
+        }
+    }
+    let mut rule_file = OpenOptions::new().truncate(true)
+                                          .create(true)
+                                          .read(true)
+                                          .write(true)
+                                          .open(format!("/.snapshots/rootfs/snapshot-chr{}/etc/apt/ash_system_packages",
+                                                        snapshot))?;
+    rule_file.write_all(lockpkg.as_bytes())?;
     Ok(())
 }
 
 // Get list of installed packages and exclude packages installed as dependencies
-pub fn no_dep_pkg_list(snapshot: &str, chr: &str) /*-> Vec<String>*/ {
-}
-
-// Reinstall base packages in snapshot
-pub fn bootstrap(snapshot: &str) -> Result<(), Error> {
-   Ok(())
+pub fn no_dep_pkg_list(snapshot: &str, chr: &str) -> Vec<String> {
+    let dpkg_query = "dpkg-query -W $(apt-mark showmanual) | awk '{print $1}' | sed 's/:.*$//'";
+    let excode = Command::new("sh").arg("-c")
+                                   .arg(format!("chroot /.snapshots/rootfs/snapshot-{}{} {}", chr,snapshot,dpkg_query))
+                                   .output().unwrap();
+    let stdout = String::from_utf8_lossy(&excode.stdout).trim().to_string();
+    stdout.split('\n').map(|s| s.to_string()).collect()
 }
 
 // Get list of packages installed in a snapshot
-pub fn pkg_list(snapshot: &str, chr: &str) /*-> Vec<String>*/ {
+pub fn pkg_list(snapshot: &str, chr: &str) -> Vec<String> {
+    let dpkg_query = "dpkg-query -W -f='${Package}\n'";
+    let excode = Command::new("sh").arg("-c")
+                                   .arg(format!("chroot /.snapshots/rootfs/snapshot-{}{} {}", chr,snapshot,dpkg_query))
+                                   .output().unwrap();
+    let stdout = String::from_utf8_lossy(&excode.stdout).trim().to_string();
+    stdout.split('\n').map(|s| s.to_string()).collect()
 }
 
-// APT query
-pub fn pkg_query(pkg: &str) /*-> Result<ExitStatus, Error>*/ {
+// Run dpkg-query
+pub fn pkg_query(pkg: &str) -> Result<ExitStatus, Error> {
+    let dpkg_query = "dpkg-query -W -f='${Package} ${Version}\n'";
+    let excode = Command::new("sh").arg("-c")
+                                   .arg(format!("{} {}", dpkg_query,pkg))
+                                   .status();
+    excode
 }
 
 // Refresh snapshot atomic-operation
@@ -353,7 +379,7 @@ pub fn service_disable(snapshot: &str, services: &Vec<String>, chr: &str) -> Res
                 return Err(Error::new(ErrorKind::Other,
                                       format!("Failed to disable {}.", service)));
             }
-        } //TODO add OpenRC
+        } //TODO add more init system
     }
     Ok(())
 }
@@ -371,22 +397,149 @@ pub fn service_enable(snapshot: &str, services: &Vec<String>, chr: &str) -> Resu
                 return Err(Error::new(ErrorKind::Other,
                                       format!("Failed to enable {}.", service)));
             }
-        } //TODO add OspenRC
+        } //TODO add more init
     }
     Ok(())
 }
 
 // Show diff of packages between 2 snapshots
 pub fn snapshot_diff(snapshot1: &str, snapshot2: &str) -> Result<(), Error> {
+    // Make sure snapshot one does exist
+    if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot1)).try_exists()? {
+        return Err(Error::new(ErrorKind::NotFound,
+                              format!("Snapshot {} not found.", snapshot1)));
+
+        // Make sure snapshot two does exist
+        } else if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot2)).try_exists()? {
+        return Err(Error::new(ErrorKind::NotFound,
+                              format!("Snapshot {} not found.", snapshot2)));
+
+    } else {
+        let snap1_pkgs = pkg_list(snapshot1, "chr");
+        let snap2_pkgs = pkg_list(snapshot2, "chr");
+
+        // Collect the missing packages names
+        let mut missing_pkgs: Vec<String> = Vec::new();
+        for pkg in &snap1_pkgs {
+            if !snap2_pkgs.contains(&pkg) {
+                missing_pkgs.push(pkg.to_string());
+            }
+        }
+
+        // Print the missing packages names
+        if !missing_pkgs.is_empty() {
+            missing_pkgs.sort();
+            for name in missing_pkgs {
+                println!("{}", name);
+            }
+        }
+
+    }
     Ok(())
 }
 
 // Copy system configurations to new snapshot
 pub fn system_config(snapshot: &str, profconf: &Ini) -> Result<(), Error> {
-   Ok(())
+    //Copy [fstab, time ,localization, network configuration, users and groups, grub, pacman.conf]
+    let files = vec!["/etc/fstab", "/etc/localtime", "/etc/adjtime", "/etc/locale.gen", "/etc/locale.conf",
+                     "/etc/vconsole.conf", "/etc/hostname", "/etc/shadow", "/etc/passwd", "/etc/gshadow",
+                     "/etc/group", "/etc/sudoers", "/boot/grub/grub.cfg", "/etc/pacman.conf"];
+    for file in files {
+        if Path::new(&format!("/.snapshots/rootfs/snapshot-{}{}", snapshot,file)).is_file() {
+            Command::new("cp").args(["-r", "--reflink=auto"])
+                              .arg(format!("/.snapshots/rootfs/snapshot-{}{}", snapshot,file))
+                              .arg(format!("/.snapshots/rootfs/snapshot-chr{}{}", snapshot,file)).status()?;
+        }
+    }
+
+    // Copy pacman.d directory
+    remove_dir_content(&format!("/.snapshots/rootfs/snapshot-chr{}/etc/apt", snapshot))?;
+    Command::new("cp").args(["-n", "-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/etc/apt/.", snapshot))
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/apt/", snapshot))
+                      .output()?;
+
+    // Ash
+    remove_dir_content(&format!("/.snapshots/rootfs/snapshot-chr{}/etc/ash", snapshot))?;
+    Command::new("cp").args(["-n", "-r", "--reflink=auto"])
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/etc/ash/.", snapshot))
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/ash/", snapshot))
+                      .output()?;
+
+    // Install system packages
+    if profconf.sections().contains(&"system-packages".to_string()) {
+        let mut pkgs_list: Vec<String> = Vec::new();
+        for pkg in profconf.get_map().unwrap().get("system-packages").unwrap().keys() {
+            pkgs_list.push(pkg.to_string());
+        }
+        if !pkgs_list.is_empty() {
+            install_package_helper_chroot(snapshot, &pkgs_list,true)?;
+        }
+    }
+
+    if profconf.sections().contains(&"profile-packages".to_string()) {
+        let mut pkgs_list: Vec<String> = Vec::new();
+        for pkg in profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
+            pkgs_list.push(pkg.to_string());
+        }
+        if !pkgs_list.is_empty() {
+            install_package_helper_chroot(snapshot, &pkgs_list,true)?;
+        }
+    }
+
+    // Read disable services section in configuration file
+    if profconf.sections().contains(&"disable-services".to_string()) {
+        let mut services: Vec<String> = Vec::new();
+        for service in profconf.get_map().unwrap().get("disable-services").unwrap().keys() {
+            services.push(service.to_string());
+        }
+        // Disable service(s)
+        if !services.is_empty() {
+            service_disable(snapshot, &services, "chr")?;
+        }
+    }
+
+    // Read enable services section in configuration file
+    if profconf.sections().contains(&"enable-services".to_string()) {
+        let mut services: Vec<String> = Vec::new();
+        for service in profconf.get_map().unwrap().get("enable-services").unwrap().keys() {
+            services.push(service.to_string());
+        }
+        // Enable service(s)
+        if !services.is_empty() {
+            service_enable(snapshot, &services, "chr")?;
+        }
+    }
+
+    // Read commands section in configuration file
+    if profconf.sections().contains(&"install-commands".to_string()) {
+        for cmd in profconf.get_map().unwrap().get("install-commands").unwrap().keys() {
+            chroot_exec(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), cmd)?;
+        }
+    }
+
+    // Restore system configuration
+    if profconf.sections().contains(&"system-configuration".to_string()) {
+        let mut system_conf: Vec<String> = Vec::new();
+        for path in profconf.get_map().unwrap().get("system-configuration").unwrap().keys() {
+            // Check if a file or directory exists
+            if !metadata(path).is_ok() {
+                system_conf.push(path.to_string());
+            }
+        }
+        if !system_conf.is_empty() {
+            for path in system_conf {
+                Command::new("cp").args(["-r", "--reflink=auto"])
+                                  .arg(format!("/.snapshots/rootfs/snapshot-{}{}", snapshot,path))
+                                  .arg(format!("/.snapshots/rootfs/snapshot-chr{}{}", snapshot,path)).status()?;
+            }
+        }
+    }
+
+    Ok(())
 }
 
-// Sync tree helper function
+// Sync tree helper function //REVIEW
 pub fn tree_sync_helper(s_f: &str, s_t: &str, chr: &str) -> Result<(), Error>  {
    Ok(())
 }
@@ -405,8 +558,10 @@ pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: b
 
     for pkg in pkgs {
         let mut pkgs_list: Vec<String> = Vec::new();
-        for pkg in profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
-            pkgs_list.push(pkg.to_string());
+        if profconf.sections().contains(&"profile-packages".to_string()) {
+            for pkg in profconf.get_map().unwrap().get("profile-packages").unwrap().keys() {
+                pkgs_list.push(pkg.to_string());
+            }
         }
         let uninstall_args = if noconfirm {
             ["apt-get", "remove", "-y"]
@@ -441,14 +596,14 @@ pub fn uninstall_package_helper(snapshot: &str, pkgs: &Vec<String>, noconfirm: b
 pub fn uninstall_package_helper_chroot(snapshot: &str, pkgs: &Vec<String>, noconfirm: bool) -> Result<(), Error> {
     for pkg in pkgs {
         let uninstall_args = if noconfirm {
-            ["apt-get", "remove", "-y"]
+            "apt-get remove -y"
         } else {
-            ["apt-get", "remove", ""]
+            "apt-get remove"
         };
 
-        let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                           .args(uninstall_args)
-                                           .arg(format!("{}", pkg)).status()?;
+        let excode = Command::new("sh").arg("-c")
+                                       .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,uninstall_args))
+                                       .arg(format!("{}", pkg)).status()?;
 
         if !excode.success() {
             return Err(Error::new(ErrorKind::Other,
@@ -485,14 +640,14 @@ pub fn upgrade_helper(snapshot: &str, noconfirm: bool) -> Result<(), Error> {
     prepare(snapshot).unwrap();
 
     let upgrade_args = if noconfirm {
-        ["pacman", "--noconfirm", "-Syyu"]
+        "apt-get update && apt-get upgrade -y"
     } else {
-        ["pacman", "--confirm", "-Syyu"]
+        "apt-get update && apt-get upgrade"
     };
 
-    let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))
-                                       .args(upgrade_args)
-                                       .status().unwrap();
+    let excode = Command::new("sh").arg("-c")
+                                   .arg(format!("chroot /.snapshots/rootfs/snapshot-chr{} {}", snapshot,upgrade_args))
+                                   .status().unwrap();
     if !excode.success() {
         return Err(Error::new(ErrorKind::Other,
                               format!("Failed to upgrade snapshot {}.", snapshot)));
@@ -503,14 +658,14 @@ pub fn upgrade_helper(snapshot: &str, noconfirm: bool) -> Result<(), Error> {
 // Live upgrade snapshot atomic-operation
 pub fn upgrade_helper_live(tmp: &str, noconfirm: bool) -> Result<(), Error> {
     let upgrade_args = if noconfirm {
-        ["apt-get", "upgrade", "-y"]
+        "apt-get update && apt-get upgrade -y"
     } else {
-        ["apt-get", "upgrade", "-y"]
+        "apt-get update && apt-get upgrade"
     };
 
-    let excode = Command::new("chroot").arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
-                                       .args(upgrade_args)
-                                       .status().unwrap();
+    let excode = Command::new("sh").arg("-c")
+                                   .arg(format!("chroot /.snapshots/rootfs/snapshot-{} {}", tmp,upgrade_args))
+                                   .status().unwrap();
     if !excode.success() {
         return Err(Error::new(ErrorKind::Other,
                               "Failed to upgrade current/live snapshot."));

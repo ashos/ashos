@@ -9,6 +9,14 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
+//  Select Bootloader
+cfg_if::cfg_if! {
+    if #[cfg(feature = "grub")] {
+        mod grub;
+        use grub::update_boot;
+    } // TODO add systemd-boot
+}
+
 // Directories
 // Global boot is always at @boot
 // *-chr                             : temporary directories used to chroot into snapshot or copy snapshots around

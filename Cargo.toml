@@ -11,10 +11,11 @@ name = "lib"
 path = "src/lib.rs"
 
 [features]
-default = ["base-import", "import", "pacman"]
+default = ["base-import", "grub", "import", "pacman"]
 apt = []
 base-import = []
 dnf = []
+grub = []
 import = []
 lock = []
 pacman = []
