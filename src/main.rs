@@ -1,4 +1,5 @@
 extern crate lib;
+mod btrfs;
 mod cli;
 
 use cli::*;
@@ -14,7 +15,7 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "grub")] {
         mod grub;
         use grub::update_boot;
-    } // TODO add systemd-boot
+    } //TODO add systemd-boot
 }
 
 // Directories
@@ -91,8 +92,8 @@ fn main() {
                         Err(snapshot) => {
                             // Clean tmp
                             if Path::new(&format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot)).try_exists().unwrap() {
-                                libbtrfsutil::delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
-                                                               libbtrfsutil::DeleteSubvolumeFlags::empty()).unwrap();
+                                #[cfg(feature = "btrfs")]
+                                btrfs::delete_subvolume(&format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot)).unwrap();
                             }
                             // Clean chroot mount directories
                             chr_delete("0").unwrap();
@@ -583,8 +584,8 @@ fn main() {
                         Err(e) => {
                             // Clean tmp
                             if Path::new(&format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot)).try_exists().unwrap() {
-                                libbtrfsutil::delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
-                                                               libbtrfsutil::DeleteSubvolumeFlags::empty()).unwrap();
+                                #[cfg(feature = "btrfs")]
+                                btrfs::delete_subvolume(&format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot)).unwrap();
                             }
                             // Clean chroot mount directories
                             chr_delete(&format!("{}", snapshot)).unwrap();

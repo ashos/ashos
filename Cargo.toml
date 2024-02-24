@@ -11,9 +11,10 @@ name = "lib"
 path = "src/lib.rs"
 
 [features]
-default = ["base-import", "grub", "import", "pacman"]
+default = ["base-import", "btrfs", "grub", "import", "pacman"]
 apt = []
 base-import = []
+btrfs = []
 dnf = []
 grub = []
 import = []
@@ -29,7 +30,7 @@ cpython = "0.7"
 csv = "1.2.2"
 ctrlc = "3.4.2"
 curl = "0.4.44"
-libbtrfsutil = "0.5.2"
+libbtrfs = "0.0.12"
 nix = "0.26.2"
 partition-identity = "0.3.0"
 proc-mounts = "0.3.0"

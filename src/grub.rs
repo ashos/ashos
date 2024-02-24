@@ -55,6 +55,7 @@ pub fn switch_recovery_tmp() -> Result<(), Error> {
     let tmp_boot = TempDir::new_in("/.snapshots/tmp")?;
 
     // Mount boot partition for writing
+    #[cfg(feature = "btrfs")]
     mount(Some(part.as_str()), tmp_boot.path().as_os_str(),
           Some("btrfs"), MsFlags::empty(), Some("subvol=@boot_linux".as_bytes()))?;
 
@@ -168,6 +169,7 @@ pub fn switch_tmp(secondary: bool, reset: bool) -> Result<String, Error> {
     let tmp_boot = TempDir::new_in("/.snapshots/tmp")?;
 
     // Mount boot partition for writing
+    #[cfg(feature = "btrfs")]
     mount(Some(part.as_str()), tmp_boot.path().as_os_str(),
           Some("btrfs"), MsFlags::empty(), Some("subvol=@boot_linux".as_bytes()))?;
 

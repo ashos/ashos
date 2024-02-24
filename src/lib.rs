@@ -2,13 +2,11 @@ mod ashpk;
 pub mod detect_distro;
 mod tree;
 
-use crate::detect_distro as detect;
-
 use chrono::Local;
 use configparser::ini::{Ini, WriteOptions};
 use ctrlc;
 use curl::easy::{Easy, HttpVersion, List, SslVersion};
-use libbtrfsutil::{create_snapshot, CreateSnapshotFlags, delete_subvolume, DeleteSubvolumeFlags, set_subvolume_read_only};
+use detect_distro as detect;
 use nix::mount::{mount, MntFlags, MsFlags, umount2};
 use partition_identity::{PartitionID, PartitionSource};
 use proc_mounts::MountIter;
@@ -24,7 +22,15 @@ use tempfile::TempDir;
 use tree::*;
 use walkdir::WalkDir;
 
-//  Select Bootloader
+//  Select file system foramt
+cfg_if::cfg_if! {
+    if #[cfg(feature = "btrfs")] {
+        mod btrfs;
+        use btrfs::*;
+    } // TODO add support for other file system formats
+}
+
+//  Select bootloader
 cfg_if::cfg_if! {
     if #[cfg(feature = "grub")] {
         mod grub;
@@ -67,28 +73,30 @@ fn allow_dir_mut(mount_path: &str) -> bool {
 
 // Ash chroot mounts
 pub fn ash_mounts(i: &str, chr: &str) -> nix::Result<()> {
+    #[cfg(feature = "btrfs")]
+    let file_system = "btrfs";
     let snapshot_path = format!("/.snapshots/rootfs/snapshot-{}{}", chr, i);
 
     // Mount snapshot to itself as a bind mount
     mount(Some(snapshot_path.as_str()), snapshot_path.as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
+          Some(file_system), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /dev
     mount(Some("/dev"), format!("{}/dev", snapshot_path).as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
+          Some(file_system), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /etc
     if chr != "chr" {
         mount(Some("/etc"), format!("{}/etc", snapshot_path).as_str(),
-              Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
+              Some(file_system), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
     }
     // Mount /home
     mount(Some("/home"), format!("{}/home", snapshot_path).as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
+          Some(file_system), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /proc
     mount(Some("/proc"), format!("{}/proc", snapshot_path).as_str(),
           Some("proc"), MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV, None::<&str>)?;
     // Mount /root
     mount(Some("/root"), format!("{}/root", snapshot_path).as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
+          Some(file_system), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
     // Mount /run
     mount(Some("/run"), format!("{}/run", snapshot_path).as_str(),
           Some("tmpfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
@@ -101,7 +109,7 @@ pub fn ash_mounts(i: &str, chr: &str) -> nix::Result<()> {
     // Mount /var
     if chr != "chr" {
     mount(Some("/var"), format!("{}/var", snapshot_path).as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
+          Some(file_system), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
     }
 
     // Check EFI
@@ -113,16 +121,16 @@ pub fn ash_mounts(i: &str, chr: &str) -> nix::Result<()> {
 
     // Mount /etc/resolv.conf
     mount(Some("/etc/resolv.conf"), format!("{}/etc/resolv.conf", snapshot_path).as_str(),
-          Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
+          Some(file_system), MsFlags::MS_BIND | MsFlags::MS_SLAVE, None::<&str>)?;
 
     Ok(())
 }
 
 // Ash chroot umounts
 pub fn ash_umounts(i: &str, chr: &str) -> nix::Result<()> {
-    // Unmount in reverse order
     let snapshot_path = format!("/.snapshots/rootfs/snapshot-{}{}", chr, i);
 
+    // Unmount in reverse order
     // Unmount /etc/resolv.conf
     umount2(Path::new(&format!("{}/etc/resolv.conf", snapshot_path)),
             MntFlags::empty())?;
@@ -190,28 +198,28 @@ pub fn branch_create(snapshot: &str, desc: &str) -> Result<i32, Error> {
 
     } else {
         // Check mutability
-        let immutability: CreateSnapshotFlags = if check_mutability(snapshot) {
-            CreateSnapshotFlags::empty()
+        let immutability = if check_mutability(snapshot) {
+            false
         } else {
-            CreateSnapshotFlags::READ_ONLY
+            true
         };
 
         // Create snapshot
-        create_snapshot(format!("/.snapshots/boot/boot-{}", snapshot),
-                        format!("/.snapshots/boot/boot-{}", i),
-                        immutability, None).unwrap();
-        create_snapshot(format!("/.snapshots/etc/etc-{}", snapshot),
-                        format!("/.snapshots/etc/etc-{}", i),
-                        immutability, None).unwrap();
-        create_snapshot(format!("/.snapshots/var/var-{}", snapshot),
-                        format!("/.snapshots/var/var-{}", i),
-                        immutability, None).unwrap();
-        create_snapshot(format!("/.snapshots/rootfs/snapshot-{}", snapshot),
-                        format!("/.snapshots/rootfs/snapshot-{}", i),
-                        immutability, None).unwrap();
+        create_snapshot(&format!("/.snapshots/boot/boot-{}", snapshot),
+                        &format!("/.snapshots/boot/boot-{}", i),
+                        immutability)?;
+        create_snapshot(&format!("/.snapshots/etc/etc-{}", snapshot),
+                        &format!("/.snapshots/etc/etc-{}", i),
+                        immutability)?;
+        create_snapshot(&format!("/.snapshots/var/var-{}", snapshot),
+                        &format!("/.snapshots/var/var-{}", i),
+                        immutability)?;
+        create_snapshot(&format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                        &format!("/.snapshots/rootfs/snapshot-{}", i),
+                        immutability)?;
 
         // Mark newly created snapshot as mutable
-        if immutability ==  CreateSnapshotFlags::empty() {
+        if !immutability {
             File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i))?;
         }
 
@@ -479,8 +487,7 @@ pub fn chr_delete(snapshot: &str) -> Result<(), Error> {
     for path in chr_path {
         if Path::new(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot)).try_exists()? {
             // Delete boot,etc and var subvolumes
-            delete_subvolume(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot),
-                             DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot))?;
         }
     }
 
@@ -489,7 +496,7 @@ pub fn chr_delete(snapshot: &str) -> Result<(), Error> {
 
     // Delete snapshot subvolume
     if Path::new(&snapshot_path).try_exists()? {
-        delete_subvolume(&snapshot_path, DeleteSubvolumeFlags::empty()).unwrap();
+        delete_subvolume(&snapshot_path)?;
     }
     Ok(())
 }
@@ -577,6 +584,7 @@ pub fn chroot(snapshot: &str, cmds: Vec<String>) -> Result<(), Error> {
 // Check if inside chroot
 pub fn chroot_check() -> bool {
     let read = read_to_string("/proc/mounts").unwrap();
+    #[cfg(feature = "btrfs")]
     if read.contains("/.snapshots btrfs") {
         return false;
     } else {
@@ -613,28 +621,28 @@ pub fn clone_as_tree(snapshot: &str, desc: &str) -> Result<i32, Error> {
 
     } else {
         // Make snapshot mutable or immutable
-        let immutability: CreateSnapshotFlags = if check_mutability(snapshot) {
-            CreateSnapshotFlags::empty()
+        let immutability = if check_mutability(snapshot) {
+           false
         } else {
-            CreateSnapshotFlags::READ_ONLY
+           true
         };
 
         // Create snapshot
-        create_snapshot(format!("/.snapshots/boot/boot-{}", snapshot),
-                        format!("/.snapshots/boot/boot-{}", i),
-                        immutability, None).unwrap();
-        create_snapshot(format!("/.snapshots/etc/etc-{}", snapshot),
-                        format!("/.snapshots/etc/etc-{}", i),
-                        immutability, None).unwrap();
-        create_snapshot(format!("/.snapshots/var/var-{}", snapshot),
-                        format!("/.snapshots/var/var-{}", i),
-                        immutability, None).unwrap();
-        create_snapshot(format!("/.snapshots/rootfs/snapshot-{}", snapshot),
-                        format!("/.snapshots/rootfs/snapshot-{}", i),
-                        immutability, None).unwrap();
+        create_snapshot(&format!("/.snapshots/boot/boot-{}", snapshot),
+                        &format!("/.snapshots/boot/boot-{}", i),
+                        immutability)?;
+        create_snapshot(&format!("/.snapshots/etc/etc-{}", snapshot),
+                        &format!("/.snapshots/etc/etc-{}", i),
+                        immutability)?;
+        create_snapshot(&format!("/.snapshots/var/var-{}", snapshot),
+                        &format!("/.snapshots/var/var-{}", i),
+                        immutability)?;
+        create_snapshot(&format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                        &format!("/.snapshots/rootfs/snapshot-{}", i),
+                        immutability)?;
 
         // Mark newly created snapshot as mutable
-        if immutability ==  CreateSnapshotFlags::empty() {
+        if !immutability {
             File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i))?;
         }
 
@@ -666,28 +674,28 @@ pub fn clone_branch(snapshot: &str) -> Result<i32, Error> {
 
     } else {
         // Make snapshot mutable or immutable
-        let immutability: CreateSnapshotFlags = if check_mutability(snapshot) {
-            CreateSnapshotFlags::empty()
+        let immutability = if check_mutability(snapshot) {
+           false
         } else {
-            CreateSnapshotFlags::READ_ONLY
+           true
         };
 
         // Create snapshot
-        create_snapshot(format!("/.snapshots/boot/boot-{}", snapshot),
-                        format!("/.snapshots/boot/boot-{}", i),
-                        immutability, None).unwrap();
-        create_snapshot(format!("/.snapshots/etc/etc-{}", snapshot),
-                        format!("/.snapshots/etc/etc-{}", i),
-                        immutability, None).unwrap();
-        create_snapshot(format!("/.snapshots/var/var-{}", snapshot),
-                        format!("/.snapshots/var/var-{}", i),
-                        immutability, None).unwrap();
-        create_snapshot(format!("/.snapshots/rootfs/snapshot-{}", snapshot),
-                        format!("/.snapshots/rootfs/snapshot-{}", i),
-                        immutability, None).unwrap();
+        create_snapshot(&format!("/.snapshots/boot/boot-{}", snapshot),
+                        &format!("/.snapshots/boot/boot-{}", i),
+                        immutability)?;
+        create_snapshot(&format!("/.snapshots/etc/etc-{}", snapshot),
+                        &format!("/.snapshots/etc/etc-{}", i),
+                        immutability)?;
+        create_snapshot(&format!("/.snapshots/var/var-{}", snapshot),
+                        &format!("/.snapshots/var/var-{}", i),
+                        immutability)?;
+        create_snapshot(&format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                        &format!("/.snapshots/rootfs/snapshot-{}", i),
+                        immutability)?;
 
         // Mark newly created snapshot as mutable
-        if immutability ==  CreateSnapshotFlags::empty() {
+        if !immutability {
             File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i))?;
         }
 
@@ -748,28 +756,28 @@ pub fn clone_under(snapshot: &str, branch: &str) -> Result<i32, Error> {
     } else {
 
         // Check mutability
-        let immutability: CreateSnapshotFlags = if check_mutability(snapshot) {
-            CreateSnapshotFlags::empty()
+        let immutability = if check_mutability(snapshot) {
+           false
         } else {
-            CreateSnapshotFlags::READ_ONLY
+           true
         };
 
         // Create snapshot
-        create_snapshot(format!("/.snapshots/boot/boot-{}", snapshot),
-                        format!("/.snapshots/boot/boot-{}", i),
-                        immutability, None).unwrap();
-        create_snapshot(format!("/.snapshots/etc/etc-{}", snapshot),
-                        format!("/.snapshots/etc/etc-{}", i),
-                        immutability, None).unwrap();
-        create_snapshot(format!("/.snapshots/var/var-{}", snapshot),
-                        format!("/.snapshots/var/var-{}", i),
-                        immutability, None).unwrap();
-        create_snapshot(format!("/.snapshots/rootfs/snapshot-{}", snapshot),
-                        format!("/.snapshots/rootfs/snapshot-{}", i),
-                        immutability, None).unwrap();
+        create_snapshot(&format!("/.snapshots/boot/boot-{}", snapshot),
+                        &format!("/.snapshots/boot/boot-{}", i),
+                        immutability)?;
+        create_snapshot(&format!("/.snapshots/etc/etc-{}", snapshot),
+                        &format!("/.snapshots/etc/etc-{}", i),
+                        immutability)?;
+        create_snapshot(&format!("/.snapshots/var/var-{}", snapshot),
+                        &format!("/.snapshots/var/var-{}", i),
+                        immutability)?;
+        create_snapshot(&format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                        &format!("/.snapshots/rootfs/snapshot-{}", i),
+                        immutability)?;
 
         // Mark newly created snapshot as mutable
-        if immutability ==  CreateSnapshotFlags::empty() {
+        if !immutability {
             File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", i))?;
         }
 
@@ -843,18 +851,18 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
                 std::fs::remove_file(desc_path)?;
             }
             if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
-                delete_subvolume(format!("/.snapshots/boot/boot-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
-                delete_subvolume(format!("/.snapshots/etc/etc-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
-                delete_subvolume(format!("/.snapshots/var/var-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
-                delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(&format!("/.snapshots/boot/boot-{}", snapshot))?;
+                delete_subvolume(&format!("/.snapshots/etc/etc-{}", snapshot))?;
+                delete_subvolume(&format!("/.snapshots/var/var-{}", snapshot))?;
+                delete_subvolume(&format!("/.snapshots/rootfs/snapshot-{}", snapshot))?;
             }
 
             // Make sure temporary chroot directories are deleted as well
             if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
-                delete_subvolume(format!("/.snapshots/boot/boot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
-                delete_subvolume(format!("/.snapshots/etc/etc-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
-                delete_subvolume(format!("/.snapshots/var/var-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
-                delete_subvolume(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(&format!("/.snapshots/boot/boot-chr{}", snapshot))?;
+                delete_subvolume(&format!("/.snapshots/etc/etc-chr{}", snapshot))?;
+                delete_subvolume(&format!("/.snapshots/var/var-chr{}", snapshot))?;
+                delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))?;
             }
 
             for child in children {
@@ -864,16 +872,16 @@ pub fn delete_node(snapshots: &Vec<String>, quiet: bool, nuke: bool) -> Result<(
                     std::fs::remove_file(desc_path)?;
                 }
                 if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", child)).try_exists()? {
-                    delete_subvolume(&format!("/.snapshots/boot/boot-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
-                    delete_subvolume(format!("/.snapshots/etc/etc-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
-                    delete_subvolume(format!("/.snapshots/var/var-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
-                    delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", child), DeleteSubvolumeFlags::empty()).unwrap();
+                    delete_subvolume(&format!("/.snapshots/boot/boot-{}", child))?;
+                    delete_subvolume(&format!("/.snapshots/etc/etc-{}", child))?;
+                    delete_subvolume(&format!("/.snapshots/var/var-{}", child))?;
+                    delete_subvolume(&format!("/.snapshots/rootfs/snapshot-{}", child))?;
                 }
                 if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", child)).try_exists()? {
-                    delete_subvolume(format!("/.snapshots/boot/boot-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
-                    delete_subvolume(format!("/.snapshots/etc/etc-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
-                    delete_subvolume(format!("/.snapshots/var/var-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
-                    delete_subvolume(format!("/.snapshots/rootfs/snapshot-chr{}", child), DeleteSubvolumeFlags::empty()).unwrap();
+                    delete_subvolume(&format!("/.snapshots/boot/boot-chr{}", child))?;
+                    delete_subvolume(&format!("/.snapshots/etc/etc-chr{}", child))?;
+                    delete_subvolume(&format!("/.snapshots/var/var-chr{}", child))?;
+                    delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", child))?;
                 }
             }
 
@@ -896,9 +904,8 @@ pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<String, Er
 
         // Set default volume
         let tmp = get_tmp();
-        Command::new("btrfs").args(["sub", "set-default"])
-                             .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
-                             .output()?;
+        #[cfg(feature = "btrfs")]
+        btrfs::set_default(&format!("/.snapshots/rootfs/snapshot-{}", tmp))?;
         tmp_delete(secondary)?;
         let tmp = get_aux_tmp(tmp, secondary);
 
@@ -923,19 +930,19 @@ pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<String, Er
                                                     }).filter(|dir| !dir.trim().is_empty()).collect()})
                                                     .unwrap_or_else(|| Vec::new());
 
-        // btrfs snapshot operations
-        create_snapshot(format!("/.snapshots/boot/boot-{}", snapshot),
-                        format!("/.snapshots/boot/boot-{}", tmp),
-                        CreateSnapshotFlags::empty(), None).unwrap();
-        create_snapshot(format!("/.snapshots/etc/etc-{}", snapshot),
-                        format!("/.snapshots/etc/etc-{}", tmp),
-                        CreateSnapshotFlags::empty(), None).unwrap();
-        create_snapshot(format!("/.snapshots/var/var-{}", snapshot),
-                        format!("/.snapshots/var/var-{}", tmp),
-                        CreateSnapshotFlags::empty(), None).unwrap();
-        create_snapshot(format!("/.snapshots/rootfs/snapshot-{}", snapshot),
-                        format!("/.snapshots/rootfs/snapshot-{}", tmp),
-                        CreateSnapshotFlags::empty(), None).unwrap();
+        // Snapshot operations
+        create_snapshot(&format!("/.snapshots/boot/boot-{}", snapshot),
+                        &format!("/.snapshots/boot/boot-{}", tmp),
+                        false)?;
+        create_snapshot(&format!("/.snapshots/etc/etc-{}", snapshot),
+                        &format!("/.snapshots/etc/etc-{}", tmp),
+                        false)?;
+        create_snapshot(&format!("/.snapshots/var/var-{}", snapshot),
+                        &format!("/.snapshots/var/var-{}", tmp),
+                        false)?;
+        create_snapshot(&format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                        &format!("/.snapshots/rootfs/snapshot-{}", tmp),
+                        false)?;
         DirBuilder::new().recursive(true)
                          .create(format!("/.snapshots/rootfs/snapshot-{}/boot", tmp))?;
         DirBuilder::new().recursive(true)
@@ -1017,9 +1024,9 @@ pub fn deploy(snapshot: &str, secondary: bool, reset: bool) -> Result<String, Er
         let target_dep = switch_tmp(secondary, reset)?;
 
         // Set default volume
-        Command::new("btrfs").args(["sub", "set-default"])
-                             .arg(format!("/.snapshots/rootfs/snapshot-{}", tmp))
-                             .output()?;
+        #[cfg(feature = "btrfs")]
+        btrfs::set_default(&format!("/.snapshots/rootfs/snapshot-{}", tmp))?;
+
         Ok(target_dep)
     }
 }
@@ -1057,25 +1064,25 @@ pub fn deploy_recovery() -> Result<(), Error> {
 
     // Clean tmp
     if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", tmp)).try_exists()? {
-        delete_subvolume(format!("/.snapshots/boot/boot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
-        delete_subvolume(format!("/.snapshots/etc/etc-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
-        delete_subvolume(format!("/.snapshots/var/var-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
-        delete_subvolume(format!("/.snapshots/rootfs/snapshot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
+        delete_subvolume(&format!("/.snapshots/boot/boot-{}", tmp))?;
+        delete_subvolume(&format!("/.snapshots/etc/etc-{}", tmp))?;
+        delete_subvolume(&format!("/.snapshots/var/var-{}", tmp))?;
+        delete_subvolume(&format!("/.snapshots/rootfs/snapshot-{}", tmp))?;
     }
 
-    // btrfs snapshot operations
+    // Snapshot operations
     create_snapshot("/.snapshots/boot/boot-0",
-                    format!("/.snapshots/boot/boot-{}", tmp),
-                    CreateSnapshotFlags::empty(), None).unwrap();
+                    &format!("/.snapshots/boot/boot-{}", tmp),
+                    false)?;
     create_snapshot("/.snapshots/etc/etc-0",
-                    format!("/.snapshots/etc/etc-{}", tmp),
-                    CreateSnapshotFlags::empty(), None).unwrap();
+                    &format!("/.snapshots/etc/etc-{}", tmp),
+                    false)?;
     create_snapshot("/.snapshots/var/var-0",
-                    format!("/.snapshots/var/var-{}", tmp),
-                    CreateSnapshotFlags::empty(), None).unwrap();
+                    &format!("/.snapshots/var/var-{}", tmp),
+                    false)?;
     create_snapshot("/.snapshots/rootfs/snapshot-0",
-                    format!("/.snapshots/rootfs/snapshot-{}", tmp),
-                    CreateSnapshotFlags::empty(), None).unwrap();
+                    &format!("/.snapshots/rootfs/snapshot-{}", tmp),
+                    false)?;
     DirBuilder::new().recursive(true)
                      .create(format!("/.snapshots/rootfs/snapshot-{}/boot", tmp))?;
     DirBuilder::new().recursive(true)
@@ -1305,6 +1312,7 @@ pub fn export(snapshot: &str, dest: &str) -> Result<(), Error> {
     let formatted = time.format("%Y%m%d-%H%M%S").to_string();
 
     // Send btrfs to destination
+    #[cfg(feature = "btrfs")]
     Command::new("sh").arg("-c")
                       .arg(format!("sudo btrfs send /.snapshots/rootfs/snapshot-{} | zstd -o {}/snapshot-{}.{}.zst",
                                    snapshot,dest,snapshot,formatted)).status()?;
@@ -1461,6 +1469,7 @@ pub fn get_tmp() -> String {
     let reader = BufReader::new(file);
     let mount: Vec<String> = reader.lines().filter_map(|line| {
         let line = line.unwrap();
+        #[cfg(feature = "btrfs")]
         if line.contains(" / btrfs") {
             Some(line)
         } else {
@@ -1504,6 +1513,7 @@ pub fn hollow(snapshot: &str) -> Result<(), Error> {
     } else {
         prepare(snapshot)?;
         // Mount root
+        #[cfg(feature = "btrfs")]
         mount(Some("/"), format!("/.snapshots/rootfs/snapshot-chr{}", snapshot).as_str(),
               Some("btrfs"), MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE, None::<&str>)?;
         // Deploy or not
@@ -1538,7 +1548,7 @@ pub fn immutability_disable(snapshot: &str) -> Result<(), Error> {
 
             } else {
                 // Disable immutability
-                set_subvolume_read_only(format!("/.snapshots/rootfs/snapshot-{}", snapshot), false).unwrap();
+                set_subvolume_read_only(&format!("/.snapshots/rootfs/snapshot-{}", snapshot), false).unwrap();
                 File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snapshot))?;
                 write_desc(snapshot, " MUTABLE ", false)?;
             }
@@ -1567,7 +1577,7 @@ pub fn immutability_enable(snapshot: &str) -> Result<(), Error> {
             } else {
                 // Enable immutability
                 std::fs::remove_file(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snapshot))?;
-                set_subvolume_read_only(format!("/.snapshots/rootfs/snapshot-{}", snapshot), true).unwrap();
+                set_subvolume_read_only(&format!("/.snapshots/rootfs/snapshot-{}", snapshot), true).unwrap();
                 // Read the desc file into a string
                 let mut contents = std::fs::read_to_string(format!("/.snapshots/ash/snapshots/{}-desc", snapshot))?;
                 // Replace MUTABLE word with an empty string
@@ -1612,6 +1622,7 @@ pub fn import(snapshot: i32, path: &str, desc: &str, tmp_dir: &TempDir) -> Resul
 
         // Receive snapshot
         println!("Receiving a snapshot, please wait...");
+        #[cfg(feature = "btrfs")]
         Command::new("sh").arg("-c")
                           .arg(format!("btrfs receive -f {} {}", path,tmp_dir.path().to_str().unwrap()))
                           .status()?;
@@ -1620,23 +1631,21 @@ pub fn import(snapshot: i32, path: &str, desc: &str, tmp_dir: &TempDir) -> Resul
         let export_snapshot = get_import_snapshot_name(&format!("{}", tmp_dir.path().to_str().unwrap())).unwrap();
 
         // Prepare snapshot
-        create_snapshot(format!("{}/{}", tmp_dir.path().to_str().unwrap(), export_snapshot),
-                        format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
-                        CreateSnapshotFlags::empty(), None).unwrap();
+        create_snapshot(&format!("{}/{}", tmp_dir.path().to_str().unwrap(), export_snapshot),
+                        &format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
+                        false)?;
 
         // Delete the folder if the process was interrupted
         if interrupted.load(Ordering::SeqCst) {
             // Clean tmp
             if Path::new(&format!("{}/{}", tmp_dir.path().to_str().unwrap(), export_snapshot)).try_exists().unwrap() {
-                delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(), export_snapshot),
-                                 DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(&format!("{}/{}", tmp_dir.path().to_str().unwrap(), export_snapshot))?;
                 std::process::exit(1);
             }
         }
 
         // Clean tmp
-        delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(), export_snapshot),
-                         DeleteSubvolumeFlags::empty()).unwrap();
+        delete_subvolume(&format!("{}/{}", tmp_dir.path().to_str().unwrap(), export_snapshot))?;
 
         // Copy fstab
         Command::new("cp").args(["-r", "--reflink=auto"])
@@ -1681,6 +1690,7 @@ pub fn import(snapshot: i32, path: &str, desc: &str, tmp_dir: &TempDir) -> Resul
                     DirBuilder::new().recursive(true)
                                      .create(format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))?;
                     // Use mount_path
+                    #[cfg(feature = "btrfs")]
                     mount(Some(format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path).as_str()),
                           format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path).as_str(),
                           Some("btrfs"), MsFlags::MS_BIND , None::<&str>)?;
@@ -1701,6 +1711,7 @@ pub fn import(snapshot: i32, path: &str, desc: &str, tmp_dir: &TempDir) -> Resul
                     DirBuilder::new().recursive(true)
                                      .create(format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path))?;
                     // Use mount_path
+                    #[cfg(feature = "btrfs")]
                     mount(Some(format!("/.snapshots/mutable_dirs/{}", mount_path).as_str()),
                           format!("/.snapshots/rootfs/snapshot-chr{}/{}", snapshot,mount_path).as_str(),
                           Some("btrfs"), MsFlags::MS_BIND , None::<&str>)?;
@@ -1710,14 +1721,14 @@ pub fn import(snapshot: i32, path: &str, desc: &str, tmp_dir: &TempDir) -> Resul
 
         // File operations for snapshot-chr
         create_snapshot("/.snapshots/boot/boot-0",
-                        format!("/.snapshots/boot/boot-chr{}", snapshot),
-                        CreateSnapshotFlags::empty(), None).unwrap();
+                        &format!("/.snapshots/boot/boot-chr{}", snapshot),
+                        false)?;
         create_snapshot("/.snapshots/etc/etc-0",
-                        format!("/.snapshots/etc/etc-chr{}", snapshot),
-                        CreateSnapshotFlags::empty(), None).unwrap();
+                        &format!("/.snapshots/etc/etc-chr{}", snapshot),
+                        false)?;
         create_snapshot("/.snapshots/var/var-0",
-                        format!("/.snapshots/var/var-chr{}", snapshot),
-                        CreateSnapshotFlags::empty(), None).unwrap();
+                        &format!("/.snapshots/var/var-chr{}", snapshot),
+                        false)?;
 
         // Copy ash related configurations
         if Path::new("/etc/systemd").try_exists()? {
@@ -1785,6 +1796,7 @@ pub fn import_base(path: &str, tmp_dir: &TempDir) -> Result<String, Error> {
 
         // Receive snapshot
         println!("Receiving a snapshot, please wait...");
+        #[cfg(feature = "btrfs")]
         Command::new("sh").arg("-c")
                           .arg(format!("btrfs receive -f {} {}", path,tmp_dir.path().to_str().unwrap()))
                           .status()?;
@@ -1793,23 +1805,21 @@ pub fn import_base(path: &str, tmp_dir: &TempDir) -> Result<String, Error> {
         let snapshot = get_import_snapshot_name(&format!("{}", tmp_dir.path().to_str().unwrap())).unwrap();
 
         // Prepare snapshot
-        create_snapshot(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
+        create_snapshot(&format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
                         "/.snapshots/rootfs/snapshot-chr0",
-                        CreateSnapshotFlags::empty(), None).unwrap();
+                        false)?;
 
         // Delete the folder if the process was interrupted
         if interrupted.load(Ordering::SeqCst) {
             // Clean tmp
             if Path::new(&format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot)).try_exists().unwrap() {
-                delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
-                                 DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(&format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot))?;
                 std::process::exit(1);
             }
         }
 
         // Clean tmp
-        delete_subvolume(format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot),
-                         DeleteSubvolumeFlags::empty()).unwrap();
+        delete_subvolume(&format!("{}/{}", tmp_dir.path().to_str().unwrap(),snapshot))?;
         clean_cache("0")?;
 
         // Copy fstab
@@ -1855,6 +1865,7 @@ pub fn import_base(path: &str, tmp_dir: &TempDir) -> Result<String, Error> {
                     DirBuilder::new().recursive(true)
                                      .create(format!("/.snapshots/rootfs/snapshot-chr0/{}", mount_path))?;
                     // Use mount_path
+                    #[cfg(feature = "btrfs")]
                     mount(Some(format!("/.snapshots/mutable_dirs/snapshot-0/{}", mount_path).as_str()),
                           format!("/.snapshots/rootfs/snapshot-chr0/{}", mount_path).as_str(),
                           Some("btrfs"), MsFlags::MS_BIND , None::<&str>)?;
@@ -1875,6 +1886,7 @@ pub fn import_base(path: &str, tmp_dir: &TempDir) -> Result<String, Error> {
                     DirBuilder::new().recursive(true)
                                      .create(format!("/.snapshots/rootfs/snapshot-chr0/{}", mount_path))?;
                     // Use mount_path
+                    #[cfg(feature = "btrfs")]
                     mount(Some(format!("/.snapshots/mutable_dirs/{}", mount_path).as_str()),
                           format!("/.snapshots/rootfs/snapshot-chr0/{}", mount_path).as_str(),
                           Some("btrfs"), MsFlags::MS_BIND , None::<&str>)?;
@@ -1885,13 +1897,13 @@ pub fn import_base(path: &str, tmp_dir: &TempDir) -> Result<String, Error> {
         // File operations for snapshot-chr
         create_snapshot("/.snapshots/boot/boot-0",
                         "/.snapshots/boot/boot-chr0",
-                        CreateSnapshotFlags::empty(), None).unwrap();
+                        false)?;
         create_snapshot("/.snapshots/etc/etc-0",
                         "/.snapshots/etc/etc-chr0",
-                        CreateSnapshotFlags::empty(), None).unwrap();
+                        false)?;
         create_snapshot("/.snapshots/var/var-0",
                         "/.snapshots/var/var-chr0",
-                        CreateSnapshotFlags::empty(), None).unwrap();
+                        false)?;
 
         // Copy ash related configurations
         if Path::new("/etc/systemd").try_exists()? {
@@ -2325,6 +2337,7 @@ pub fn list(snapshot: &str, chr: &str, exclude: bool) -> Vec<String> {
 
 // List sub-volumes for the booted distro only
 pub fn list_subvolumes() {
+    #[cfg(feature = "btrfs")]
     let args = "btrfs sub list / | grep -i _linux | sort -f -k 9";
     Command::new("sh").arg("-c").arg(args).status().unwrap();
 }
@@ -2373,44 +2386,42 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
     let path_vec = vec!["boot","etc", "var"];
     for path in path_vec {
         if Path::new(&format!("/.snapshots/{}/{}-{}", path,path,snapshot)).try_exists()? {
-            delete_subvolume(Path::new(&format!("/.snapshots/{}/{}-{}", path,path,snapshot)),
-                             DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(&format!("/.snapshots/{}/{}-{}", path,path,snapshot))?;
         }
     }
     if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
-        delete_subvolume(Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)),
-                         DeleteSubvolumeFlags::empty()).unwrap();
+        delete_subvolume(&format!("/.snapshots/rootfs/snapshot-{}", snapshot))?;
     }
 
     // Create mutable or immutable snapshot
     // Mutable
     if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/usr/share/ash/mutable", snapshot)).try_exists()? {
-        create_snapshot(format!("/.snapshots/boot/boot-chr{}", snapshot),
-                        format!("/.snapshots/boot/boot-{}", snapshot),
-                        CreateSnapshotFlags::empty(), None).unwrap();
-        create_snapshot(format!("/.snapshots/etc/etc-chr{}", snapshot),
-                        format!("/.snapshots/etc/etc-{}", snapshot),
-                        CreateSnapshotFlags::empty(), None).unwrap();
-        create_snapshot(format!("/.snapshots/var/var-chr{}", snapshot),
-                        format!("/.snapshots/var/var-{}", snapshot),
-                        CreateSnapshotFlags::empty(), None).unwrap();
-        create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
-                        format!("/.snapshots/rootfs/snapshot-{}", snapshot),
-                        CreateSnapshotFlags::empty(), None).unwrap();
+        create_snapshot(&format!("/.snapshots/boot/boot-chr{}", snapshot),
+                        &format!("/.snapshots/boot/boot-{}", snapshot),
+                        false)?;
+        create_snapshot(&format!("/.snapshots/etc/etc-chr{}", snapshot),
+                        &format!("/.snapshots/etc/etc-{}", snapshot),
+                        false)?;
+        create_snapshot(&format!("/.snapshots/var/var-chr{}", snapshot),
+                        &format!("/.snapshots/var/var-{}", snapshot),
+                        false)?;
+        create_snapshot(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
+                        &format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                        false)?;
     } else {
         // Immutable
-        create_snapshot(format!("/.snapshots/boot/boot-chr{}", snapshot),
-                        format!("/.snapshots/boot/boot-{}", snapshot),
-                        CreateSnapshotFlags::READ_ONLY, None).unwrap();
-        create_snapshot(format!("/.snapshots/etc/etc-chr{}", snapshot),
-                        format!("/.snapshots/etc/etc-{}", snapshot),
-                        CreateSnapshotFlags::READ_ONLY, None).unwrap();
-        create_snapshot(format!("/.snapshots/var/var-chr{}", snapshot),
-                        format!("/.snapshots/var/var-{}", snapshot),
-                        CreateSnapshotFlags::READ_ONLY, None).unwrap();
-        create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
-                        format!("/.snapshots/rootfs/snapshot-{}", snapshot),
-                        CreateSnapshotFlags::READ_ONLY, None).unwrap();
+        create_snapshot(&format!("/.snapshots/boot/boot-chr{}", snapshot),
+                        &format!("/.snapshots/boot/boot-{}", snapshot),
+                        true)?;
+        create_snapshot(&format!("/.snapshots/etc/etc-chr{}", snapshot),
+                        &format!("/.snapshots/etc/etc-{}", snapshot),
+                        true)?;
+        create_snapshot(&format!("/.snapshots/var/var-chr{}", snapshot),
+                        &format!("/.snapshots/var/var-{}", snapshot),
+                        true)?;
+        create_snapshot(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
+                        &format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                        true)?;
     }
 
     // Unmount in reverse order
@@ -2470,8 +2481,7 @@ pub fn post_transactions(snapshot: &str) -> Result<(), Error> {
 
 // Hollow  Post transaction function
 pub fn posttrans(snapshot: &str) -> Result<(), Error> {
-    delete_subvolume(Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)),
-                     DeleteSubvolumeFlags::empty()).unwrap();
+    delete_subvolume(&format!("/.snapshots/rootfs/snapshot-{}", snapshot))?;
     remove_dir_content(&format!("/.snapshots/etc/etc-chr{}", snapshot))?;
     Command::new("cp").args(["-r", "--reflink=auto"])
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/*", snapshot))
@@ -2487,24 +2497,21 @@ pub fn posttrans(snapshot: &str) -> Result<(), Error> {
                       .arg(format!("/.snapshots/rootfs/snapshot-chr{}/boot/*", snapshot))
                       .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
                       .output()?;
-    delete_subvolume(Path::new(&format!("/.snapshots/etc/etc-{}", snapshot)),
-                     DeleteSubvolumeFlags::empty()).unwrap();
-    delete_subvolume(Path::new(&format!("/.snapshots/var/var-{}", snapshot)),
-                     DeleteSubvolumeFlags::empty()).unwrap();
-    delete_subvolume(Path::new(&format!("/.snapshots/boot/boot-{}", snapshot)),
-                     DeleteSubvolumeFlags::empty()).unwrap();
-    create_snapshot(format!("/.snapshots/etc/etc-chr{}", snapshot),
-                    format!("/.snapshots/etc/etc-{}", snapshot),
-                    CreateSnapshotFlags::READ_ONLY, None).unwrap();
-    create_snapshot(format!("/.snapshots/var/var-chr{}", snapshot),
-                    format!("/.snapshots/var/var-{}", snapshot),
-                    CreateSnapshotFlags::READ_ONLY, None).unwrap();
-    create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
-                    format!("/.snapshots/rootfs/snapshot-{}", snapshot),
-                    CreateSnapshotFlags::READ_ONLY, None).unwrap();
-    create_snapshot(format!("/.snapshots/boot/boot-chr{}", snapshot),
-                    format!("/.snapshots/boot/boot-{}", snapshot),
-                    CreateSnapshotFlags::READ_ONLY, None).unwrap();
+    delete_subvolume(&format!("/.snapshots/etc/etc-{}", snapshot))?;
+    delete_subvolume(&format!("/.snapshots/var/var-{}", snapshot))?;
+    delete_subvolume(&format!("/.snapshots/boot/boot-{}", snapshot))?;
+    create_snapshot(&format!("/.snapshots/etc/etc-chr{}", snapshot),
+                    &format!("/.snapshots/etc/etc-{}", snapshot),
+                    true)?;
+    create_snapshot(&format!("/.snapshots/var/var-chr{}", snapshot),
+                    &format!("/.snapshots/var/var-{}", snapshot),
+                    true)?;
+    create_snapshot(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
+                    &format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+                    true)?;
+    create_snapshot(&format!("/.snapshots/boot/boot-chr{}", snapshot),
+                    &format!("/.snapshots/boot/boot-{}", snapshot),
+                    true)?;
     umount2(Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/.snapshots/rootfs/snapshot-chr{}/", snapshot,snapshot)),
             MntFlags::MNT_DETACH).unwrap();
     chr_delete(snapshot)?;
@@ -2517,9 +2524,9 @@ pub fn prepare(snapshot: &str) -> Result<(), Error> {
     let snapshot_chr = format!("/.snapshots/rootfs/snapshot-chr{}", snapshot);
 
     // Create chroot directory
-    create_snapshot(format!("/.snapshots/rootfs/snapshot-{}", snapshot),
+    create_snapshot(&format!("/.snapshots/rootfs/snapshot-{}", snapshot),
                     &snapshot_chr,
-                    CreateSnapshotFlags::empty(), None).unwrap();
+                    false)?;
 
     // Pacman gets weird when chroot directory is not a mountpoint, so the following mount is necessary
     ash_mounts(snapshot, "chr")?;
@@ -2559,6 +2566,7 @@ pub fn prepare(snapshot: &str) -> Result<(), Error> {
                 DirBuilder::new().recursive(true)
                                  .create(format!("{}/{}", snapshot_chr,mount_path))?;
                 // Use mount_path
+                #[cfg(feature = "btrfs")]
                 mount(Some(format!("/.snapshots/mutable_dirs/snapshot-{}/{}", snapshot,mount_path).as_str()),
                       format!("{}/{}", snapshot_chr,mount_path).as_str(),
                       Some("btrfs"), MsFlags::MS_BIND , None::<&str>)?;
@@ -2579,6 +2587,7 @@ pub fn prepare(snapshot: &str) -> Result<(), Error> {
                 DirBuilder::new().recursive(true)
                                  .create(format!("{}/{}", snapshot_chr,mount_path))?;
                 // Use mount_path
+                #[cfg(feature = "btrfs")]
                 mount(Some(format!("/.snapshots/mutable_dirs/{}", mount_path).as_str()),
                       format!("{}/{}", snapshot_chr,mount_path).as_str(),
                       Some("btrfs"), MsFlags::MS_BIND , None::<&str>)?;
@@ -2587,15 +2596,15 @@ pub fn prepare(snapshot: &str) -> Result<(), Error> {
     }
 
     // File operations for snapshot-chr
-    create_snapshot(format!("/.snapshots/boot/boot-{}", snapshot),
-                    format!("/.snapshots/boot/boot-chr{}", snapshot),
-                    CreateSnapshotFlags::empty(), None).unwrap();
-    create_snapshot(format!("/.snapshots/etc/etc-{}", snapshot),
-                    format!("/.snapshots/etc/etc-chr{}", snapshot),
-                    CreateSnapshotFlags::empty(), None).unwrap();
-    create_snapshot(format!("/.snapshots/var/var-{}", snapshot),
-                    format!("/.snapshots/var/var-chr{}", snapshot),
-                    CreateSnapshotFlags::empty(), None).unwrap();
+    create_snapshot(&format!("/.snapshots/boot/boot-{}", snapshot),
+                    &format!("/.snapshots/boot/boot-chr{}", snapshot),
+                    false)?;
+    create_snapshot(&format!("/.snapshots/etc/etc-{}", snapshot),
+                    &format!("/.snapshots/etc/etc-chr{}", snapshot),
+                    false)?;
+    create_snapshot(&format!("/.snapshots/var/var-{}", snapshot),
+                    &format!("/.snapshots/var/var-chr{}", snapshot),
+                    false)?;
     Command::new("cp").args(["-r", "--reflink=auto"])
                       .arg(format!("/.snapshots/boot/boot-chr{}/.", snapshot))
                       .arg(format!("{}/boot", snapshot_chr))
@@ -2634,6 +2643,7 @@ pub fn print_tmp() -> String {
     let reader = BufReader::new(file);
     let mount: Vec<String> = reader.lines().filter_map(|line| {
         let line = line.unwrap();
+        #[cfg(feature = "btrfs")]
         if line.contains(" / btrfs") {
             Some(line)
         } else {
@@ -2682,31 +2692,31 @@ pub fn rebuild(snapshot: &str, desc: &str) -> Result<i32, Error> {
 
     } else {
         // Make snapshot mutable or immutable
-        let immutability: CreateSnapshotFlags = if check_mutability(snapshot) {
-            CreateSnapshotFlags::empty()
+        let immutability = if check_mutability(snapshot) {
+            false
         } else {
-            CreateSnapshotFlags::READ_ONLY
+            true
         };
 
         // prepare
         rebuild_prep(snapshot)?;
 
         // Create snapshot
-        create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
-                        format!("/.snapshots/rootfs/snapshot-chr{}", snap_num),
-                        immutability, None).unwrap();
-        create_snapshot(format!("/.snapshots/boot/boot-chr{}", snapshot),
-                        format!("/.snapshots/boot/boot-chr{}", snap_num),
-                        immutability, None).unwrap();
-        create_snapshot(format!("/.snapshots/etc/etc-chr{}", snapshot),
-                        format!("/.snapshots/etc/etc-chr{}", snap_num),
-                        immutability, None).unwrap();
+        create_snapshot(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot),
+                        &format!("/.snapshots/rootfs/snapshot-chr{}", snap_num),
+                        immutability)?;
+        create_snapshot(&format!("/.snapshots/boot/boot-chr{}", snapshot),
+                        &format!("/.snapshots/boot/boot-chr{}", snap_num),
+                        immutability)?;
+        create_snapshot(&format!("/.snapshots/etc/etc-chr{}", snapshot),
+                        &format!("/.snapshots/etc/etc-chr{}", snap_num),
+                        immutability)?;
         // Keep package manager's cache after installing packages
         // This prevents unnecessary downloads for each snapshot when upgrading multiple snapshots
         cache_copy(snapshot, false)?;
-        create_snapshot(format!("/.snapshots/var/var-chr{}", snapshot),
-                        format!("/.snapshots/var/var-chr{}", snap_num),
-                        immutability, None).unwrap();
+        create_snapshot(&format!("/.snapshots/var/var-chr{}", snapshot),
+                        &format!("/.snapshots/var/var-chr{}", snap_num),
+                        immutability)?;
 
         // Unmount in reverse order
         ash_umounts(snapshot, "chr")?;
@@ -2717,32 +2727,32 @@ pub fn rebuild(snapshot: &str, desc: &str) -> Result<i32, Error> {
         // Create mutable or immutable snapshot
         // Mutable
         if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}/usr/share/ash/mutable", snap_num)).try_exists()? {
-            create_snapshot(format!("/.snapshots/boot/boot-chr{}", snap_num),
-                            format!("/.snapshots/boot/boot-{}", snap_num),
-                            CreateSnapshotFlags::empty(), None).unwrap();
-            create_snapshot(format!("/.snapshots/etc/etc-chr{}", snap_num),
-                            format!("/.snapshots/etc/etc-{}", snap_num),
-                            CreateSnapshotFlags::empty(), None).unwrap();
-            create_snapshot(format!("/.snapshots/var/var-chr{}", snap_num),
-                            format!("/.snapshots/var/var-{}", snap_num),
-                            CreateSnapshotFlags::empty(), None).unwrap();
-            create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snap_num),
-                            format!("/.snapshots/rootfs/snapshot-{}", snap_num),
-                            CreateSnapshotFlags::empty(), None).unwrap();
+            create_snapshot(&format!("/.snapshots/boot/boot-chr{}", snap_num),
+                            &format!("/.snapshots/boot/boot-{}", snap_num),
+                            false)?;
+            create_snapshot(&format!("/.snapshots/etc/etc-chr{}", snap_num),
+                            &format!("/.snapshots/etc/etc-{}", snap_num),
+                            false)?;
+            create_snapshot(&format!("/.snapshots/var/var-chr{}", snap_num),
+                            &format!("/.snapshots/var/var-{}", snap_num),
+                            false)?;
+            create_snapshot(&format!("/.snapshots/rootfs/snapshot-chr{}", snap_num),
+                            &format!("/.snapshots/rootfs/snapshot-{}", snap_num),
+                            false)?;
         } else {
             // Immutable
-            create_snapshot(format!("/.snapshots/boot/boot-chr{}", snap_num),
-                            format!("/.snapshots/boot/boot-{}", snap_num),
-                            CreateSnapshotFlags::READ_ONLY, None).unwrap();
-            create_snapshot(format!("/.snapshots/etc/etc-chr{}", snap_num),
-                            format!("/.snapshots/etc/etc-{}", snap_num),
-                            CreateSnapshotFlags::READ_ONLY, None).unwrap();
-            create_snapshot(format!("/.snapshots/var/var-chr{}", snap_num),
-                            format!("/.snapshots/var/var-{}", snap_num),
-                            CreateSnapshotFlags::READ_ONLY, None).unwrap();
-            create_snapshot(format!("/.snapshots/rootfs/snapshot-chr{}", snap_num),
-                            format!("/.snapshots/rootfs/snapshot-{}", snap_num),
-                            CreateSnapshotFlags::READ_ONLY, None).unwrap();
+            create_snapshot(&format!("/.snapshots/boot/boot-chr{}", snap_num),
+                            &format!("/.snapshots/boot/boot-{}", snap_num),
+                            true)?;
+            create_snapshot(&format!("/.snapshots/etc/etc-chr{}", snap_num),
+                            &format!("/.snapshots/etc/etc-{}", snap_num),
+                            true)?;
+            create_snapshot(&format!("/.snapshots/var/var-chr{}", snap_num),
+                            &format!("/.snapshots/var/var-{}", snap_num),
+                            true)?;
+            create_snapshot(&format!("/.snapshots/rootfs/snapshot-chr{}", snap_num),
+                            &format!("/.snapshots/rootfs/snapshot-{}", snap_num),
+                            true)?;
         }
 
         // Special mutable directories
@@ -2795,7 +2805,7 @@ pub fn rebuild(snapshot: &str, desc: &str) -> Result<i32, Error> {
         chr_delete(&format!("{}", snap_num))?;
 
         // Mark newly created snapshot as mutable
-        if immutability ==  CreateSnapshotFlags::empty() {
+        if !immutability {
             File::create(format!("/.snapshots/rootfs/snapshot-{}/usr/share/ash/mutable", snap_num))?;
         }
 
@@ -2973,17 +2983,17 @@ pub fn snapshot_base_new(desc: &str) -> Result<i32, Error> {
     // Immutability toggle not used as base should always be immutable
     let i = find_new();
     create_snapshot("/.snapshots/boot/boot-0",
-                    format!("/.snapshots/boot/boot-{}", i),
-                    CreateSnapshotFlags::READ_ONLY, None).unwrap();
+                    &format!("/.snapshots/boot/boot-{}", i),
+                    true)?;
     create_snapshot("/.snapshots/etc/etc-0",
-                    format!("/.snapshots/etc/etc-{}", i),
-                    CreateSnapshotFlags::READ_ONLY, None).unwrap();
+                    &format!("/.snapshots/etc/etc-{}", i),
+                    true)?;
     create_snapshot("/.snapshots/var/var-0",
-                    format!("/.snapshots/var/var-{}", i),
-                    CreateSnapshotFlags::READ_ONLY, None).unwrap();
+                    &format!("/.snapshots/var/var-{}", i),
+                    true)?;
     create_snapshot("/.snapshots/rootfs/snapshot-0",
-                    format!("/.snapshots/rootfs/snapshot-{}", i),
-                    CreateSnapshotFlags::READ_ONLY, None).unwrap();
+                    &format!("/.snapshots/rootfs/snapshot-{}", i),
+                    true)?;
 
     // Import tree file
     let tree = fstree().unwrap();
@@ -3187,20 +3197,20 @@ pub fn snapshot_unlock(snapshot: &str) -> Result<(), Error> {
             let path_vec = vec!["boot", "etc", "var"];
             for path in path_vec {
                 if Path::new(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot)).try_exists()? {
-                    delete_subvolume(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+                    delete_subvolume(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot))?;
                 }
             }
-            delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))?;
         } else {
             umount2(Path::new(path),
                     MntFlags::MNT_DETACH)?;
             let path_vec = vec!["boot", "etc", "var"];
             for path in path_vec {
                 if Path::new(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot)).try_exists()? {
-                    delete_subvolume(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+                    delete_subvolume(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot))?;
                 }
             }
-            delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+            delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))?;
         }
     }
     Ok(())
@@ -3271,28 +3281,28 @@ pub fn temp_snapshots_clear() -> Result<(), Error> {
         if snapshot.to_str().unwrap().contains("snapshot-chr") {
             // Make sure the path isn't being used
             if !is_mounted(&snapshot) {
-                delete_subvolume(&snapshot, DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(snapshot.to_str().unwrap())?;
             } else {
                 eprintln!("{} is busy.", snapshot.to_str().unwrap());
             }
         } else if snapshot.to_str().unwrap().contains("var") {
             // Make sure the path isn't being used
             if !is_mounted(&snapshot) {
-                delete_subvolume(&snapshot, DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(snapshot.to_str().unwrap())?;
             } else {
                 eprintln!("{} is busy.", snapshot.to_str().unwrap());
             }
         } else if snapshot.to_str().unwrap().contains("etc-chr") {
             // Make sure the path isn't being used
             if !is_mounted(&snapshot) {
-                delete_subvolume(&snapshot, DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(snapshot.to_str().unwrap())?;
             } else {
                 eprintln!("{} is busy.", snapshot.to_str().unwrap());
             }
         } else if snapshot.to_str().unwrap().contains("boot-chr") {
             // Make sure the path isn't being used
             if !is_mounted(&snapshot) {
-                delete_subvolume(&snapshot, DeleteSubvolumeFlags::empty()).unwrap();
+                delete_subvolume(snapshot.to_str().unwrap())?;
             } else {
                 eprintln!("{} is busy.", snapshot.to_str().unwrap());
             }
@@ -3309,10 +3319,10 @@ pub fn tmp_delete(secondary: bool) -> Result<(), Error> {
 
     // Clean tmp
     if Path::new(&format!("/.snapshots/rootfs/snapshot-{}", tmp)).try_exists()? {
-        delete_subvolume(&format!("/.snapshots/boot/boot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
-        delete_subvolume(&format!("/.snapshots/etc/etc-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
-        delete_subvolume(&format!("/.snapshots/var/var-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
-        delete_subvolume(&format!("/.snapshots/rootfs/snapshot-{}", tmp), DeleteSubvolumeFlags::RECURSIVE).unwrap();
+        delete_subvolume(&format!("/.snapshots/boot/boot-{}", tmp))?;
+        delete_subvolume(&format!("/.snapshots/etc/etc-{}", tmp))?;
+        delete_subvolume(&format!("/.snapshots/var/var-{}", tmp))?;
+        delete_subvolume(&format!("/.snapshots/rootfs/snapshot-{}", tmp))?;
     }
     Ok(())
 }
@@ -3869,19 +3879,19 @@ pub fn update_etc() -> Result<(), Error> {
                               format!("Changing base snapshot is not allowed.")));
     } else {
         // Remove old /etc
-        delete_subvolume(&format!("/.snapshots/etc/etc-{}", snapshot), DeleteSubvolumeFlags::empty()).unwrap();
+        delete_subvolume(&format!("/.snapshots/etc/etc-{}", snapshot))?;
 
         // Check mutability
-        let immutability: CreateSnapshotFlags = if check_mutability(&snapshot) {
-            CreateSnapshotFlags::empty()
+        let immutability = if check_mutability(&snapshot) {
+            false
         } else {
-            CreateSnapshotFlags::READ_ONLY
+            true
         };
 
         // Create new /etc
-        create_snapshot(format!("/.snapshots/etc/etc-{}", tmp),
-                        format!("/.snapshots/etc/etc-{}", snapshot),
-                        immutability, None).unwrap();
+        create_snapshot(&format!("/.snapshots/etc/etc-{}", tmp),
+                        &format!("/.snapshots/etc/etc-{}", snapshot),
+                        immutability)?;
     }
     Ok(())
 }
