@@ -717,14 +717,16 @@ fn main() {
                     desc
                 };
 
+                // Get new snapshot number
+                let snap_num = find_new();
+
                 // Run rebuild
-                let run = rebuild(&snapshot, &desc);
+                let run = rebuild(&snapshot, snap_num, &desc);
                 match run {
                     Ok(snap_num) => {
                         println!("Tree {} cloned from {}.", snap_num,snapshot);
                     },
                     Err(e) => {
-                        chr_delete(&snapshot).unwrap();
                         eprintln!("{}", e);
                     },
                 }

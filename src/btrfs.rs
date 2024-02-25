@@ -7,15 +7,15 @@ pub fn create_snapshot(snapvol: &str, pathname: &str, readonly: bool) -> Result<
     Ok(())
 }
 
-// Delete btrfs subvolume
-pub fn delete_subvolume(pathname: &str) -> Result<(), Error> {
-    remove(pathname)?;
+// Create btrfs subvolume
+pub fn create_subvolume(pathname: &str) -> Result<(), Error> {
+    new(pathname)?;
     Ok(())
 }
 
-// Create new btrfs subvolume
-pub fn create_subvolume(pathname: &str) -> Result<(), Error> {
-    new(pathname)?;
+// Delete btrfs subvolume
+pub fn delete_subvolume(pathname: &str) -> Result<(), Error> {
+    remove(pathname)?;
     Ok(())
 }
 

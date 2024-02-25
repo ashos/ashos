@@ -160,25 +160,6 @@ pub fn clean_cache(snapshot: &str) -> Result<(), Error> {
     Ok(())
 }
 
-// Uninstall all packages in snapshot
-pub fn clean_chroot(snapshot: &str, profconf: &Ini) -> Result<(), Error> {
-    // Read commands section in configuration file
-    if profconf.sections().contains(&"uninstall-commands".to_string()) {
-        for cmd in profconf.get_map().unwrap().get("uninstall-commands").unwrap().keys() {
-            chroot_exec(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot), cmd)?;
-        }
-    }
-
-    let excode = Command::new("sh").arg("-c")
-                                   .arg(format!("printf 'y\ny' | chroot /.snapshots/rootfs/snapshot-chr{} su aur -c 'paru -Rsn $(pacman -Qq)'",
-                                                snapshot)).status()?;
-    if !excode.success() {
-        return Err(Error::new(ErrorKind::Other,
-                              format!("Failed remove packages from snapshot {} chroot.", snapshot)));
-    }
-    Ok(())
-}
-
 // Fix signature invalid error
 pub fn fix_package_db(snapshot: &str) -> Result<(), Error> {
     // Make sure snapshot does exist
@@ -677,19 +658,16 @@ pub fn system_config(snapshot: &str, profconf: &Ini) -> Result<(), Error> {
                       .output()?;
 
     // Copy ash configuration
-    remove_dir_content(&format!("/.snapshots/rootfs/snapshot-chr{}/etc/ash", snapshot))?;
     Command::new("cp").args(["-n", "-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-{}/etc/ash/.", snapshot))
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/ash/", snapshot))
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/etc/ash", snapshot))
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/etc/ash", snapshot))
                       .output()?;
 
     // Copy grub configuration
     #[cfg(feature = "grub")]
-    remove_dir_content(&format!("/.snapshots/rootfs/snapshot-chr{}/boot/grub", snapshot))?;
-    #[cfg(feature = "grub")]
     Command::new("cp").args(["-n", "-r", "--reflink=auto"])
-                      .arg(format!("/.snapshots/rootfs/snapshot-{}/boot/grub/.", snapshot))
-                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/boot/grub/", snapshot))
+                      .arg(format!("/.snapshots/rootfs/snapshot-{}/boot/grub", snapshot))
+                      .arg(format!("/.snapshots/rootfs/snapshot-chr{}/boot/grub", snapshot))
                       .output()?;
 
     // Install system packages

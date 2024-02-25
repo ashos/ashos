@@ -496,7 +496,11 @@ pub fn chr_delete(snapshot: &str) -> Result<(), Error> {
 
     // Delete snapshot subvolume
     if Path::new(&snapshot_path).try_exists()? {
-        delete_subvolume(&snapshot_path)?;
+        // Try to remove directory contents if delete subvolume failed
+        if delete_subvolume(&snapshot_path).is_err() {
+            remove_dir_content(&snapshot_path)?;
+            delete_subvolume(&snapshot_path)?;
+        }
     }
     Ok(())
 }
@@ -1599,7 +1603,7 @@ pub fn import(snapshot: i32, path: &str, desc: &str, tmp_dir: &TempDir) -> Resul
     // Make sure snapshot is not in use by another ash process
     if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
         return Err(Error::new
-                   (ErrorKind::NotFound,
+                   (ErrorKind::Unsupported,
                     format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
                             snapshot,snapshot)));
 
@@ -1774,7 +1778,7 @@ pub fn import_base(path: &str, tmp_dir: &TempDir) -> Result<String, Error> {
     // Make sure snapshot is not in use by another ash process
     if Path::new("/.snapshots/rootfs/snapshot-chr0").try_exists()? {
         return Err(Error::new
-                   (ErrorKind::NotFound,
+                   (ErrorKind::Unsupported,
                     "Snapshot 0 appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s 0'."));
 
     // Make sure snapshot does exist
@@ -2554,8 +2558,8 @@ pub fn prepare(snapshot: &str) -> Result<(), Error> {
 
     if !mutable_dirs.is_empty() {
         // Clean old mutable_dirs
-        if Path::new("/.snapshots/mutable_dirs/snapshot-{}").try_exists()? {
-            remove_dir_content("/.snapshots/mutable_dirs/snapshot-{}")?;
+        if Path::new(&format!("/.snapshots/mutable_dirs/snapshot-{}", snapshot)).try_exists()? {
+            remove_dir_content(&format!("/.snapshots/mutable_dirs/snapshot-{}", snapshot))?;
         }
         for mount_path in mutable_dirs {
             if allow_dir_mut(mount_path) {
@@ -2673,22 +2677,30 @@ pub fn print_tmp() -> String {
 }
 
 // Rebuild snapshot
-pub fn rebuild(snapshot: &str, desc: &str) -> Result<i32, Error> {
-    let snap_num = find_new();
+pub fn rebuild(snapshot: &str, snap_num: i32, desc: &str) -> Result<i32, Error> {
     // Make sure snapshot does exist
     if !Path::new(&format!("/.snapshots/rootfs/snapshot-{}", snapshot)).try_exists()? {
         return Err(Error::new(ErrorKind::NotFound, format!("Cannot rebuild as snapshot {} doesn't exist.", snapshot)));
 
     // Make sure snapshot is not in use by another ash process
-    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists()? {
-        return Err(Error::new(
-            ErrorKind::Unsupported,
-            format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
-                    snapshot,snapshot)));
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).try_exists().unwrap() {
+        return Err(
+            Error::new(
+                ErrorKind::Unsupported,
+                format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
+                        snapshot,snapshot)));
+
+    // Make sure snap_num is not in use by another ash process
+    } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", snap_num)).try_exists().unwrap() {
+        return Err(
+            Error::new(
+                ErrorKind::Unsupported,
+                format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}'.",
+                        snap_num,snap_num)));
 
     // Make sure snapshot is not base snapshot
     } else if snapshot == "0" {
-        return Err(Error::new(ErrorKind::NotFound, "Changing base snapshot is not allowed."));
+        return Err(Error::new(ErrorKind::Unsupported, "Changing base snapshot is not allowed."));
 
     } else {
         // Make snapshot mutable or immutable
@@ -2854,13 +2866,44 @@ pub fn rebuild_prep(snapshot: &str) -> Result<(), Error> {
     // Load profile
     profconf.load(&cfile).unwrap();
 
-    // Remove packages
-    prepare(snapshot)?;
-    clean_chroot(snapshot,  &profconf)?;
+    // Create chroot directory
+    let snapshot_chr = format!("/.snapshots/rootfs/snapshot-chr{}", snapshot);
+    create_subvolume(&snapshot_chr)?;
 
-    // Reinstall base
+    // Bootstrap snapshot
     bootstrap(snapshot)?;
+
+    // Pacman gets weird when chroot directory is not a mountpoint, so the following mount is necessary
+    ash_mounts(snapshot, "chr")?;
+
+    // Copy old snapshot
     system_config(snapshot, &profconf)?;
+
+    // File operations for snapshot-chr
+    create_snapshot(&format!("/.snapshots/boot/boot-{}", snapshot),
+                    &format!("/.snapshots/boot/boot-chr{}", snapshot),
+                    false)?;
+    create_snapshot(&format!("/.snapshots/etc/etc-{}", snapshot),
+                    &format!("/.snapshots/etc/etc-chr{}", snapshot),
+                    false)?;
+    create_snapshot(&format!("/.snapshots/var/var-{}", snapshot),
+                    &format!("/.snapshots/var/var-chr{}", snapshot),
+                    false)?;
+    remove_dir_content(&format!("/.snapshots/boot/boot-chr{}", snapshot))?;
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg(format!("{}/boot/.", snapshot_chr))
+                      .arg(format!("/.snapshots/boot/boot-chr{}", snapshot))
+                      .output()?;
+    remove_dir_content(&format!("/.snapshots/etc/etc-chr{}", snapshot))?;
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg(format!("{}/etc/.", snapshot_chr))
+                      .arg(format!("/.snapshots/etc/etc-chr{}", snapshot))
+                      .output()?;
+    remove_dir_content(&format!("/.snapshots/var/var-chr{}", snapshot))?;
+    Command::new("cp").args(["-r", "--reflink=auto"])
+                      .arg(format!("{}/var/.", snapshot_chr))
+                      .arg(format!("/.snapshots/var/var-chr{}", snapshot))
+                      .output()?;
 
     Ok(())
 }
@@ -3200,7 +3243,11 @@ pub fn snapshot_unlock(snapshot: &str) -> Result<(), Error> {
                     delete_subvolume(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot))?;
                 }
             }
-            delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))?;
+            // Try to remove directory contents if delete subvolume failed
+            if delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).is_err() {
+                remove_dir_content(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))?;
+                delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))?;
+            }
         } else {
             umount2(Path::new(path),
                     MntFlags::MNT_DETACH)?;
@@ -3210,7 +3257,11 @@ pub fn snapshot_unlock(snapshot: &str) -> Result<(), Error> {
                     delete_subvolume(&format!("/.snapshots/{}/{}-chr{}", path,path,snapshot))?;
                 }
             }
-            delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))?;
+            // Try to remove directory contents if delete subvolume failed
+            if delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot)).is_err() {
+                remove_dir_content(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))?;
+                delete_subvolume(&format!("/.snapshots/rootfs/snapshot-chr{}", snapshot))?;
+            }
         }
     }
     Ok(())
@@ -3488,7 +3539,7 @@ pub fn tree_run(treename: &str, cmd: &str) -> Result<(), Error> {
                               format!("Cannot update as tree {} doesn't exist.", treename)));
 
     } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", treename)).try_exists()? {
-        return Err(Error::new(ErrorKind::Other,
+        return Err(Error::new(ErrorKind::Unsupported,
                               format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
                                       treename,treename)));
     } else {
@@ -3505,7 +3556,7 @@ pub fn tree_run(treename: &str, cmd: &str) -> Result<(), Error> {
             if branch != treename {
                 println!("{}, {}", treename,branch);
                 if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", branch)).try_exists()? {
-                    return Err(Error::new(ErrorKind::Other,
+                    return Err(Error::new(ErrorKind::Unsupported,
                                           format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
                                                   branch,branch)));
                 } else {
@@ -3534,7 +3585,7 @@ pub fn tree_sync(treename: &str, force_offline: bool, live: bool) -> Result<(), 
 
     // Make sure snapshot is not in use by another ash process
     } else if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", treename)).try_exists()? {
-        return Err(Error::new(ErrorKind::Other,
+        return Err(Error::new(ErrorKind::Unsupported,
                               format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
                                       treename,treename)));
     } else {
@@ -3554,7 +3605,7 @@ pub fn tree_sync(treename: &str, force_offline: bool, live: bool) -> Result<(), 
             if branch != treename {
                 println!("{}, {}", treename,branch);
                 if Path::new(&format!("/.snapshots/rootfs/snapshot-chr{}", branch)).try_exists()? {
-                    return Err(Error::new(ErrorKind::Other,
+                    return Err(Error::new(ErrorKind::Unsupported,
                                           format!("Snapshot {} appears to be in use. If you're certain it's not in use, clear lock with 'ash unlock -s {}.",
                                                   branch,branch)));
                 } else {
